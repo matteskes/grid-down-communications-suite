@@ -1,10 +1,11 @@
 # Control Center GUI (Phase 2, spec §7)
 
-PySide6 application. **M3a (landed):** application skeleton + read-only
-Dashboard — station header, profile-resolved rigctld command, owned PipeWire
-endpoints, supervisor instances, doctor summary. **M3b (landed):** Catalog
-(searchable table over the 41-app registry) + Doctor (color-coded checks,
-copy-as-JSON). M3c: Bundles start/stop, audio actions + Profiles.
+PySide6 application. **M3a:** skeleton + read-only Dashboard (station header,
+profile-resolved rigctld command, owned PipeWire endpoints, supervisor
+instances, doctor summary). **M3b:** Catalog (searchable table over the
+41-app registry) + Doctor (color-coded checks, copy-as-JSON). **M3c (v1,
+0.4.0-m3):** Bundles start/stop tiles (confirm dialog + notes pane), audio
+up/down actions on the Dashboard, read-only Profiles view.
 
 ## Layout
 
@@ -12,7 +13,8 @@ copy-as-JSON). M3c: Bundles start/stop, audio actions + Profiles.
   (in-process, spec §7/G1 — never via the `gd` CLI). Tests inject fakes here.
 - `models.py` — pure snapshot → display rows (unit-testable without Qt).
 - `workers.py` — `SnapshotWorker(QThread)` so core calls never block the UI.
-- `views/` — one module per spec §7 view (`dashboard.py` in M3a).
+- `views/` — one module per spec §7 view (`dashboard`, `bundles`, `catalog`,
+  `doctor`, `profiles`).
 - `main_window.py` — nav sidebar + stacked pages.
 - `app.py` — QApplication entry; `--selfcheck` builds the window, applies one
   real snapshot and exits (headless-safe).

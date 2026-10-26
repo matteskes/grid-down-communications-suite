@@ -234,6 +234,18 @@ PySide6. Views: Dashboard (bundle tiles, rig/audio status), Catalog (registry-dr
 install state), Bundles (start/stop sessions), Profiles (form-driven YAML editing), Doctor
 (check results + fixes). Offscreen-testable in CI (`QT_QPA_PLATFORM=offscreen`).
 
+> **M3 note (2026-10-26):** Control Center v1 (`gd gui`, 0.4.0-m3) ships all five views:
+> Dashboard (station/rig/audio/instances/doctor + audio up/down actions), Catalog (filterable
+> table over the 41-app registry), Bundles (start/stop tiles + confirm dialog + notes pane,
+> calling `Supervisor.launch_bundle/stop_bundle` in-process), Doctor (color-coded checks +
+> copy-as-JSON), Profiles (read-only YAML — form editing deferred; core `profile.py` is
+> load-only). Core is reached through a dependency-injected service layer
+> (`control/gui/services.py` — pure Python, fakes in tests); every core call runs in a
+> worker thread; any failing section degrades to "unavailable" instead of killing the UI.
+> PySide6 on the target comes from the Fedora repos (`python3-pyside6`, see
+> `docs/audit/f45-package-audit.md`); pip wheels are dev/CI-only. Profiles form editing,
+> install-state columns, winehub controls, and the tray/launcher stay out of M3 scope.
+
 ## 8. App catalog & install strategies
 
 Registry entries (41 apps) live in `control/registry/apps/`; install strategies:

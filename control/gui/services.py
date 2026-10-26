@@ -33,11 +33,17 @@ class Services:
 
     version: Callable[[], str]
     profile: Callable[[], dict]
+    profile_raw: Callable[[], dict]
     rig: Callable[[], dict]
     audio: Callable[[], dict]
     instances: Callable[[], dict]
     apps: Callable[[], dict]
+    bundles: Callable[[], dict]
     doctor: Callable[[], list]
+    bundle_start: Callable[[str], dict]
+    bundle_stop: Callable[[str], dict]
+    audio_up: Callable[[], dict]
+    audio_down: Callable[[], dict]
 
 
 def default_services(root: Path | None = None) -> Services:
@@ -70,6 +76,18 @@ def default_services(root: Path | None = None) -> Services:
     def _doctor() -> list:
         return doctor.run_checks(profile_data=profile.load_profile())
 
+    def _bundle_start(name: str) -> dict:
+        return _sup().launch_bundle(name)
+
+    def _bundle_stop(name: str) -> dict:
+        return _sup().stop_bundle(name)
+
+    def _audio_up() -> dict:
+        return audio.up(profile.load_profile())
+
+    def _audio_down() -> dict:
+        return audio.down(profile.load_profile())
+
     def _apps() -> dict:
         # load_registry() returns a list[dict] (each entry has "id"); the GUI
         # contract is a dict keyed by id so views/tests can index directly.
@@ -78,9 +96,12 @@ def default_services(root: Path | None = None) -> Services:
         return {str((a or {}).get("id", f"app-{i}")): (a or {})
                 for i, a in enumerate(apps or [])}
 
-    return Services(version=lambda: VERSION, profile=_profile, rig=_rig,
+    return Services(version=lambda: VERSION, profile=_profile,
+                    profile_raw=profile.load_profile, rig=_rig,
                     audio=audio.status, instances=lambda: _sup().status(),
-                    apps=_apps, doctor=_doctor)
+                    apps=_apps, bundles=lambda: bundles, doctor=_doctor,
+                    bundle_start=_bundle_start, bundle_stop=_bundle_stop,
+                    audio_up=_audio_up, audio_down=_audio_down)
 
 
 def _counts(results: list) -> dict:
@@ -106,10 +127,12 @@ def snapshot(svc: Services) -> dict:
     return {
         "version": collect("version", svc.version, "?"),
         "profile": collect("profile", svc.profile, {}),
+        "profile_raw": collect("profile_raw", svc.profile_raw, {}),
         "rig": collect("rig", svc.rig, {}),
         "audio": collect("audio", svc.audio, {}),
         "instances": collect("instances", svc.instances, {}),
         "apps": collect("apps", svc.apps, {}),
+        "bundles": collect("bundles", svc.bundles, {}),
         "doctor": {"results": results, "counts": _counts(results),
                    "all_ok": doctor.all_ok(results)},
         "errors": errors,

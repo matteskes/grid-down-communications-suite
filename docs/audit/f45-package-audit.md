@@ -82,6 +82,33 @@ snapshot.x86_64 51.0-2.fc45 fedora
 glob meshtastic*:       (empty)
 ```
 
+## GUI dependency check (M3, 2026-10-26)
+
+`gd gui` (Control Center, spec §7) needs PySide6 on the target station. Repoquery
+inside `fedora:45` `linux/amd64` (same method as the raw results above):
+
+```text
+fedora:45 (linux/amd64)  date: 2026-10-26T23:28:12Z  container-arch: x86_64
+python3-pyside6-0:6.11.2-2.fc45.i686
+python3-pyside6-0:6.11.2-2.fc45.x86_64
+python3-pyside6-0:6.11.2-3.fc45.i686
+AVAILABLE python3-pyside6
+```
+
+Decision: the GUI lane is **`python3-pyside6` from the Fedora repos** (Qt 6.11,
+Wayland-native) — `dnf install python3-pyside6` goes into the station install
+recipe; pip `PySide6-Essentials` wheels remain dev/CI-only and are never
+vendored. Headless smoke: `QT_QPA_PLATFORM=offscreen gd gui --selfcheck`.
+
+Smoke (same container, after `dnf install -y python3-pyside6 python3-pyyaml`,
+repo mounted read-only):
+
+```text
+fedora:45 (linux/amd64) smoke 2026-10-26T23:35:26Z
+gui selfcheck ok — apps=41, bundles=9, doctor checks=17, platform=offscreen
+gd 0.4.0-m3
+```
+
 ## Decisions applied to the registry (2026-10-26)
 
 | App | Before | After | Basis |

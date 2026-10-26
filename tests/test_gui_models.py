@@ -116,3 +116,24 @@ def test_doctor_rows_duck_typed():
     assert models.doctor_rows(snap) == [("ok", "t", "d"), ("fail", "p", "q")]
     assert models.doctor_rows(_snap(errors={"doctor": "x"})) == [
         ("fail", "doctor", "unavailable — x")]
+
+
+def test_bundle_rows_merge_meta_and_state():
+    snap = _snap(bundles={"winlink": {"description": "HF email",
+                                      "members": ["hamlib", "ardop", "pat"]},
+                          "js8": {"description": "JS8",
+                                  "members": ["hamlib", "js8call"]}},
+                 instances={"apps": [], "bundles": {
+                     "winlink": {"running": ["hamlib"], "total": 3}}})
+    rows = models.bundle_rows(snap)
+    assert [r["name"] for r in rows] == ["js8", "winlink"]  # sorted
+    assert rows[0]["running"] == 0 and rows[0]["total"] == 2
+    assert rows[1]["running"] == 1 and rows[1]["total"] == 3
+    assert rows[1]["description"] == "HF email"
+
+
+def test_profile_text_renders_yaml_and_errors():
+    text = models.profile_text(_snap(profile_raw={"profile": {"callsign": "W1AW"}}))
+    assert "callsign: W1AW" in text
+    assert models.profile_text(_snap(errors={"profile_raw": "io"})) == \
+        "unavailable — io"

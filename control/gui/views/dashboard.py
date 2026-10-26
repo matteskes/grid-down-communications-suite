@@ -13,7 +13,7 @@ import time
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QPushButton, QVBoxLayout, QWidget)
+                               QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
 from gui import models
 from gui.services import Services, snapshot
@@ -48,8 +48,19 @@ class DashboardView(QWidget):
         layout.addWidget(self._box("Rig — rigctld (suite-owned, G4)", self.rig_label))
 
         self.audio_label = self._wrap_label()
-        layout.addWidget(self._box("Audio — owned PipeWire endpoints (G4)",
-                                   self.audio_label))
+        audio_box = QGroupBox("Audio — owned PipeWire endpoints (G4)")
+        audio_lay = QVBoxLayout(audio_box)
+        audio_lay.addWidget(self.audio_label)
+        audio_btns = QHBoxLayout()
+        self.up_btn = QPushButton("Audio up")
+        self.down_btn = QPushButton("Audio down")
+        self.up_btn.clicked.connect(self._audio_up)
+        self.down_btn.clicked.connect(self._audio_down)
+        audio_btns.addWidget(self.up_btn)
+        audio_btns.addWidget(self.down_btn)
+        audio_btns.addStretch(1)
+        audio_lay.addLayout(audio_btns)
+        layout.addWidget(audio_box)
 
         self.instances_label = self._wrap_label()
         layout.addWidget(self._box("Instances — supervisor state",
@@ -91,7 +102,6 @@ class DashboardView(QWidget):
         worker = SnapshotWorker(lambda: snapshot(self.services), parent=self)
         worker.done.connect(self._on_done)
         worker.failed.connect(self._on_failed)
-        worker.finished.connect(worker.deleteLater)
         self._worker = worker
         self.status_label.setText("refreshing…")
         worker.start()
@@ -113,6 +123,43 @@ class DashboardView(QWidget):
         self._drop_worker()
         self.status_label.setText(f"refresh failed: {message}")
         self.status_label.setStyleSheet("color: #b02020;")
+
+    # ------------------------------------------------------------- actions
+    def _confirm(self, title: str, text: str) -> bool:
+        return QMessageBox.question(self, title, text) == QMessageBox.StandardButton.Yes
+
+    def _audio_up(self) -> None:
+        self._run_audio(down=False)
+
+    def _audio_down(self) -> None:
+        if not self._confirm("Audio down?",
+                             "Unload the grid_down_* loopback endpoints now?"):
+            return
+        self._run_audio(down=True)
+
+    def _run_audio(self, down: bool) -> None:
+        if self._worker is not None:
+            return  # snapshot or audio action already in flight
+        svc = self.services
+        fn = svc.audio_down if down else svc.audio_up
+        self.status_label.setText("audio: applying…")
+        worker = SnapshotWorker(fn, parent=self)
+        worker.done.connect(self._audio_done)
+        worker.failed.connect(self._on_failed)
+        self._worker = worker
+        worker.start()
+
+    def _audio_done(self, out: object) -> None:
+        self._drop_worker()
+        out = out or {}
+        unloaded = list(out.get("unloaded") or [])
+        if unloaded:
+            self.status_label.setText(
+                f"audio down — unloaded: {', '.join(map(str, unloaded)) or 'none'}")
+        else:
+            created = len(out.get("created") or [])
+            self.status_label.setText(f"audio up — created {created} endpoint(s)")
+        self.refresh()
 
     # ------------------------------------------------------------- display
     def set_snapshot(self, snap: dict) -> None:

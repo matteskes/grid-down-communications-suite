@@ -35,11 +35,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.selfcheck:
         snap = snapshot(win.dashboard.services)
         win.dashboard.set_snapshot(snap)
+        win.bundles.set_snapshot(snap)
         win.catalog.set_snapshot(snap)
         win.doctor.set_snapshot(snap)
+        win.profiles.set_snapshot(snap)
         app.processEvents()
         print("gui selfcheck ok — "
               f"apps={win.catalog.model.rowCount()}, "
+              f"bundles={len(win.bundles._tiles)}, "
               f"doctor checks={win.doctor.tree.topLevelItemCount()}, "
               f"platform={app.platformName()}")
         return 0

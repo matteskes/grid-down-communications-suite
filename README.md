@@ -8,7 +8,7 @@ designed to be **built online, installed offline, and run fully offline**.
 
 - Full design and scope: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) (v0.3)
 - Fedora 45 package audit: [`docs/audit/f45-package-audit.md`](docs/audit/f45-package-audit.md)
-- Status: **Phase 2, M3b — GUI skeleton + Dashboard + Catalog/Doctor views landed; Bundles/audio/Profiles next**
+- Status: **Phase 2, M3 v1 (0.4.0-m3) — all five §7 GUI views landed; GUI scope complete**
 
 ## Why
 
@@ -81,7 +81,7 @@ Supervisor state lives in `$XDG_STATE_HOME/grid-down/supervisor.json`
 |---|---|
 | P0 | Scaffold, spec v0.3, F45 package audit *(done)* |
 | P1 | Installer library + kit builder skeleton; first online↔air-gap round-trip (dnf-only subset) |
-| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(in progress — M1: CLI v1 + supervisor + doctor; M2: rigctld-from-profile + audio endpoints; M3a: GUI skeleton + Dashboard; M3b: Catalog + Doctor views; M3c next)* |
+| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(in progress — M1: CLI v1 + supervisor + doctor; M2: rigctld-from-profile + audio endpoints; M3a: GUI skeleton + Dashboard; M3b: Catalog + Doctor; M3c: Bundles/audio/Profiles — GUI v1 done; remaining: systemd-unit launch backend, install progress, winehub)* |
 | P3 | VARA/Wine Hub; Winlink session bundle end-to-end |
 | P4 | Remaining apps + LoRa/Meshtastic recipes, adapters, localhost services |
 | P5 | Offline USB kit, bootstrap hardening, docs, drills |

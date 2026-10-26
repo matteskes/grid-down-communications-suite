@@ -114,3 +114,35 @@ def doctor_rows(snap: dict) -> list[tuple[str, str, str]]:
             title, detail = getattr(r, "title", ""), getattr(r, "detail", "")
         rows.append((str(status), str(title), str(detail)))
     return rows
+
+
+def bundle_rows(snap: dict) -> list[dict]:
+    """Merge bundles.yaml metadata with live supervisor state (spec §6.3)."""
+    meta = snap.get("bundles") or {}
+    state = ((snap.get("instances") or {}).get("bundles")) or {}
+    rows = []
+    for name in sorted(meta):
+        m = meta[name] or {}
+        st = state.get(name) or {}
+        members = [str(x) for x in (m.get("members") or [])]
+        rows.append({"name": str(name),
+                     "description": str(m.get("description") or ""),
+                     "members": members,
+                     "running": len(st.get("running") or []),
+                     "total": int(st.get("total", len(members)))})
+    return rows
+
+
+def profile_text(snap: dict) -> str:
+    """Read-only profile document as YAML (M3 plan: no form editing)."""
+    err = _err(snap, "profile_raw")
+    if err:
+        return err
+    data = snap.get("profile_raw") or {}
+    try:
+        import yaml
+        return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
+    except Exception as exc:  # noqa: BLE001 — PyYAML missing must not kill the GUI
+        import json
+        return (f"# rendered as JSON (yaml unavailable: {exc})\n"
+                + json.dumps(data, indent=2))

@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import audio, doctor, profile, registry  # noqa: E402
 from core.supervisor import PORTS, Supervisor, SupervisorError  # noqa: E402
 
-VERSION = "0.3.0-m3b"
+VERSION = "0.4.0-m3"
 ROOT = Path(__file__).resolve().parents[2]
 
 

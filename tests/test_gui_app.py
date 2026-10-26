@@ -25,15 +25,17 @@ pytest.importorskip("pytestqt")
 
 from gui.main_window import MainWindow  # noqa: E402
 from gui.services import Services  # noqa: E402
+from gui.views.bundles import BundlesView  # noqa: E402
 from gui.views.catalog import CatalogView  # noqa: E402
 from gui.views.dashboard import DashboardView  # noqa: E402
 from gui.views.doctor import DoctorView  # noqa: E402
+from gui.views.profiles import ProfilesView  # noqa: E402
 from gui.workers import SnapshotWorker  # noqa: E402
 
 
 def _snap() -> dict:
     return {
-        "version": "0.3.0-m3b",
+        "version": "0.4.0-m3",
         "profile": {"path": "/etc/grid-down/profiles/default.yaml", "id": "default",
                     "callsign": "W1AW", "grid": "FN31pr"},
         "rig": {"argv": ["rigctld", "-T", "127.0.0.1", "-t", "4532", "-v", "-m", "1"],
@@ -41,7 +43,18 @@ def _snap() -> dict:
                 "model": "3073", "path": "/dev/ttyUSB0", "baud": "38400"},
         "audio": {"present": ["grid_down_hf_out"], "missing": ["grid_down_hf_in"]},
         "instances": {"apps": [{"id": "hamlib", "state": "running", "pid": 42}],
-                      "bundles": {}},
+                      "bundles": {"winlink": {"running": ["hamlib", "ardop"],
+                                              "total": 3},
+                                  "js8": {"running": [], "total": 2}}},
+        "bundles": {"js8": {"description": "JS8 weak-signal messaging",
+                            "members": ["hamlib", "js8call"]},
+                    "packet": {"description": "Packet radio terminal stack",
+                               "members": ["direwolf", "qttermtcp", "paracon"]},
+                    "winlink": {"description": "HF/VHF email via Winlink",
+                                "members": ["hamlib", "direwolf", "ardop", "pat"]}},
+        "profile_raw": {"profile": {"id": "default", "callsign": "W1AW",
+                                    "grid": "FN31pr"},
+                        "rig": {"model": "", "path": "", "baud": ""}},
         "apps": {"ardop": {"name": "ARDOP TNC", "category": "winlink",
                            "launch": {"via": "managed-service"},
                            "ui": {"tagline": "ARDOP modem"}},
@@ -58,11 +71,31 @@ def _fake_services() -> Services:
     snap = _snap()
     return Services(version=lambda: snap["version"],
                     profile=lambda: snap["profile"],
+                    profile_raw=lambda: snap["profile_raw"],
                     rig=lambda: snap["rig"],
                     audio=lambda: snap["audio"],
                     instances=lambda: snap["instances"],
                     apps=lambda: snap["apps"],
-                    doctor=lambda: snap["doctor"]["results"])
+                    bundles=lambda: snap["bundles"],
+                    doctor=lambda: snap["doctor"]["results"],
+                    bundle_start=lambda name: {"bundle": name,
+                                               "notes": [f"running: {name}"]},
+                    bundle_stop=lambda name: {"bundle": name,
+                                              "notes": [f"stopped: {name}"]},
+                    audio_up=lambda: {"created": [{"endpoint": "grid_down_hf_out",
+                                                   "module": 7}],
+                                      "skipped": ["grid_down_hf_in"]},
+                    audio_down=lambda: {"unloaded": ["grid_down_hf_out"]})
+
+
+def _spy_services(base: Services, **over) -> Services:
+    """Copy a Services with selected callables replaced (test spy)."""
+    fields = {f: getattr(base, f) for f in
+              ("version", "profile", "profile_raw", "rig", "audio", "instances",
+               "apps", "bundles", "doctor", "bundle_start", "bundle_stop",
+               "audio_up", "audio_down")}
+    fields.update(over)
+    return Services(**fields)
 
 
 def test_dashboard_set_snapshot_populates_labels(qtbot):
@@ -113,7 +146,73 @@ def test_main_window_builds_with_placeholders(qtbot):
     assert win.windowTitle().startswith("Grid Down")
     assert win.nav.count() == 5
     win.dashboard.set_snapshot(_snap())
-    assert win.dashboard.header_labels["Version"].text() == "0.3.0-m3b"
+    assert win.dashboard.header_labels["Version"].text() == "0.4.0-m3"
+
+
+def test_bundles_tiles_counts_and_cancel(qtbot):
+    view = BundlesView(_fake_services())
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert set(view._tiles) == {"js8", "packet", "winlink"}
+    assert view._tiles["winlink"][0].text() == "2/3 running"
+    assert view._tiles["js8"][0].text() == "0/2 running"
+    view._confirm = lambda t, x: False
+    view._stop("winlink")
+    assert "cancelled: stop winlink" in view.notes.toPlainText()
+
+
+def test_bundles_start_confirmed_runs_in_worker(qtbot):
+    calls = []
+    services = _spy_services(
+        _fake_services(),
+        bundle_start=lambda n: (calls.append(n),
+                                {"bundle": n, "notes": [f"running: {n}"]})[1])
+    view = BundlesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    view._confirm = lambda t, x: True
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view._start("js8")
+    assert calls == ["js8"]
+    assert "running: js8" in view.notes.toPlainText()
+
+
+def test_dashboard_audio_up_runs_and_refreshes(qtbot):
+    calls = []
+    services = _spy_services(_fake_services(),
+                             audio_up=lambda: (calls.append("up"),
+                                               {"created": [{"endpoint": "e",
+                                                             "module": 7}],
+                                                "skipped": []})[1])
+    view = DashboardView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    with qtbot.waitSignal(view.refreshed, timeout=5000):
+        view._audio_up()
+    assert calls == ["up"]
+
+
+def test_dashboard_audio_down_requires_confirm(qtbot):
+    calls = []
+    services = _spy_services(_fake_services(),
+                             audio_down=lambda: (calls.append("down"),
+                                                 {"unloaded": []})[1])
+    view = DashboardView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    view._confirm = lambda t, x: False
+    view._audio_down()
+    assert calls == []          # refused — no worker, no core call
+    assert view._worker is None
+
+
+def test_profiles_view_renders_yaml(qtbot):
+    view = ProfilesView(_fake_services())
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert "station profile:" in view.path_label.text()
+    text = view.text.toPlainText()
+    assert "callsign: W1AW" in text and "rig:" in text
 
 
 def test_catalog_lists_and_filters(qtbot):

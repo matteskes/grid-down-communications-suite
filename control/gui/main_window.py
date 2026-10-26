@@ -7,16 +7,17 @@ are placeholders that land in M3b/M3c per the milestone plan (spec §7).
 """
 from __future__ import annotations
 
-from PySide6.QtWidgets import (QHBoxLayout, QLabel, QListWidget, QMainWindow,
-                               QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QHBoxLayout, QListWidget, QMainWindow,
+                               QStackedWidget, QWidget)
 
 from gui.services import Services
+from gui.views.bundles import BundlesView
 from gui.views.catalog import CatalogView
 from gui.views.dashboard import DashboardView
 from gui.views.doctor import DoctorView
+from gui.views.profiles import ProfilesView
 
 PAGES = ("Dashboard", "Bundles", "Catalog", "Doctor", "Profile")
-PENDING = {"Bundles": "M3c", "Profile": "M3c"}  # Catalog + Doctor landed in M3b
 
 
 class MainWindow(QMainWindow):
@@ -26,14 +27,17 @@ class MainWindow(QMainWindow):
         self.resize(960, 640)
 
         self.dashboard = DashboardView(services, self)
+        self.bundles = BundlesView(services, self)
         self.catalog = CatalogView(services, self)
         self.doctor = DoctorView(services, self)
+        self.profiles = ProfilesView(services, self)
         stack = QStackedWidget(self)
-        stack.addWidget(self.dashboard)                # Dashboard
-        stack.addWidget(self._placeholder("Bundles"))  # M3c
-        stack.addWidget(self.catalog)                  # Catalog (M3b)
-        stack.addWidget(self.doctor)                   # Doctor (M3b)
-        stack.addWidget(self._placeholder("Profile"))  # M3c
+        stack.addWidget(self.dashboard)     # Dashboard
+        stack.addWidget(self.bundles)       # Bundles (M3c)
+        stack.addWidget(self.catalog)       # Catalog (M3b)
+        stack.addWidget(self.doctor)        # Doctor (M3b)
+        stack.addWidget(self.profiles)      # Profile (M3c)
+        self.bundles.changed.connect(self.dashboard.refresh)
 
         self.nav = QListWidget(self)
         for name in PAGES:
@@ -50,12 +54,3 @@ class MainWindow(QMainWindow):
 
         if autostart:
             self.dashboard.start_autorefresh()
-
-    def _placeholder(self, name: str) -> QWidget:
-        page = QWidget(self)
-        lay = QVBoxLayout(page)
-        note = QLabel(f"{name} view lands in {PENDING[name]} (spec §7).")
-        note.setWordWrap(True)
-        lay.addWidget(note)
-        lay.addStretch(1)
-        return page

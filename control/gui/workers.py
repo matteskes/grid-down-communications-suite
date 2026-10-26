@@ -13,7 +13,13 @@ from PySide6.QtCore import QThread, Signal
 
 
 class SnapshotWorker(QThread):
-    """Run a zero-arg callable; emit `done(result)` or `failed(message)`."""
+    """Run a zero-arg callable; emit `done(result)` or `failed(message)`.
+
+    Lifetime note: callers keep the worker referenced (typically
+    `self._worker`) and parent it to the view — finished threads are then
+    reclaimed with the view. Do NOT wire finished->deleteLater: deleting the
+    QThread while a sibling worker's queued signals are in flight segfaults.
+    """
 
     done = Signal(object)
     failed = Signal(str)
