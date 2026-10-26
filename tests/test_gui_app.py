@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
+"""GUI smoke tests (M3a) — PySide6 offscreen via pytest-qt (spec §7).
+
+QT_QPA_PLATFORM=offscreen is forced before any Qt import so the suite runs
+headless; the production target is Fedora 45 x86_64 (GNOME/Wayland), where
+the same window code runs under the platform's Qt.
+"""
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "control"))
+
+pytest.importorskip("PySide6")
+pytest.importorskip("pytestqt")
+
+from gui.main_window import MainWindow  # noqa: E402
+from gui.services import Services  # noqa: E402
+from gui.views.dashboard import DashboardView  # noqa: E402
+from gui.workers import SnapshotWorker  # noqa: E402
+
+
+def _snap() -> dict:
+    return {
+        "version": "0.3.0-m3a",
+        "profile": {"path": "/etc/grid-down/profiles/default.yaml", "id": "default",
+                    "callsign": "W1AW", "grid": "FN31pr"},
+        "rig": {"argv": ["rigctld", "-T", "127.0.0.1", "-t", "4532", "-v", "-m", "1"],
+                "notes": [], "endpoint": "127.0.0.1:4532",
+                "model": "3073", "path": "/dev/ttyUSB0", "baud": "38400"},
+        "audio": {"present": ["grid_down_hf_out"], "missing": ["grid_down_hf_in"]},
+        "instances": {"apps": [{"id": "hamlib", "state": "running", "pid": 42}],
+                      "bundles": {}},
+        "doctor": {"results": [], "counts": {"ok": 8, "warn": 5, "fail": 0, "skip": 4},
+                   "all_ok": True},
+        "errors": {},
+    }
+
+
+def _fake_services() -> Services:
+    snap = _snap()
+    return Services(version=lambda: snap["version"],
+                    profile=lambda: snap["profile"],
+                    rig=lambda: snap["rig"],
+                    audio=lambda: snap["audio"],
+                    instances=lambda: snap["instances"],
+                    doctor=lambda: snap["doctor"]["results"])
+
+
+def test_dashboard_set_snapshot_populates_labels(qtbot):
+    view = DashboardView(_fake_services())
+    qtbot.addWidget(view)
+    with qtbot.waitSignal(view.refreshed, timeout=2000):
+        view.set_snapshot(_snap())
+    assert view.header_labels["Callsign"].text() == "W1AW"
+    assert "endpoint: 127.0.0.1:4532" in view.rig_label.text()
+    assert "grid_down_hf_in — MISSING" in view.audio_label.text()
+    assert "hamlib — running" in view.instances_label.text()
+    assert view.doctor_label.text() == "doctor: 8 ok, 5 warn, 0 fail, 4 skip"
+    assert not view.errors_label.isVisibleTo(view)
+
+
+def test_dashboard_shows_section_errors(qtbot):
+    view = DashboardView(_fake_services())
+    qtbot.addWidget(view)
+    snap = _snap()
+    snap["audio"] = {}
+    snap["errors"] = {"audio": "FileNotFoundError: pactl"}
+    view.set_snapshot(snap)
+    assert "unavailable — FileNotFoundError: pactl" in view.audio_label.text()
+    assert view.errors_label.isVisibleTo(view)
+    assert "audio: FileNotFoundError: pactl" in view.errors_label.text()
+
+
+def test_worker_emits_done_with_result(qtbot):
+    snap = _snap()
+    worker = SnapshotWorker(lambda: snap)
+    with qtbot.waitSignal(worker.done, timeout=5000) as blocker:
+        worker.start()
+    assert blocker.args[0] is snap
+
+
+def test_worker_emits_failed_on_raise(qtbot):
+    def boom():
+        raise RuntimeError("no pactl")
+    worker = SnapshotWorker(boom)
+    with qtbot.waitSignal(worker.failed, timeout=5000) as blocker:
+        worker.start()
+    assert "RuntimeError: no pactl" in blocker.args[0]
+
+
+def test_main_window_builds_with_placeholders(qtbot):
+    win = MainWindow(_fake_services(), autostart=False)
+    qtbot.addWidget(win)
+    assert win.windowTitle().startswith("Grid Down")
+    assert win.nav.count() == 5
+    win.dashboard.set_snapshot(_snap())
+    assert win.dashboard.header_labels["Version"].text() == "0.3.0-m3a"

@@ -8,7 +8,7 @@ designed to be **built online, installed offline, and run fully offline**.
 
 - Full design and scope: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) (v0.3)
 - Fedora 45 package audit: [`docs/audit/f45-package-audit.md`](docs/audit/f45-package-audit.md)
-- Status: **Phase 2, M2 — rigctld-from-profile + PipeWire endpoint ownership landed; Control Center GUI next**
+- Status: **Phase 2, M3a — Control Center skeleton + Dashboard landed; Catalog/Doctor views next**
 
 ## Why
 
@@ -63,6 +63,7 @@ python3 control/cli/gd.py doctor             # station preflight (§6.7)
 python3 control/cli/gd.py rig                # profile-resolved rigctld argv (§6.4)
 python3 control/cli/gd.py audio plan        # owned PipeWire endpoint graph (§6.4 M2)
 python3 control/cli/gd.py audio up          # create grid_down_* endpoints (idempotent)
+python3 control/cli/gd.py gui                # Control Center GUI skeleton (§7, M3a)
 python3 control/cli/gd.py status             # supervisor instances
 python3 control/cli/gd.py launch <app|bundle>   # e.g. launch winlink (rigctld auto-starts)
 python3 control/cli/gd.py stop <app|bundle|all> # reverse order; rigctld stopped last
@@ -80,7 +81,7 @@ Supervisor state lives in `$XDG_STATE_HOME/grid-down/supervisor.json`
 |---|---|
 | P0 | Scaffold, spec v0.3, F45 package audit *(done)* |
 | P1 | Installer library + kit builder skeleton; first online↔air-gap round-trip (dnf-only subset) |
-| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(in progress — M1: CLI v1 + supervisor + doctor; M2: rigctld-from-profile + audio endpoints; GUI next)* |
+| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(in progress — M1: CLI v1 + supervisor + doctor; M2: rigctld-from-profile + audio endpoints; M3a: GUI skeleton + Dashboard; M3b/M3c views next)* |
 | P3 | VARA/Wine Hub; Winlink session bundle end-to-end |
 | P4 | Remaining apps + LoRa/Meshtastic recipes, adapters, localhost services |
 | P5 | Offline USB kit, bootstrap hardening, docs, drills |

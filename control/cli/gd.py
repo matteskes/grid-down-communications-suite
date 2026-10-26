@@ -5,10 +5,11 @@
 
 Implemented: version, apps list, bundles list, profile show, rig, audio
 (plan/up/down/status), launch, stop, status, doctor (spec §6.4/§6.6/§6.7).
-M2 adds profile-driven rigctld (rig_argv) and the suite-owned PipeWire
-endpoint namespace (core/audio.py). Later phases add: config apply
-(adapters), install progress, winehub, and the Control Center GUI (which
-shares core/supervisor + core/audio + core/doctor with this CLI).
+M2 added profile-driven rigctld (rig_argv) and the suite-owned PipeWire
+endpoint namespace (core/audio.py). M3a adds the Control Center skeleton
+(`gd gui` — Dashboard, spec §7) sharing core/supervisor + core/audio +
+core/doctor with this CLI in-process. Later phases add the remaining §7
+views (M3b/M3c), config apply (adapters), install progress, winehub.
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from core import audio, doctor, profile, registry  # noqa: E402
 from core.supervisor import PORTS, Supervisor, SupervisorError  # noqa: E402
 
-VERSION = "0.3.0-m2"
+VERSION = "0.3.0-m3a"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -37,6 +38,18 @@ def _build_supervisor(profile_data: dict | None = None) -> Supervisor:
     bundles = registry.load_bundles(ROOT / "control" / "registry" / "bundles.yaml")
     prof = profile.load_profile() if profile_data is None else profile_data
     return Supervisor(apps, bundles, profile=prof)
+
+
+def cmd_gui(args) -> int:
+    """Launch the Control Center (spec §7). Lazy Qt import: the CLI stays
+    fully usable on headless/air-gap boxes without PySide6 installed."""
+    try:
+        from gui.app import main as gui_main
+    except ImportError as exc:
+        return _fail("PySide6 is not available "
+                     "(Fedora 45: sudo dnf install python3-pyside6; "
+                     f"dev venv: pip install PySide6-Essentials) — {exc}")
+    return gui_main(["--selfcheck"] if args.selfcheck else [])
 
 
 def cmd_version(_args) -> int:
@@ -259,6 +272,11 @@ def main(argv: list[str] | None = None) -> int:
                       ("status", "list present/missing owned endpoints")):
         p = p_a_sub.add_parser(name, help=hlp)
         p.set_defaults(func=cmd_audio, audio_cmd=name)
+
+    p_gui = sub.add_parser("gui", help="launch the Control Center GUI (spec §7)")
+    p_gui.add_argument("--selfcheck", action="store_true",
+                       help="build the window, apply one snapshot, exit")
+    p_gui.set_defaults(func=cmd_gui)
 
     args = ap.parse_args(argv)
     try:
