@@ -12,7 +12,7 @@ Spec §11 P1. Builder: `install/bundle-builder/build-kit.sh` · payload:
 | S1 | closure completeness | `dnf download --resolve --alldeps` → **421 rpms incl. `glibc-2.44-2.fc45`** — complete clean-host closure. Plain `--resolve` → 276 (skips base-system rpms; insufficient). **Builder uses `--resolve --alldeps`.** |
 | S2 | createrepo_c | **not in the base image**; must be installed explicitly (loudly — a silent install failure was observed once). |
 | S3 | offline install flags | **`--cacheonly` is unsafe**: it resolved from stale system-cache metadata of network repos (air-gap leak) and silently skipped the uncached kit repo. **Correct: `--disablerepo='*' --enablerepo=gd-kit --setopt=gd-kit.skip_if_unavailable=0`** (no network-capable repo enabled; broken kit fails loudly). |
-| S4 | aarch64 kits | `dnf --forcearch=aarch64 download` works from the amd64 container (`alsa-lib-1.2.16.1-2.fc45.aarch64.rpm` et al.) → `fedora-arm-ks` VM kits are buildable as-is. |
+| S4 | aarch64 kits | `dnf --forcearch=aarch64 download` works from the amd64 container (`alsa-lib-1.2.16.1-2.fc45.aarch64.rpm` et al.) → aarch64 targets (any Fedora 45 ARM host) are servable as-is. |
 
 ## Kit layout (spec §6.8, dnf-only subset for P1)
 
@@ -58,7 +58,7 @@ ROUNDTRIP OK — 85s total
 (The `Header … NOKEY` line is the expected `gpgcheck=0` warning — kit integrity
 is enforced by `manifest.sha256`, verified before the repo is enabled.)
 
-## VM acceptance (fedora-arm-ks, aarch64, GUI)
+## VM acceptance (Fedora 45 GUI VM, aarch64 or x86_64)
 
 Status: **PENDING (human half)** — runbook: `docs/phase1-vm-runbook.md`.
 

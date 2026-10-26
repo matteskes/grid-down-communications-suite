@@ -226,8 +226,9 @@ source URLs for every artifact for auditability.
 ## 10. Testing & acceptance
 
 - `tests/` validate registry/profile/bundle/recipe consistency on every commit.
-- Kit build runs in clean `fedora:45` container (this Mac); air-gap install validated in the
-  `fedora-arm-ks` VM (GUI) and `fedora:45` container (headless) with networking removed.
+- Kit build runs in clean `fedora:45` container (this Mac); air-gap install validated in a
+  Fedora 45 GUI VM (any hypervisor; x86_64 or aarch64) and the `fedora:45` container
+  (headless), with networking removed.
 - Per-phase acceptance: P3 = Winlink session end-to-end in Wine; P4 = mesh device-profile apply
   round-trip + Artemis RPM launch; P5 = full offline rebuild from USB kit on a clean host.
 

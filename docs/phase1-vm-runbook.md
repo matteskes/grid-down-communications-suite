@@ -1,21 +1,24 @@
-# Phase 1 VM runbook — dnf-only kit install in the `fedora-arm-ks` VM
+# Phase 1 VM runbook — dnf-only kit install in a Fedora 45 GUI VM
 
 Goal (spec §11 P1 acceptance): **direwolf + fldigi installed from an offline kit
-inside the `fedora-arm-ks` VM (aarch64, GNOME) with networking removed.**
+inside a Fedora 45 VM with a desktop session and networking removed.** Any
+hypervisor, either arch — x86_64 is the fleet default; aarch64 kits build on any
+host via `--forcearch` (spike S4). Prereq: a stock Fedora 45 VM (netinst,
+Workstation, or Server + GNOME group) with SSH or shared-folder access.
 The automated half runs in a `--network none` container (`tools/roundtrip-dnf.sh`);
 this runbook is the human half.
 
-## 1. Build the aarch64 kit (on the Mac, network on)
+## 1. Build the kit (on the Mac, network on)
 
 ```sh
 cd grid-down
 
-# optional: automated container proof for aarch64 rpms
-tools/roundtrip-dnf.sh --arch aarch64
+# optional: automated container proof for the target arch
+tools/roundtrip-dnf.sh --arch aarch64        # or x86_64
 
-# the kit for the VM (packed tarball):
-install/bundle-builder/build-kit.sh --arch aarch64
-#   → kit/grid-down-kit-<date>-aarch64.tar.zst
+# the kit for the VM (packed tarball) — match the VM's arch:
+install/bundle-builder/build-kit.sh --arch aarch64   # or x86_64 (default)
+#   → kit/grid-down-kit-<date>-<arch>.tar.zst
 ```
 
 (`--with-rpmfusion` adds ffmpeg + the pinned RPM Fusion enablement; not needed for
@@ -40,7 +43,7 @@ soname jump vs an older dnf stack — see `docs/audit/phase1-roundtrip.md`).
 sudo dnf -y update && sudo reboot      # do this while still online
 ```
 
-Then detach the NIC in VMPal/VM settings, **or** inside the VM:
+Then detach the NIC in your hypervisor's VM settings, **or** inside the VM:
 
 ```sh
 sudo nmcli networking off

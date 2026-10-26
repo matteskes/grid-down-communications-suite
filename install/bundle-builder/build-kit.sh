@@ -4,8 +4,8 @@
 # container-build.sh inside fedora:45 (network ON) to produce a sha256-pinned kit.
 #
 # Usage: install/bundle-builder/build-kit.sh
-#          [--arch x86_64|aarch64]      target arch (default x86_64; aarch64 for the
-#                                       fedora-arm-ks VM — spike S4: --forcearch works)
+#          [--arch x86_64|aarch64]      target arch (default x86_64; aarch64 for
+#                                       ARM targets — spike S4: --forcearch works)
 #          [--apps id[,id...]]          apps to include (default: direwolf,fldigi,hamlib)
 #          [--all-dnf]                  include every dnf-strategy app instead
 #          [--with-rpmfusion]           enable pinned RPM Fusion release RPMs
