@@ -250,6 +250,27 @@ source URLs for every artifact for auditability.
 3. Meshtastic hardware style: USB handset (default) vs LoRa HAT + meshtasticd.
 4. ~~Fedora 45 package audit~~ **Resolved 2026-10-26** — see `docs/audit/f45-package-audit.md`
    (wine confirmed on x86_64; 6 dnf flips, 4 build flips; cheese retired → GNOME Snapshot).
-5. Project license choice (spec is not the artifact license; decide by P2).
+5. ~~Project license choice~~ **Resolved 2026-10-26** — suite code is **MIT** (`LICENSE` at the
+   repo root, SPDX headers on all source files); bundled third-party attribution is inventoried
+   in `docs/audit/third-party-licenses.md` (see §13).
+
+---
+
+## 13. Licensing & third-party attribution (M0)
+
+Grid Down's own code is **MIT** so the suite imposes no copyleft of its own; obligations run per
+bundled component only.
+
+- **Inventory** — every third-party component with its SPDX id, verification source, and open
+  flags: `docs/audit/third-party-licenses.md`.
+- **dnf apps** — Fedora/RPM Fusion binaries carry their license texts; the kit manifest (G5)
+  records the RPM `License:` tag + NVR per package at build time.
+- **build/tarball apps** — each recipe records an upstream `license:`; the kit build ships the
+  upstream LICENSE into `/opt/grid-down/<app>/` and pins source URL + SHA-256 (satisfies GPL
+  source-offer obligations).
+- **user-supplied** — VARA family / VarAC installers and licenses are never redistributed (G6);
+  GridTracker stays fail-closed until its redistribution terms are verified (inventory Flags #2).
+- **No invented licenses** — unresolved components carry `license: TBD-VERIFY-AT-PIN` and are
+  flagged by Doctor at kit-build time; nothing ships silently unlicensed.
 
 

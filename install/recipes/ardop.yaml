@@ -3,6 +3,7 @@
 recipe:
   id: ardop
   strategy: build
+  license: MIT
   source:
     git: PIN-ME          # repo URL + tag
     sha256: PIN-ME       # archive sha256

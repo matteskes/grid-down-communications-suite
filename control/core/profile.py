@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 """Station profile model (Phase 0 stub). Schema: docs/SPECIFICATION.md §4.
 
 Resolution order:

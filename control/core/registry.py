@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 """Registry loader for the Grid Down app catalog (Phase 0 stub).
 
 Schema: docs/SPECIFICATION.md §6.1. One YAML per app in control/registry/apps/.

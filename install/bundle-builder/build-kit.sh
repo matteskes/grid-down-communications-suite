@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # Grid Down offline-kit builder — host-side orchestrator (Phase 1).
 # Resolves dnf-strategy recipes into repo-split package sets, then runs
 # container-build.sh inside fedora:45 (network ON) to produce a sha256-pinned kit.

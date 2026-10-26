@@ -3,6 +3,7 @@
 recipe:
   id: osm-navit
   strategy: build
+  license: GPL-2.0
   source:
     git: PIN-ME          # repo URL + tag
     sha256: PIN-ME       # archive sha256

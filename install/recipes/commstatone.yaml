@@ -3,6 +3,7 @@
 recipe:
   id: commstatone
   strategy: static
+  license: GPL-3.0
   static:
     src: kit/static/commstatone/
     serve: localhost

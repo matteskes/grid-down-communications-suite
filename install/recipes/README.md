@@ -10,4 +10,8 @@ Strategies (spec §8): `dnf`, `dnf-verify` (audit decides dnf vs build), `build`
 Rules:
 - VARA-family recipes reference `kit-import/` artifacts and **never** embed download URLs (G6).
 - Every pinned artifact records `sha256`; the builder writes them into the kit manifest.
+- Every recipe records `license:` — the upstream SPDX id used for attribution and the kit
+  manifest (spec §13). `TBD-VERIFY-AT-PIN` marks licenses that must be confirmed when the
+  `PIN-ME` fields are resolved (Doctor flags them at kit build). `wine` recipes carry
+  `wine.license: user-supplied` instead (G6). Inventory: `docs/audit/third-party-licenses.md`.
 - Recipe strategy must match the registry entry's `install.strategy` (enforced by tests).

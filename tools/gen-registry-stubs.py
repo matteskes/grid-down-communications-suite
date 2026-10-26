@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 """Generate Phase-0 registry + recipe stubs for the Grid Down app catalog.
 
 Idempotent: overwrites control/registry/apps/<id>.yaml and install/recipes/<id>.yaml

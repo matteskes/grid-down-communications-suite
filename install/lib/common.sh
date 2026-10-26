@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # Grid Down install-library helpers (Phase 0).
 # Sourced by bootstrap.sh and bundle-builder scripts. No side effects on source.
 

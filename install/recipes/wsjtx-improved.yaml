@@ -3,6 +3,7 @@
 recipe:
   id: wsjtx-improved
   strategy: build
+  license: GPL-3.0-or-later
   source:
     git: PIN-ME          # repo URL + tag
     sha256: PIN-ME       # archive sha256

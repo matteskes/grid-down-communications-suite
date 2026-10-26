@@ -3,6 +3,7 @@
 recipe:
   id: chattervox
   strategy: tarball
+  license: GPL-3.0
   tarball:
     url: PIN-ME          # exact upstream artifact URL
     sha256: PIN-ME

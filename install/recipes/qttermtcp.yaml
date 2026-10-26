@@ -3,6 +3,7 @@
 recipe:
   id: qttermtcp
   strategy: build
+  license: TBD-VERIFY-AT-PIN  # no license found upstream (Flags #1)
   source:
     git: PIN-ME          # repo URL + tag
     sha256: PIN-ME       # archive sha256

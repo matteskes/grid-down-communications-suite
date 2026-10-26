@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # Grid Down installer entry point (Phase 1: --kit mode is real; --online stays a stub).
 # Spec: docs/SPECIFICATION.md §5.
 #

@@ -3,6 +3,7 @@
 recipe:
   id: meshtastic
   strategy: pip-vendored
+  license: GPL-3.0
   pip:
     wheels_dir: kit/wheels/
     install: python3 -m pip install --no-index --find-links kit/wheels/ meshtastic

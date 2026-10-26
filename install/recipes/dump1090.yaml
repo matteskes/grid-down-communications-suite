@@ -3,6 +3,7 @@
 recipe:
   id: dump1090
   strategy: build
+  license: TBD-VERIFY-AT-PIN  # fork-dependent: BSD-3 vs GPL-2+ (Flags #3)
   dnf:
     repo: fedora
     packages:

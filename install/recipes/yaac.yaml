@@ -3,6 +3,7 @@
 recipe:
   id: yaac
   strategy: tarball
+  license: LGPL-2.1-or-later  # verify version at pin (Flags #6)
   tarball:
     url: PIN-ME          # exact upstream artifact URL
     sha256: PIN-ME

@@ -3,6 +3,7 @@
 recipe:
   id: ffmpeg
   strategy: dnf
+  license: GPL-2.0-or-later
   dnf:
     repo: rpmfusion-free
     packages:

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # tools/spike-dnf5-offline.sh — Phase 1 spike: verify dnf5 offline-kit flags inside fedora:45.
 # Answers (recorded in docs/audit/phase1-roundtrip.md):
 #   S1 dnf flavor on F45; does `dnf download --resolve --alldeps` produce a complete

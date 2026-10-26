@@ -3,6 +3,7 @@
 recipe:
   id: xygrib
   strategy: build
+  license: GPL-3.0
   source:
     git: PIN-ME          # repo URL + tag
     sha256: PIN-ME       # archive sha256

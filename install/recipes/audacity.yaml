@@ -3,6 +3,7 @@
 recipe:
   id: audacity
   strategy: dnf
+  license: GPL-2.0-or-later
   dnf:
     repo: fedora
     packages:

@@ -118,3 +118,14 @@ glob meshtastic*:       (empty)
   `java-latest-openjdk-headless` (or the 25 equivalent at kit time).
 - **php-cli** is available — JS8Spotter's local service needs no extra repo.
 - `pat`, `meshtastic`, `gridtracker` absent as designed (tarball / vendored-wheels strategies).
+
+## Post-audit correction (2026-10-26, license-research pass)
+
+- **flarq** — Fedora's `fldigi` package **Provides: flarq = 4.2.13** (Fedora mdapi), i.e.
+  `dnf install fldigi` ships flarq. The `MISSING flarq` result above only means "no package
+  *named* flarq", so the **build** decision for flarq is likely moot. Verify in the container at
+  kit-build time (`dnf install -y fldigi && test -x /usr/bin/flarq`); if confirmed, retire
+  `install/recipes/flarq.yaml` and keep flarq in the registry as an app delivered by the fldigi
+  package. Same-family note: flwrap remains genuinely absent (no Provides found) — build stands.
+  Details: `docs/audit/third-party-licenses.md` (Flags #4).
+- Full license inventory for every catalog app: `docs/audit/third-party-licenses.md`.

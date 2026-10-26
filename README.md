@@ -80,3 +80,10 @@ bash tools/run-audit.sh > docs/audit/f45-package-audit.md
 - Everything installed must run with zero network connectivity. Anything that phones home
   (e.g. Meshtastic MQTT uplink) is disabled and flagged by Doctor in air-gap mode.
 - Adapters write native config formats only — never patched apps, never wrapper hacks.
+
+## License
+
+Grid Down's own code is [MIT](LICENSE). Bundled third-party components keep their own licenses —
+see [`docs/audit/third-party-licenses.md`](docs/audit/third-party-licenses.md) for the per-app
+SPDX inventory and open flags. VARA/VarAC installers and licenses are user-supplied and never
+redistributed (G6).

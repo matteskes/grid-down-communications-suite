@@ -3,6 +3,7 @@
 recipe:
   id: js8call
   strategy: dnf
+  license: GPL-3.0-or-later
   dnf:
     repo: fedora
     packages:

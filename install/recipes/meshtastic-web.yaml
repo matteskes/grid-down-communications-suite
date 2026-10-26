@@ -3,6 +3,7 @@
 recipe:
   id: meshtastic-web
   strategy: static
+  license: GPL-3.0
   static:
     src: kit/static/meshtastic-web/
     serve: localhost

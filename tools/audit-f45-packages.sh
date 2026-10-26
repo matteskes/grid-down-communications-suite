@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # Fedora 45 package availability audit (run INSIDE a fedora:45 container).
 # Runner: tools/run-audit.sh   Output: plain "AVAILABLE|MISSING <pkg>" lines.
 # Spec: docs/SPECIFICATION.md §11 Phase 0.

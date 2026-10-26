@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 """Registry + recipe consistency tests (Phase 0).
 
 Run: python3 -m pytest tests/ -q   (skips if PyYAML is absent)
@@ -99,3 +101,18 @@ def test_dnf_recipes_declare_repo(apps):
     # ffmpeg comes from RPM Fusion (audit decision — docs/audit/f45-package-audit.md)
     ff = yaml.safe_load((REC_DIR / "ffmpeg.yaml").read_text())["recipe"]
     assert ff["dnf"]["repo"] == "rpmfusion-free"
+
+
+def test_recipes_declare_license(apps):
+    """M0 (spec §13): every recipe records a license for attribution/manifest.
+
+    `wine` recipes carry `wine.license: user-supplied` instead; `TBD-VERIFY-AT-PIN`
+    is an allowed value until the recipe's PIN-ME fields are resolved.
+    """
+    for a in apps:
+        r = yaml.safe_load((REC_DIR / f"{a['id']}.yaml").read_text())["recipe"]
+        if r["strategy"] == "wine":
+            assert r.get("wine", {}).get("license") == "user-supplied", a["id"]
+        else:
+            lic = r.get("license")
+            assert isinstance(lic, str) and lic.strip(), f"{a['id']}: recipe missing license"

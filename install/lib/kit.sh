@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # install/lib/kit.sh — air-gap-side kit helpers (Phase 1).
 # Sourced by bootstrap.sh; expects common.sh to already be sourced.
 # Offline-install mechanics verified by tools/spike-dnf5-offline.sh (S3):

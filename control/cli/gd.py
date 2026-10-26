@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 """gd — Grid Down command-line control interface (Phase 0 stub).
 
 Implemented: version, apps list, bundles list, profile show, doctor (stub).

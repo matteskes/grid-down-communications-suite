@@ -3,6 +3,7 @@
 recipe:
   id: hamlib
   strategy: dnf
+  license: LGPL-2.1-or-later
   dnf:
     repo: fedora
     packages:

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # Run the F45 package audit in a local container (host side).
 # Usage: bash tools/run-audit.sh [> docs/audit/f45-package-audit.md]
 # Tries fedora:45, then fedora:beta, then fedora:latest (labels output with actual image).

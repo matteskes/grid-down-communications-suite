@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # P1 acceptance harness: build a dnf-only kit online, then install it in a
 # --network none container (true air gap). Spec §11 P1 (VM acceptance is the
 # human half: docs/phase1-vm-runbook.md).

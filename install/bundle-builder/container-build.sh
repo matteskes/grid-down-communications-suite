@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 # Kit-build payload — runs INSIDE a fedora:45 container with network access.
 # Invoked by build-kit.sh (host side); emits a kit staging tree and optionally packs it.
 # Layout (spec §6.8):

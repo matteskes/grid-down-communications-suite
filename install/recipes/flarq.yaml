@@ -3,6 +3,7 @@
 recipe:
   id: flarq
   strategy: build
+  license: GPL-2.0-or-later
   source:
     git: PIN-ME          # repo URL + tag
     sha256: PIN-ME       # archive sha256
