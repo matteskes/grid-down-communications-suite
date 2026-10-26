@@ -8,6 +8,7 @@ the same window code runs under the platform's Qt.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -24,13 +25,15 @@ pytest.importorskip("pytestqt")
 
 from gui.main_window import MainWindow  # noqa: E402
 from gui.services import Services  # noqa: E402
+from gui.views.catalog import CatalogView  # noqa: E402
 from gui.views.dashboard import DashboardView  # noqa: E402
+from gui.views.doctor import DoctorView  # noqa: E402
 from gui.workers import SnapshotWorker  # noqa: E402
 
 
 def _snap() -> dict:
     return {
-        "version": "0.3.0-m3a",
+        "version": "0.3.0-m3b",
         "profile": {"path": "/etc/grid-down/profiles/default.yaml", "id": "default",
                     "callsign": "W1AW", "grid": "FN31pr"},
         "rig": {"argv": ["rigctld", "-T", "127.0.0.1", "-t", "4532", "-v", "-m", "1"],
@@ -39,6 +42,12 @@ def _snap() -> dict:
         "audio": {"present": ["grid_down_hf_out"], "missing": ["grid_down_hf_in"]},
         "instances": {"apps": [{"id": "hamlib", "state": "running", "pid": 42}],
                       "bundles": {}},
+        "apps": {"ardop": {"name": "ARDOP TNC", "category": "winlink",
+                           "launch": {"via": "managed-service"},
+                           "ui": {"tagline": "ARDOP modem"}},
+                 "direwolf": {"name": "Direwolf", "category": "packet",
+                              "launch": {"via": "managed-service"}, "ui": {}},
+                 "js8call": {"name": "JS8Call", "category": "winlink", "ui": {}}},
         "doctor": {"results": [], "counts": {"ok": 8, "warn": 5, "fail": 0, "skip": 4},
                    "all_ok": True},
         "errors": {},
@@ -52,6 +61,7 @@ def _fake_services() -> Services:
                     rig=lambda: snap["rig"],
                     audio=lambda: snap["audio"],
                     instances=lambda: snap["instances"],
+                    apps=lambda: snap["apps"],
                     doctor=lambda: snap["doctor"]["results"])
 
 
@@ -103,4 +113,60 @@ def test_main_window_builds_with_placeholders(qtbot):
     assert win.windowTitle().startswith("Grid Down")
     assert win.nav.count() == 5
     win.dashboard.set_snapshot(_snap())
-    assert win.dashboard.header_labels["Version"].text() == "0.3.0-m3a"
+    assert win.dashboard.header_labels["Version"].text() == "0.3.0-m3b"
+
+
+def test_catalog_lists_and_filters(qtbot):
+    view = CatalogView(_fake_services())
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert view.model.rowCount() == 3
+    assert view.proxy.rowCount() == 3
+    assert view.count_label.text() == "3 apps"
+    view.filter_box.setText("ardop")      # id match
+    assert view.proxy.rowCount() == 1
+    view.filter_box.setText("packet")     # category match
+    assert view.proxy.rowCount() == 1
+    view.filter_box.setText("zzz-none")
+    assert view.proxy.rowCount() == 0
+    assert view.count_label.text() == "3 apps (0 shown)"
+
+
+def test_catalog_columns_and_state(qtbot):
+    view = CatalogView(_fake_services())
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert view.model.data(view.model.index(0, 0)) == "ardop"  # sorted by id
+    assert view.model.data(view.model.index(0, 1)) == "ARDOP TNC"
+    assert view.model.data(view.model.index(0, 4)) == "-"      # not running
+    assert view.model.data(view.model.index(0, 0), 3) == "ARDOP modem"  # tooltip
+    assert view.model.data(view.model.index(2, 0), 3) is None  # js8call: none
+
+
+def test_doctor_rows_colors_and_summary(qtbot):
+    view = DoctorView(_fake_services())
+    qtbot.addWidget(view)
+    snap = _snap()
+    snap["doctor"]["results"] = [
+        {"id": "platform", "title": "platform", "status": "ok", "detail": "linux"},
+        {"id": "ports", "title": "port conflicts", "status": "fail",
+         "detail": "4532 busy"},
+        {"id": "deferred", "title": "deferred", "status": "skip", "detail": "n/a"},
+    ]
+    view.set_snapshot(snap)
+    assert view.tree.topLevelItemCount() == 3
+    assert view.tree.topLevelItem(1).text(0) == "FAIL"
+    assert view.tree.topLevelItem(1).foreground(0).color().name() == "#b02020"
+    assert view.tree.topLevelItem(2).foreground(0).color().name() == "#6e7781"
+    assert "doctor: 8 ok, 5 warn, 0 fail, 4 skip" in view.summary_label.text()
+
+
+def test_doctor_copy_json(qtbot):
+    view = DoctorView(_fake_services())
+    qtbot.addWidget(view)
+    snap = _snap()
+    snap["doctor"]["results"] = [{"id": "ports", "title": "port conflicts",
+                                  "status": "fail", "detail": "4532 busy"}]
+    view.set_snapshot(snap)
+    checks = json.loads(view.copy_json())["checks"]
+    assert checks[0]["id"] == "ports" and checks[0]["status"] == "fail"

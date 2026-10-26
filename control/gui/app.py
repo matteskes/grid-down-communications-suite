@@ -33,9 +33,14 @@ def main(argv: list[str] | None = None) -> int:
     win = MainWindow(default_services(), autostart=not args.selfcheck)
     win.show()
     if args.selfcheck:
-        win.dashboard.set_snapshot(snapshot(win.dashboard.services))
+        snap = snapshot(win.dashboard.services)
+        win.dashboard.set_snapshot(snap)
+        win.catalog.set_snapshot(snap)
+        win.doctor.set_snapshot(snap)
         app.processEvents()
-        print("gui selfcheck ok — dashboard populated, "
+        print("gui selfcheck ok — "
+              f"apps={win.catalog.model.rowCount()}, "
+              f"doctor checks={win.doctor.tree.topLevelItemCount()}, "
               f"platform={app.platformName()}")
         return 0
     return app.exec()

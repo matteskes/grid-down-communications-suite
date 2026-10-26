@@ -36,6 +36,7 @@ class Services:
     rig: Callable[[], dict]
     audio: Callable[[], dict]
     instances: Callable[[], dict]
+    apps: Callable[[], dict]
     doctor: Callable[[], list]
 
 
@@ -69,9 +70,17 @@ def default_services(root: Path | None = None) -> Services:
     def _doctor() -> list:
         return doctor.run_checks(profile_data=profile.load_profile())
 
+    def _apps() -> dict:
+        # load_registry() returns a list[dict] (each entry has "id"); the GUI
+        # contract is a dict keyed by id so views/tests can index directly.
+        if isinstance(apps, dict):
+            return apps
+        return {str((a or {}).get("id", f"app-{i}")): (a or {})
+                for i, a in enumerate(apps or [])}
+
     return Services(version=lambda: VERSION, profile=_profile, rig=_rig,
                     audio=audio.status, instances=lambda: _sup().status(),
-                    doctor=_doctor)
+                    apps=_apps, doctor=_doctor)
 
 
 def _counts(results: list) -> dict:
@@ -100,6 +109,7 @@ def snapshot(svc: Services) -> dict:
         "rig": collect("rig", svc.rig, {}),
         "audio": collect("audio", svc.audio, {}),
         "instances": collect("instances", svc.instances, {}),
+        "apps": collect("apps", svc.apps, {}),
         "doctor": {"results": results, "counts": _counts(results),
                    "all_ok": doctor.all_ok(results)},
         "errors": errors,

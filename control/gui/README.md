@@ -2,8 +2,9 @@
 
 PySide6 application. **M3a (landed):** application skeleton + read-only
 Dashboard — station header, profile-resolved rigctld command, owned PipeWire
-endpoints, supervisor instances, doctor summary. Catalog + Doctor views land
-in M3b; Bundles start/stop, audio actions + Profiles in M3c.
+endpoints, supervisor instances, doctor summary. **M3b (landed):** Catalog
+(searchable table over the 41-app registry) + Doctor (color-coded checks,
+copy-as-JSON). M3c: Bundles start/stop, audio actions + Profiles.
 
 ## Layout
 

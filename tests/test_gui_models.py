@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "control"))
@@ -84,3 +85,34 @@ def test_models_tolerate_minimal_snapshot():
     rows = models.header_rows({})
     assert rows[0] == ("Version", "?")
     assert models.audio_rows({})[0][1].startswith("no owned endpoints")
+
+
+def test_catalog_rows_merge_registry_and_state():
+    apps = {"ardop": {"name": "ARDOP TNC", "category": "winlink",
+                      "launch": {"via": "managed-service"},
+                      "ui": {"tagline": "ARDOP modem"}},
+            "zz-plain": {}}
+    rows = models.catalog_rows(_snap(apps=apps))
+    assert [r["app"] for r in rows] == ["ardop", "zz-plain"]
+    assert rows[0]["name"] == "ARDOP TNC" and rows[0]["via"] == "managed-service"
+    assert rows[0]["state"] == "-" and rows[0]["tagline"] == "ARDOP modem"
+    assert rows[1]["name"] == "zz-plain" and rows[1]["category"] == "-"
+
+
+def test_catalog_rows_overlay_running_state():
+    snap = _snap(apps={"hamlib": {}},
+                 instances={"apps": [{"id": "hamlib", "state": "running"}]})
+    assert models.catalog_rows(snap)[0]["state"] == "running"
+
+
+def test_catalog_rows_empty_on_section_error():
+    assert models.catalog_rows(_snap(apps={}, errors={"apps": "boom"})) == []
+
+
+def test_doctor_rows_duck_typed():
+    res = [SimpleNamespace(status="ok", title="t", detail="d"),
+           {"status": "fail", "title": "p", "detail": "q"}]
+    snap = _snap(doctor={"results": res, "counts": {}, "all_ok": False})
+    assert models.doctor_rows(snap) == [("ok", "t", "d"), ("fail", "p", "q")]
+    assert models.doctor_rows(_snap(errors={"doctor": "x"})) == [
+        ("fail", "doctor", "unavailable — x")]

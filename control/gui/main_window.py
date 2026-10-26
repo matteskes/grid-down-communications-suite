@@ -11,10 +11,12 @@ from PySide6.QtWidgets import (QHBoxLayout, QLabel, QListWidget, QMainWindow,
                                QStackedWidget, QVBoxLayout, QWidget)
 
 from gui.services import Services
+from gui.views.catalog import CatalogView
 from gui.views.dashboard import DashboardView
+from gui.views.doctor import DoctorView
 
 PAGES = ("Dashboard", "Bundles", "Catalog", "Doctor", "Profile")
-PENDING = {"Bundles": "M3c", "Catalog": "M3b", "Doctor": "M3b", "Profile": "M3c"}
+PENDING = {"Bundles": "M3c", "Profile": "M3c"}  # Catalog + Doctor landed in M3b
 
 
 class MainWindow(QMainWindow):
@@ -24,10 +26,14 @@ class MainWindow(QMainWindow):
         self.resize(960, 640)
 
         self.dashboard = DashboardView(services, self)
+        self.catalog = CatalogView(services, self)
+        self.doctor = DoctorView(services, self)
         stack = QStackedWidget(self)
-        stack.addWidget(self.dashboard)
-        for name in PAGES[1:]:
-            stack.addWidget(self._placeholder(name))
+        stack.addWidget(self.dashboard)                # Dashboard
+        stack.addWidget(self._placeholder("Bundles"))  # M3c
+        stack.addWidget(self.catalog)                  # Catalog (M3b)
+        stack.addWidget(self.doctor)                   # Doctor (M3b)
+        stack.addWidget(self._placeholder("Profile"))  # M3c
 
         self.nav = QListWidget(self)
         for name in PAGES:

@@ -75,3 +75,42 @@ def doctor_lines(snap: dict) -> list[str]:
 
 def error_lines(snap: dict) -> list[str]:
     return [f"{section}: {msg}" for section, msg in (snap.get("errors") or {}).items()]
+
+
+def catalog_rows(snap: dict) -> list[dict]:
+    """One row per registry app: id/name/category/via + live supervisor state."""
+    if _err(snap, "apps"):
+        return []
+    state_by_id = {str(r.get("id")): str(r.get("state"))
+                   for r in (snap.get("instances") or {}).get("apps", [])}
+    rows = []
+    for app_id, app in sorted((snap.get("apps") or {}).items()):
+        app = app or {}
+        rows.append({
+            "app": str(app_id),
+            "name": str(app.get("name") or app_id),
+            "category": str(app.get("category") or "-"),
+            "via": str((app.get("launch") or {}).get("via") or "-"),
+            "tagline": str((app.get("ui") or {}).get("tagline") or ""),
+            "state": state_by_id.get(str(app_id), "-"),
+        })
+    return rows
+
+
+DOCTOR_GLYPH = {"ok": "ok", "warn": "WARN", "fail": "FAIL", "skip": "skip"}
+
+
+def doctor_rows(snap: dict) -> list[tuple[str, str, str]]:
+    """(status, title, detail) per check; accepts CheckResult objects or dicts."""
+    err = _err(snap, "doctor")
+    if err:
+        return [("fail", "doctor", err)]
+    rows = []
+    for r in (snap.get("doctor") or {}).get("results") or []:
+        if isinstance(r, dict):
+            status, title, detail = r.get("status", "?"), r.get("title", ""), r.get("detail", "")
+        else:
+            status = getattr(r, "status", "?")
+            title, detail = getattr(r, "title", ""), getattr(r, "detail", "")
+        rows.append((str(status), str(title), str(detail)))
+    return rows
