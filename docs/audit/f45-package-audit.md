@@ -104,7 +104,16 @@ glob meshtastic*:       (empty)
 - **wine 11.20** is present on x86_64 but currently from `updates-testing` (F45 just GA'd) —
   the kit builder must record the exact NVR + repo in the manifest (G5).
 - **ffmpeg** requires RPM Fusion release RPMs *before* kit download; the builder installs them
-  from pinned URLs (recorded in the manifest).
+  from the pinned mirrors (user-supplied URL, verified 2026-10-26 — redirect → FCIX mirrors):
+
+  | Artifact | URL (mirrors.rpmfusion.org) | SHA-256 | Size |
+  |---|---|---|---|
+  | free release | `https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-45.noarch.rpm` | `a120c2a2c70ec2c8ad461908aacf316998b03f6b2156c143b772052972e80a95` | 11,589 B |
+  | nonfree release | `https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-45.noarch.rpm` | `0cb381899827136c92be41a068e6177982bda36ce594729c0bf6f4fa485a15a9` | 11,677 B |
+
+  Verified in-container (`fedora:45`, linux/amd64, 2026-10-26): both install as
+  `rpmfusion-free-release-45-0.2.noarch` / `rpmfusion-nonfree-release-45-0.2.noarch`; ffmpeg then
+  resolves to `ffmpeg-9.0.2-1.fc45` from the **rpmfusion-free** repo.
 - **Java:** only `java-25-openjdk` / `java-latest-openjdk` remain; YAAC recipe pins
   `java-latest-openjdk-headless` (or the 25 equivalent at kit time).
 - **php-cli** is available — JS8Spotter's local service needs no extra repo.

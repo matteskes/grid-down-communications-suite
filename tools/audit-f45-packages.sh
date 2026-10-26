@@ -44,10 +44,10 @@ check js8call pat meshtastic gridtracker
 
 # --- Round 2: verify surprises with alternate names, globs, and official RPM Fusion release RPMs ---
 
-echo "--- rpmfusion via official release rpms ---"
+echo "--- rpmfusion via official release rpms (mirrors.rpmfusion.org; pinned, see docs/audit) ---"
 if dnf -q -y install \
-    https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-45.noarch.rpm \
-    https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-45.noarch.rpm >/dev/null 2>&1; then
+    https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-45.noarch.rpm \
+    https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-45.noarch.rpm >/dev/null 2>&1; then
     echo "rpmfusion: enabled (release rpms)"
     check ffmpeg
 else
