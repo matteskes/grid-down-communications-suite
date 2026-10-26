@@ -68,12 +68,15 @@ One YAML file describes the station; every adapter reads from it. Default templa
 ```yaml
 profile: { id: default, callsign: "", grid: "" }
 rig:
-  model: ""                 # hamlib model, e.g. 3073 (TS-480 via rigctld)
+  model: ""                 # numeric hamlib id from `rigctl -l` (e.g. 3073 = TS-480);
+                            # empty = Dummy backend (bench-safe; Doctor warns)
   path: /dev/ttyUSB0
   baud: 38400
 audio:
   backend: pipewire
-  presets: {}               # per-app loopback presets, see §6.6
+  rig_capture: ""           # physical rig capture source name (loopback wiring: Phase 3)
+  presets:                  # per-app launch-cmd placeholders, see §6.6/§6.4 M2 note
+    ardop: { capture: grid_down_hf_out, playback: grid_down_hf_in }
 internet: { present: false }   # air-gap master switch
 winlink:
   secure_password: ""
@@ -145,6 +148,16 @@ formatting where practical. `gd config apply <app>` prints the unified diff befo
   device. Only rigctld touches the serial port (G4).
 - **Audio:** PipeWire graph with named loopback sinks/sources per role (HF in/out, packet in/out,
   voice in/out). Apps bind to loopbacks via adapters; presets live in the profile (`audio.presets`).
+
+**M2 implementation (2026-10-26):** `control/core/audio.py` owns the endpoint namespace —
+`grid_down_{hf,packet,voice}_{in,out}` (in = sink apps play into, out = source apps capture
+from), created/destroyed idempotently via `gd audio up|down` (pactl / pipewire-pulse) and
+audited by `gd audio status` + Doctor. Nothing outside the module may create or destroy
+`grid_down_*` nodes (G4). Apps bind to endpoints through registry launch-cmd placeholders
+(e.g. `ardopc 8515 <capture> <playback>`), resolved per-app from `audio.presets` (profile)
+over `DEFAULT_PRESETS`; unresolved placeholders are refused naming the exact profile key.
+Loopbacking the endpoints to the physical rig interface (`audio.rig_capture`) lands with the
+Phase 3 adapter work; `gd audio plan` prints the intended graph either way.
 - **Wine hub:** one prefix at `/opt/grid-down/wine-prefix` for the VARA family + VarAC;
   `gd winehub` wraps start/stop and serial/COM mapping. Installers/licenses never leave
   `install/kit-import/` (G6).
@@ -162,8 +175,11 @@ process-group spawn (`start_new_session`), JSON instance table at
 Suite rules enforced: `hamlib` (rigctld) is a singleton auto-started before any rig-dependent app
 (an app is rig-dependent when it appears in any bundle that includes hamlib — data-driven from
 §6.3) and stopped only once the last dependent is down; wine-hub and cli-tool launches are
-refused with operator guidance; placeholder launch cmds (e.g. ARDOP audio devices) are refused
-until the audio wiring lands. The systemd user-unit backend above (bundle targets + `BindsTo`)
+refused with operator guidance. **M2 (2026-10-26):** rigctld flags are built from the profile
+`rig:` section by `Supervisor.rig_argv()` — `gd rig` previews the exact argv (Dummy backend +
+note when `rig.model` is empty; non-numeric ids refused); launch-cmd `<placeholders>` resolve
+through `audio.presets` (§6.4 M2 note) and are refused naming the exact profile key when
+unresolved. The systemd user-unit backend above (bundle targets + `BindsTo`)
 remains the Phase 2 completion target for the GUI; `Supervisor` is the backend-neutral API both
 frontends share.
 
@@ -187,9 +203,11 @@ PipeWire graph health · rigctld port conflicts · Wine prefix sanity · kit man
 
 M1 (2026-10-26) implements via `control/core/doctor.py`: platform sanity, dialout group, serial
 device presence, PipeWire tooling, §6.6 port occupancy, supervisor state hygiene (stale
-instances), profile sanity, wine-prefix presence, air-gap switch report. Deferred with an
-explicit `skip` line in every report: kit manifest verify, deep PipeWire graph audit, Meshtastic
-VID:PID probe, per-app phone-home scan.
+instances), profile sanity, wine-prefix presence, air-gap switch report. **M2 adds:** rig-model
+sanity (warns on Dummy fallback and non-numeric `rig.model`) and the owned-endpoint audit
+(missing `grid_down_*` endpoints → warn with `gd audio up`), which retires the deep PipeWire
+graph audit from the deferred list. Deferred with an explicit `skip` line in every report:
+kit manifest verify, Meshtastic VID:PID probe, per-app phone-home scan.
 
 ### 6.8 Offline kit contents
 

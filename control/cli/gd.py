@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
-"""gd — Grid Down command-line control interface (M1).
+"""gd — Grid Down command-line control interface (M2).
 
-Implemented: version, apps list, bundles list, profile show, launch, stop,
-status, doctor (spec §6.7 M1 subset).
-Later phases add: config apply (adapters), install progress, winehub, and the
-Control Center GUI (which shares core/supervisor + core/doctor with this CLI).
+Implemented: version, apps list, bundles list, profile show, rig, audio
+(plan/up/down/status), launch, stop, status, doctor (spec §6.4/§6.6/§6.7).
+M2 adds profile-driven rigctld (rig_argv) and the suite-owned PipeWire
+endpoint namespace (core/audio.py). Later phases add: config apply
+(adapters), install progress, winehub, and the Control Center GUI (which
+shares core/supervisor + core/audio + core/doctor with this CLI).
 """
 from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import doctor, profile, registry  # noqa: E402
-from core.supervisor import Supervisor, SupervisorError  # noqa: E402
+from core import audio, doctor, profile, registry  # noqa: E402
+from core.supervisor import PORTS, Supervisor, SupervisorError  # noqa: E402
 
-VERSION = "0.2.0-m1"
+VERSION = "0.3.0-m2"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -29,10 +32,11 @@ def _fail(message: str) -> int:
     return 1
 
 
-def _build_supervisor() -> Supervisor:
+def _build_supervisor(profile_data: dict | None = None) -> Supervisor:
     apps = registry.load_registry(ROOT / "control" / "registry" / "apps")
     bundles = registry.load_bundles(ROOT / "control" / "registry" / "bundles.yaml")
-    return Supervisor(apps, bundles)
+    prof = profile.load_profile() if profile_data is None else profile_data
+    return Supervisor(apps, bundles, profile=prof)
 
 
 def cmd_version(_args) -> int:
@@ -68,6 +72,60 @@ def cmd_profile(_args) -> int:
     data = profile.load_profile()
     print(f"profile file: {path}")
     print(json.dumps(data, indent=2))
+    return 0
+
+
+def cmd_rig(args) -> int:
+    prof = profile.load_profile()
+    argv, notes = _build_supervisor(prof).rig_argv()
+    rig = prof.get("rig", {}) or {}
+    if args.json:
+        print(json.dumps({"argv": argv, "notes": notes,
+                          "endpoint": f"127.0.0.1:{PORTS['hamlib']}",
+                          "profile_rig": rig}, indent=2))
+        return 0
+    print("rigctld argv: " + shlex.join(argv))
+    print(f"endpoint: 127.0.0.1:{PORTS['hamlib']} — suite-owned singleton (spec §6.4/G4)")
+    print(f"profile rig: model={rig.get('model') or '(unset → Dummy)'} "
+          f"path={rig.get('path') or '(unset)'} baud={rig.get('baud') or '(unset)'}")
+    for note in notes:
+        print(f"note: {note}")
+    return 0
+
+
+def cmd_audio(args) -> int:
+    prof = profile.load_profile()
+    action = args.audio_cmd
+    if action == "plan":
+        steps = audio.plan(prof)
+        print(f"{'ENDPOINT':<26} {'KIND':<7} STATE")
+        for st in steps:
+            print(f"{st['endpoint']:<26} {st['kind']:<7} {st['state']}")
+        rig_capture = (prof.get("audio", {}) or {}).get("rig_capture") or ""
+        pending = (f"rig-interface loopback from '{rig_capture}'"
+                   if rig_capture else "rig-interface loopback (set audio.rig_capture)")
+        print(f"\npending (Phase 3 adapters): {pending}")
+        defaults = ", ".join(f"{a}.{k}={v}"
+                             for a, pv in audio.DEFAULT_PRESETS.items()
+                             for k, v in pv.items())
+        print(f"launch-arg presets (profile audio.presets overrides): {defaults}")
+        return 0
+    if action == "status":
+        st = audio.status()
+        print("present: " + (", ".join(st["present"]) or "(none)"))
+        print("missing: " + (", ".join(st["missing"]) or "(none)"))
+        return 0
+    if action == "up":
+        out = audio.up(prof)
+        for c in out["created"]:
+            print(f"created: {c['endpoint']} (pactl module {c['module']})")
+        for name in out["skipped"]:
+            print(f"exists:  {name}")
+        if not out["created"] and not out["skipped"]:
+            print("nothing to do")
+        return 0
+    out = audio.down(prof)  # down
+    print("unloaded modules: " + (", ".join(out["unloaded"]) or "(none)"))
     return 0
 
 
@@ -189,10 +247,24 @@ def main(argv: list[str] | None = None) -> int:
     p_status.add_argument("--json", action="store_true", help="machine-readable snapshot")
     p_status.set_defaults(func=cmd_status)
 
+    p_rig = sub.add_parser("rig", help="show profile-resolved rigctld command (spec §6.4)")
+    p_rig.add_argument("--json", action="store_true", help="machine-readable report")
+    p_rig.set_defaults(func=cmd_rig)
+
+    p_a = sub.add_parser("audio", help="suite-owned PipeWire endpoints (spec §6.6, G4)")
+    p_a_sub = p_a.add_subparsers(dest="audio_cmd", required=True)
+    for name, hlp in (("plan", "print the planned owned endpoint graph"),
+                      ("up", "create missing grid_down_* endpoints (idempotent)"),
+                      ("down", "unload grid_down_* modules (never others)"),
+                      ("status", "list present/missing owned endpoints")):
+        p = p_a_sub.add_parser(name, help=hlp)
+        p.set_defaults(func=cmd_audio, audio_cmd=name)
+
     args = ap.parse_args(argv)
     try:
         return args.func(args)
-    except (SupervisorError, registry.RegistryError, profile.ProfileError) as exc:
+    except (SupervisorError, registry.RegistryError, profile.ProfileError,
+            audio.AudioError) as exc:
         return _fail(str(exc))
 
 

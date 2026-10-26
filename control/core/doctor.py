@@ -24,8 +24,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 try:  # package import (gd CLI, pytest)
-    from . import supervisor as sup
+    from . import audio, supervisor as sup
 except ImportError:  # pragma: no cover - sibling import inside control/
+    import audio
     import supervisor as sup  # type: ignore
 
 PORTS = sup.PORTS
@@ -38,7 +39,6 @@ WINE_PREFIX = Path("/opt/grid-down/wine-prefix")
 
 DEFERRED = (
     "kit manifest sha256 verification (needs kit/ from a build)",
-    "deep PipeWire loopback graph audit (audio module, Phase 2)",
     "Meshtastic USB VID:PID probe (cp210x/ch341)",
     "phone-home scan of running apps when air-gapped",
 )
@@ -114,13 +114,38 @@ def _check_serial() -> CheckResult:
 
 def _check_audio() -> CheckResult:
     if not sys.platform.startswith("linux"):
-        return CheckResult("audio", "PipeWire audio", "skip", "non-Linux host")
-    if shutil.which("pw-cli") or shutil.which("pactl"):
-        return CheckResult("audio", "PipeWire audio", "ok",
-                           "audio tooling present (pw-cli/pactl); loopback graph audit "
-                           "lands with the §6.6 audio module (Phase 2)")
-    return CheckResult("audio", "PipeWire audio", "warn",
-                       "no PipeWire tooling on PATH (Fedora 45 ships pipewire + pipewire-pulse)")
+        return CheckResult("audio", "PipeWire audio", "skip",
+                           "non-Linux host — owned endpoints (`gd audio up`) need PipeWire")
+    if not shutil.which("pactl"):
+        return CheckResult("audio", "PipeWire audio", "warn",
+                           "pactl not found (pipewire-pulse) — the suite cannot own its "
+                           "audio endpoints (dnf install pipewire-pulse)")
+    try:
+        st = audio.status()
+    except audio.AudioError as exc:
+        return CheckResult("audio", "PipeWire audio", "warn",
+                           f"no live PipeWire session ({exc})")
+    if st["missing"]:
+        return CheckResult("audio", "PipeWire audio", "warn",
+                           "owned endpoints missing: " + ", ".join(st["missing"])
+                           + " — create with: gd audio up")
+    return CheckResult("audio", "PipeWire audio", "ok",
+                       "owned endpoints present: " + ", ".join(st["present"]))
+
+
+def _check_rig_model(profile_data: dict | None) -> CheckResult:
+    rig = (profile_data or {}).get("rig", {}) or {}
+    model = str(rig.get("model") or "").strip()
+    if not model:
+        return CheckResult("rig-model", "rig model (hamlib)", "warn",
+                           "rig.model unset — rigctld starts on the Dummy backend "
+                           "(safe loopback, no radio); set the numeric id from `rigctl -l`")
+    if not model.isdigit():
+        return CheckResult("rig-model", "rig model (hamlib)", "warn",
+                           f"rig.model {model!r} is not numeric — rigctld needs the "
+                           "id column of `rigctl -l`")
+    return CheckResult("rig-model", "rig model (hamlib)", "ok",
+                       f"model {model} → rigctld -m {model} at 127.0.0.1:{PORTS['hamlib']}")
 
 
 def _check_ports(ports: dict[str, int], instances: dict) -> list[CheckResult]:
@@ -204,6 +229,7 @@ def run_checks(state_dir: Path | None = None, profile_data: dict | None = None,
     results += _check_ports(ports, instances)
     results.append(_check_state(state_dir))
     results += _check_profile(profile_data)
+    results.append(_check_rig_model(profile_data))
     results.append(_check_wine())
     results.append(_check_deferred())
     return results

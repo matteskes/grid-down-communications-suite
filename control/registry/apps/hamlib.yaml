@@ -11,7 +11,9 @@ install:
   note: "Install from Fedora 45 / RPM Fusion repos at air-gap time via the kit-local dnf repo."
 launch:
   via: managed-service
-  cmd: "rigctld -T 127.0.0.1 -p 4532 -v"
+  # First token = binary the supervisor resolves; all flags are built from the
+  # station profile rig: section (M2 — spec §4). This line documents defaults.
+  cmd: "rigctld -T 127.0.0.1 -t 4532 -v"
 config:
   adapter: none
   native_path: TBD   # pin exact native config path per station (Phase 3/4)

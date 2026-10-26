@@ -7,13 +7,20 @@ profile:
   grid: ""            # Maidenhead grid square, e.g. FN31pr
 
 rig:
-  model: ""           # hamlib model id or name (see: rigctl -l)
+  model: ""           # numeric hamlib id from `rigctl -l` (e.g. 3073 = TS-480);
+                      # empty = Dummy backend (bench-safe, Doctor warns)
   path: /dev/ttyUSB0
   baud: 38400
 
 audio:
   backend: pipewire
-  presets: {}         # per-app loopback presets (Phase 2: control/core/audio.py)
+  # Suite-owned endpoints (M2, spec §6.6/G4): `gd audio up` creates
+  #   grid_down_{hf,packet,voice}_{in,out}  — in = apps play to, out = apps capture.
+  rig_capture: ""     # physical rig capture source name; loopback wiring = Phase 3 adapters
+  presets:            # per-app <placeholder> launch args; override defaults in control/core/audio.py
+    ardop:
+      capture: grid_down_hf_out
+      playback: grid_down_hf_in
 
 internet:
   present: false      # air-gap master switch; Doctor enforces off-net behavior when false

@@ -27,9 +27,20 @@ def _sleeper(secs: float = 60) -> str:
     return shlex.join([sys.executable, "-c", f"import time; time.sleep({secs})"])
 
 
-def _apps() -> list[dict]:
+def _rig_stub(tmp_path: Path) -> str:
+    """Flag-swallowing stand-in for the rigctld binary (M2: argv0 comes from
+    the registry entry; all flags are profile-built and this stub ignores them)."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    rig = bindir / "rigctld-fake"
+    rig.write_text("#!/bin/sh\nexec sleep 60\n")
+    rig.chmod(0o755)
+    return str(rig)
+
+
+def _apps(rig_cmd: str = "rigctld") -> list[dict]:
     return [
-        {"id": "hamlib", "launch": {"via": "managed-service", "cmd": _sleeper()}},
+        {"id": "hamlib", "launch": {"via": "managed-service", "cmd": rig_cmd}},
         {"id": "term", "launch": {"via": "desktop-app", "cmd": _sleeper()}},
         {"id": "dep", "launch": {"via": "desktop-app", "cmd": _sleeper()}},
         {"id": "dep2", "launch": {"via": "desktop-app", "cmd": _sleeper()}},
@@ -53,7 +64,7 @@ BUNDLES = {
 
 @pytest.fixture()
 def sup(tmp_path):
-    s = Supervisor(_apps(), bundles=BUNDLES, state_dir=tmp_path / "state",
+    s = Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES, state_dir=tmp_path / "state",
                    app_root=tmp_path / "opt")
     yield s
     for entry in list(s.state["instances"].values()):
@@ -124,7 +135,7 @@ def test_stop_all_teardown(sup):
 
 
 def test_placeholder_cmd_refused(sup):
-    with pytest.raises(SupervisorError, match="placeholders"):
+    with pytest.raises(SupervisorError, match="preset unresolved"):
         sup.launch("bad")
     assert "bad" not in sup.state["instances"]
 
@@ -160,10 +171,10 @@ def test_stale_detection_and_clear(sup):
 
 
 def test_state_persists_across_instances(tmp_path):
-    s1 = Supervisor(_apps(), bundles=BUNDLES, state_dir=tmp_path / "state",
+    s1 = Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES, state_dir=tmp_path / "state",
                     app_root=tmp_path / "opt")
     s1.launch("term")
-    s2 = Supervisor(_apps(), bundles=BUNDLES, state_dir=tmp_path / "state",
+    s2 = Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES, state_dir=tmp_path / "state",
                     app_root=tmp_path / "opt")
     assert s2.is_running("term")  # second process sees the same state file
     s2.stop("term")
@@ -193,3 +204,70 @@ def test_js8spotter_needs_php_or_errors(sup, tmp_path):
     else:
         with pytest.raises(SupervisorError, match="php-cli"):
             sup._local_service_cmd(sup.app("js8spotter"))
+
+
+# ------------------------------------------------------- M2: rig from profile
+def _sup_with_profile(tmp_path, prof):
+    return Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES,
+                      state_dir=tmp_path / "state",
+                      app_root=tmp_path / "opt", profile=prof)
+
+
+def _kill_all(s):
+    for entry in list(s.state["instances"].values()):
+        try:
+            os.killpg(entry["pgid"], signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def test_rig_argv_from_profile(tmp_path):
+    prof = {"rig": {"model": "3073", "path": "/dev/ttyUSB0", "baud": 38400}}
+    argv, notes = _sup_with_profile(tmp_path, prof).rig_argv()
+    assert notes == []
+    assert argv[argv.index("-m") + 1] == "3073"
+    assert argv[argv.index("-r") + 1] == "/dev/ttyUSB0"
+    assert argv[argv.index("-s") + 1] == "38400"
+    assert argv[argv.index("-T") + 1] == "127.0.0.1"
+    assert argv[argv.index("-t") + 1] == "4532"
+
+
+def test_rig_argv_dummy_when_model_unset(sup):
+    argv, notes = sup.rig_argv()
+    assert argv[argv.index("-m") + 1] == "1"
+    assert "Dummy" in notes[0]
+
+
+def test_rig_argv_refuses_non_numeric_model(tmp_path):
+    s = _sup_with_profile(tmp_path, {"rig": {"model": "TS-480"}})
+    with pytest.raises(SupervisorError, match="rigctl -l"):
+        s.rig_argv()
+
+
+def test_hamlib_launch_uses_profile_rig(tmp_path):
+    prof = {"rig": {"model": "3073", "path": "/dev/ttyUSB0", "baud": 38400}}
+    s = _sup_with_profile(tmp_path, prof)
+    try:
+        s.launch("dep", bundle="wb")  # auto-starts the rig singleton
+        argv = s.state["instances"]["hamlib"]["argv"]
+        assert argv[argv.index("-m") + 1] == "3073"
+        assert argv[argv.index("-t") + 1] == "4532"
+    finally:
+        _kill_all(s)
+
+
+# -------------------------------------------------- M2: audio preset binding
+def test_placeholder_resolved_via_default_preset(sup):
+    app = {"id": "ardop", "launch": {"via": "managed-service",
+                                     "cmd": f"{sys.executable} -c pass 8515 "
+                                            f"<capture> <playback>"}}
+    argv, _ = sup._resolve_cmd(app)
+    assert argv[-2:] == ["grid_down_hf_out", "grid_down_hf_in"]
+
+
+def test_placeholder_partial_profile_override(sup):
+    sup.profile["audio"] = {"presets": {"bad2": {"capture": "hw:CARD=rig"}}}
+    app = {"id": "bad2", "launch": {"via": "managed-service",
+                                    "cmd": "x <capture> <playback>"}}
+    with pytest.raises(SupervisorError, match=r"presets\.bad2\.playback"):
+        sup._resolve_cmd(app)  # capture resolved; playback still missing

@@ -77,3 +77,29 @@ def test_text_and_json_rendering(tmp_path):
     assert payload["ok"] is True
     assert payload["checks"][0]["id"] == "platform"
     assert all(set(c) == {"id", "title", "status", "detail"} for c in payload["checks"])
+
+
+# ------------------------------------------------------- M2: rig + audio checks
+def test_rig_model_check(tmp_path):
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={})
+    chk = next(r for r in results if r.id == "rig-model")
+    assert chk.status == "warn" and "Dummy" in chk.detail
+
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={"rig": {"model": "TS-480"}})
+    chk = next(r for r in results if r.id == "rig-model")
+    assert chk.status == "warn" and "numeric" in chk.detail
+
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={"rig": {"model": "3073"}})
+    chk = next(r for r in results if r.id == "rig-model")
+    assert chk.status == "ok" and "4532" in chk.detail
+
+
+def test_audio_check_and_deferred_no_pipewire(tmp_path):
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={})
+    audio_chk = next(r for r in results if r.id == "audio")
+    if sys.platform.startswith("linux"):
+        assert audio_chk.status in ("ok", "warn")
+    else:
+        assert audio_chk.status == "skip"
+    deferred = next(r for r in results if r.id == "deferred")
+    assert "PipeWire" not in deferred.detail  # graph audit implemented in M2

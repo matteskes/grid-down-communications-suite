@@ -41,6 +41,11 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:  # package import (gd CLI, pytest)
+    from . import audio
+except ImportError:  # pragma: no cover - sibling import inside control/
+    import audio  # type: ignore
+
 RIG_ID = "hamlib"      # suite-owned rigctld singleton (spec §6.4)
 TERM_GRACE_S = 5.0     # SIGTERM → SIGKILL escalation window
 STATE_VERSION = 1
@@ -89,12 +94,14 @@ class Supervisor:
     """Direct-backend supervisor over the app registry (spec §6.1/§6.5)."""
 
     def __init__(self, apps: list[dict], bundles: dict | None = None,
-                 state_dir: Path | None = None, app_root: Path | None = None):
+                 state_dir: Path | None = None, app_root: Path | None = None,
+                 profile: dict | None = None):
         self.apps: dict[str, dict] = {a["id"]: a for a in apps}
         self.bundles: dict = bundles or {}
         self.state_dir = Path(state_dir) if state_dir else default_state_dir()
         root = app_root or os.environ.get("GRID_DOWN_APP_ROOT") or "/opt/grid-down"
         self.app_root = Path(root).expanduser()
+        self.profile = profile or {}   # station profile (rig + audio.presets, §4)
         self._rig_dependents = self._compute_rig_dependents()
         self.state = self._load_state()
 
@@ -195,6 +202,41 @@ class Supervisor:
                 "radio app without rig control (spec §6.4)")
         self.launch(RIG_ID, bundle=bundle)
 
+    def rig_argv(self) -> tuple[list[str], list[str]]:
+        """rigctld argv from the station profile (spec §4 rig:, §6.4/§6.6).
+
+        Returns (argv, notes). The binary name comes from the registry entry
+        (first token of hamlib launch.cmd); every flag is profile-derived so
+        rigctld remains the only serial owner (G4). Empty rig.model falls back
+        to the hamlib Dummy backend (id 1) with an explicit note — safe on a
+        bench, wrong in the field (Doctor warns). Non-numeric models are
+        refused: rigctld takes only the numeric id column of `rigctl -l`.
+        """
+        reg_cmd = (self.apps.get(RIG_ID, {}).get("launch", {}) or {}).get("cmd") or ""
+        tokens = shlex.split(reg_cmd)
+        argv0 = os.path.expandvars(os.path.expanduser(tokens[0])) if tokens else "rigctld"
+        rig = (self.profile.get("rig", {}) or {}) if self.profile else {}
+        argv = [argv0, "-T", "127.0.0.1", "-t", str(PORTS[RIG_ID]), "-v"]
+        notes: list[str] = []
+        model = str(rig.get("model") or "").strip()
+        if not model:
+            argv += ["-m", "1"]
+            notes.append("rig.model unset — hamlib Dummy backend (loopback-safe, "
+                         "no radio); set rig.model to the numeric id from "
+                         "`rigctl -l` for field use")
+        elif model.isdigit():
+            argv += ["-m", model]
+        else:
+            raise SupervisorError(
+                f"rig.model {model!r} is not a numeric hamlib id — rigctld accepts "
+                "the id column of `rigctl -l` (e.g. 3073); leave rig.model empty "
+                "for the Dummy backend")
+        if rig.get("path"):
+            argv += ["-r", str(rig["path"])]
+        if rig.get("baud"):
+            argv += ["-s", str(rig["baud"])]
+        return argv, notes
+
     def _spawn(self, app: dict, bundle: str | None) -> dict:
         argv, cwd = self._resolve_cmd(app)
         log = self.state_dir / "logs" / f"{app['id']}.log"
@@ -227,6 +269,8 @@ class Supervisor:
         launch = app.get("launch", {})
         via = launch.get("via")
         cmd = (launch.get("cmd") or "").strip()
+        if app_id == RIG_ID:  # rig flags are profile-built (spec §4), not registry
+            return self.rig_argv()[0], None
         if via == "wine-hub":
             raise SupervisorError(f"{app_id}: wine-hub apps are managed by 'gd winehub' (Phase 3)")
         if via == "cli-tool":
@@ -237,9 +281,19 @@ class Supervisor:
         if not cmd:
             raise SupervisorError(f"{app_id}: registry entry has no launch.cmd")
         # drop prose parentheticals like "(served by suite)"
-        tokens = [t for t in shlex.split(cmd) if not re.fullmatch(r"\([^)]*\)", t)]
-        if not tokens:
+        raw = [t for t in shlex.split(cmd) if not re.fullmatch(r"\([^)]*\)", t)]
+        if not raw:
             raise SupervisorError(f"{app_id}: launch.cmd is only prose: {cmd!r}")
+        tokens = []
+        for t in raw:  # <placeholders> resolve through audio.presets (spec §6.6)
+            m = re.fullmatch(r"<([a-z_]+)>", t)
+            if m:
+                try:
+                    tokens.append(audio.resolve_preset(app_id, m.group(1), self.profile))
+                except audio.AudioError as exc:
+                    raise SupervisorError(f"{app_id}: {exc}") from None
+            else:
+                tokens.append(t)
         if any(re.search(r"[<>\[\]{}]", t) for t in tokens):
             raise SupervisorError(f"{app_id}: launch.cmd has placeholders ({cmd}) — needs "
                                   "profile/audio wiring (Phase 3) before it can be supervised")
