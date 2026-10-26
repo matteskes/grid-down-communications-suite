@@ -52,23 +52,32 @@ grid-down/
 ## Quick start (dev)
 
 ```bash
-# validate registry + recipes
+# validate registry, recipes, supervisor, doctor
 python3 -m pytest tests/ -q
 
-# CLI smoke test
-python3 control/cli/gd.py apps list
+# CLI
+python3 control/cli/gd.py version
+python3 control/cli/gd.py apps list          # 41 registered apps
+python3 control/cli/gd.py bundles list       # session bundles (§6.3)
+python3 control/cli/gd.py doctor             # station preflight (§6.7 M1 subset)
+python3 control/cli/gd.py status             # supervisor instances
+python3 control/cli/gd.py launch <app|bundle>   # e.g. launch winlink (rigctld auto-starts)
+python3 control/cli/gd.py stop <app|bundle|all> # reverse order; rigctld stopped last
 
 # Fedora 45 package audit (online machine, uses Docker)
 bash tools/run-audit.sh > docs/audit/f45-package-audit.md
 ```
 
+Supervisor state lives in `$XDG_STATE_HOME/grid-down/supervisor.json`
+(override: `GRID_DOWN_STATE_DIR`); launch logs in `.../logs/<app>.log`.
+
 ## Phased rollout
 
 | Phase | Scope |
 |---|---|
-| P0 | Scaffold, spec v0.3, F45 package audit *(current)* |
+| P0 | Scaffold, spec v0.3, F45 package audit *(done)* |
 | P1 | Installer library + kit builder skeleton; first online↔air-gap round-trip (dnf-only subset) |
-| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership |
+| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(in progress — CLI v1 + supervisor + doctor landed, M1; GUI next)* |
 | P3 | VARA/Wine Hub; Winlink session bundle end-to-end |
 | P4 | Remaining apps + LoRa/Meshtastic recipes, adapters, localhost services |
 | P5 | Offline USB kit, bootstrap hardening, docs, drills |

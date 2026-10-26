@@ -155,6 +155,18 @@ Managed services (rigctld, direwolf, meshtasticd, dump1090, localhost HTTP/PHP s
 systemd user units with `BindsTo` on a bundle target (`grid-down-<bundle>.target`). Control Center
 starts/stops bundles; processes outliving their target are treated as errors by Doctor.
 
+**M1 implementation (2026-10-26):** `control/core/supervisor.py` ships the *direct* backend —
+process-group spawn (`start_new_session`), JSON instance table at
+`$XDG_STATE_HOME/grid-down/supervisor.json` (override: `GRID_DOWN_STATE_DIR`), per-app logs under
+`.../logs/<app>.log`, atomic state writes, SIGTERM→SIGKILL teardown in reverse bundle order.
+Suite rules enforced: `hamlib` (rigctld) is a singleton auto-started before any rig-dependent app
+(an app is rig-dependent when it appears in any bundle that includes hamlib — data-driven from
+§6.3) and stopped only once the last dependent is down; wine-hub and cli-tool launches are
+refused with operator guidance; placeholder launch cmds (e.g. ARDOP audio devices) are refused
+until the audio wiring lands. The systemd user-unit backend above (bundle targets + `BindsTo`)
+remains the Phase 2 completion target for the GUI; `Supervisor` is the backend-neutral API both
+frontends share.
+
 ### 6.6 Local services & ports
 
 | Port | Service |
@@ -172,6 +184,12 @@ dialout/udev groups · serial/SPI device presence (incl. Meshtastic cp210x/ch341
 PipeWire graph health · rigctld port conflicts · Wine prefix sanity · kit manifest verification ·
 **air-gap violations**: any enabled phone-home feature (notably Meshtastic MQTT uplink) when
 `internet.present: false`.
+
+M1 (2026-10-26) implements via `control/core/doctor.py`: platform sanity, dialout group, serial
+device presence, PipeWire tooling, §6.6 port occupancy, supervisor state hygiene (stale
+instances), profile sanity, wine-prefix presence, air-gap switch report. Deferred with an
+explicit `skip` line in every report: kit manifest verify, deep PipeWire graph audit, Meshtastic
+VID:PID probe, per-app phone-home scan.
 
 ### 6.8 Offline kit contents
 
