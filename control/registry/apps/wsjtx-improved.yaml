@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: wsjtx-improved
+name: WSJT-X Improved (JTDX fork)
+category: hf
+ui:
+  tagline: "Community-enhanced WSJT-X build, isolated prefix"
+install:
+  strategy: build
+  recipe: wsjtx-improved
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: desktop-app
+  cmd: "/opt/grid-down/wsjtx-improved/bin/wsjtx"
+config:
+  adapter: wsjtx-ini
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

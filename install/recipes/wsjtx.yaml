@@ -1,0 +1,9 @@
+# Install recipe for wsjtx (Phase 0 skeleton)
+# strategy: dnf — Install from Fedora 45 repos at air-gap time via kit-local dnf repo.
+recipe:
+  id: wsjtx
+  strategy: dnf
+  dnf:
+    packages:
+      - wsjtx
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

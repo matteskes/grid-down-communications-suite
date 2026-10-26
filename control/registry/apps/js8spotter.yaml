@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: js8spotter
+name: JS8Spotter
+category: monitor
+ui:
+  tagline: "JS8 call-activity dashboard, served on localhost (DanDawson)"
+install:
+  strategy: tarball
+  recipe: js8spotter
+  packages: []
+  note: "Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down."
+launch:
+  via: local-service
+  cmd: "php -S 127.0.0.1:8091 (served by suite)"
+config:
+  adapter: none
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: chattervox
+name: ChatterVox
+category: packet
+ui:
+  tagline: "100 baud ASTRO packet encryption/compression (brannondorsey)"
+install:
+  strategy: tarball
+  recipe: chattervox
+  packages: []
+  note: "Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down."
+launch:
+  via: cli-tool
+  cmd: "chattervox"
+config:
+  adapter: chattervox-json
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: artemis
+name: Artemis
+category: monitor
+ui:
+  tagline: "RF signal ID: 580+ signal library, parametric filter (AresValley, GPL-3.0, v4.2)"
+install:
+  strategy: tarball
+  recipe: artemis
+  packages: []
+  note: "Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down."
+launch:
+  via: desktop-app
+  cmd: "artemis"
+config:
+  adapter: artemis-paths
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

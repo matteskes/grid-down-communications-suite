@@ -1,0 +1,9 @@
+# Install recipe for ffmpeg (Phase 0 skeleton)
+# strategy: dnf — Install from Fedora 45 repos at air-gap time via kit-local dnf repo.
+recipe:
+  id: ffmpeg
+  strategy: dnf
+  dnf:
+    packages:
+      - ffmpeg
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

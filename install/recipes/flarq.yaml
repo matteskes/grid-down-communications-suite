@@ -1,0 +1,10 @@
+# Install recipe for flarq (Phase 0 skeleton)
+# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+recipe:
+  id: flarq
+  strategy: build
+  source:
+    git: PIN-ME          # repo URL + tag
+    sha256: PIN-ME       # archive sha256
+    build_container: fedora:45
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

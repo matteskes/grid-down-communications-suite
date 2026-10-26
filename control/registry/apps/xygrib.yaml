@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: xygrib
+name: XYGrib
+category: map_weather
+ui:
+  tagline: "GRIB weather viewer (no F45 package; pinned source build, staged GRIBs)"
+install:
+  strategy: build
+  recipe: xygrib
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: desktop-app
+  cmd: "/opt/grid-down/xygrib/xyGrib"
+config:
+  adapter: xygrib-conf
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

@@ -1,0 +1,10 @@
+# Install recipe for pat (Phase 0 skeleton)
+# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+recipe:
+  id: pat
+  strategy: tarball
+  tarball:
+    url: PIN-ME          # exact upstream artifact URL
+    sha256: PIN-ME
+    dest: /opt/grid-down/pat
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

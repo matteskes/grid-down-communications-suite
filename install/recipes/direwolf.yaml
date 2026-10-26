@@ -1,0 +1,9 @@
+# Install recipe for direwolf (Phase 0 skeleton)
+# strategy: dnf — Install from Fedora 45 repos at air-gap time via kit-local dnf repo.
+recipe:
+  id: direwolf
+  strategy: dnf
+  dnf:
+    packages:
+      - direwolf
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

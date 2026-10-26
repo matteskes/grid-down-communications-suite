@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: ardop
+name: ARDOP TNC
+category: winlink
+ui:
+  tagline: "ARDOP modem for Winlink HF sessions (pflarue/ardop)"
+install:
+  strategy: build
+  recipe: ardop
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: managed-service
+  cmd: "ardopc 8515 <capture> <playback>"
+config:
+  adapter: ardop-cfg
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

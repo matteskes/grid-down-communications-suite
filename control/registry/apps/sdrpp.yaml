@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: sdrpp
+name: SDR++
+category: monitor
+ui:
+  tagline: "SDR receiver (Airspy/HackRF/RTL — built from source, AlexandreRouma)"
+install:
+  strategy: build
+  recipe: sdrpp
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: desktop-app
+  cmd: "sdrpp"
+config:
+  adapter: sdrpp-conf
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

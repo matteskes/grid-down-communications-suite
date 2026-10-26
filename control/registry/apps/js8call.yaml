@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: js8call
+name: JS8Call
+category: hf
+ui:
+  tagline: "JS8 weak-signal messaging"
+install:
+  strategy: dnf
+  recipe: js8call
+  packages: [js8call]
+  note: "Install from Fedora 45 repos at air-gap time via kit-local dnf repo."
+launch:
+  via: desktop-app
+  cmd: "js8call"
+config:
+  adapter: js8call-ini
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

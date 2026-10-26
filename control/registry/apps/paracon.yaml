@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: paracon
+name: Paracon
+category: packet
+ui:
+  tagline: "Packet TNC terminal with file transfer (mfncooper)"
+install:
+  strategy: build
+  recipe: paracon
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: desktop-app
+  cmd: "/opt/grid-down/paracon/paracon"
+config:
+  adapter: paracon-cfg
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

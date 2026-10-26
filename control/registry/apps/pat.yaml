@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: pat
+name: Pat (Winlink client)
+category: winlink
+ui:
+  tagline: "Winlink webmail client; talks to VARA over the Wine hub"
+install:
+  strategy: tarball
+  recipe: pat
+  packages: []
+  note: "Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down."
+launch:
+  via: desktop-app
+  cmd: "pat"
+config:
+  adapter: pat-conf
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

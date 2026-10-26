@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: vara-sat
+name: VARA SAT
+category: winlink
+ui:
+  tagline: "VARA SAT modem (user-supplied installer + license)"
+install:
+  strategy: wine
+  recipe: vara-sat
+  packages: []
+  note: "Installed into the shared VARA Wine prefix; installer user-supplied (kit-import/), never redistributed."
+launch:
+  via: wine-hub
+  cmd: "VARA SAT.exe (via gd winehub)"
+config:
+  adapter: vara-ini
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

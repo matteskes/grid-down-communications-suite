@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: meshtastic-web
+name: Meshtastic Web
+category: mesh
+ui:
+  tagline: "Official web client served air-gap-side with Web Serial"
+install:
+  strategy: static
+  recipe: meshtastic-web
+  packages: []
+  note: "Static site/bundle shipped in kit; served on localhost by the suite."
+launch:
+  via: local-service
+  cmd: "served on 127.0.0.1:8092 by suite"
+config:
+  adapter: none
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

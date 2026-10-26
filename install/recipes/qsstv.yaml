@@ -1,0 +1,9 @@
+# Install recipe for qsstv (Phase 0 skeleton)
+# strategy: dnf — Install from Fedora 45 repos at air-gap time via kit-local dnf repo.
+recipe:
+  id: qsstv
+  strategy: dnf
+  dnf:
+    packages:
+      - qsstv
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

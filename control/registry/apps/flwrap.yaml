@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: flwrap
+name: flwrap
+category: hf
+ui:
+  tagline: "File encapsulator for fldigi transfers (no F45 package; pinned source build)"
+install:
+  strategy: build
+  recipe: flwrap
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: desktop-app
+  cmd: "/opt/grid-down/flwrap/bin/flwrap"
+config:
+  adapter: none
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

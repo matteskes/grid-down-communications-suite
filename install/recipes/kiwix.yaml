@@ -1,0 +1,9 @@
+# Install recipe for kiwix (Phase 0 skeleton)
+# strategy: dnf — Install from Fedora 45 repos at air-gap time via kit-local dnf repo.
+recipe:
+  id: kiwix
+  strategy: dnf
+  dnf:
+    packages:
+      - kiwix-desktop
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: flmsg
+name: flmsg
+category: hf
+ui:
+  tagline: "IARC/NBEMS standardized message forms"
+install:
+  strategy: dnf
+  recipe: flmsg
+  packages: [flmsg]
+  note: "Install from Fedora 45 repos at air-gap time via kit-local dnf repo."
+launch:
+  via: desktop-app
+  cmd: "flmsg"
+config:
+  adapter: flmsg-forms
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

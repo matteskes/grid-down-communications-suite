@@ -1,0 +1,30 @@
+# Session bundles — docs/SPECIFICATION.md §6.3
+# Members reference app ids in registry/apps/*.yaml.
+bundles:
+  winlink:
+    description: "HF/VHF email via Winlink (VARA + Pat over the Wine hub, ARDOP)"
+    members: [hamlib, direwolf, ardop, vara-hf, vara-fm, pat, qttermtcp]
+  js8:
+    description: "JS8 weak-signal messaging with local dashboard"
+    members: [hamlib, js8call, js8spotter]
+  packet:
+    description: "Packet radio terminal stack over direwolf KISS"
+    members: [hamlib, direwolf, qttermtcp, paracon, chattervox]
+  ft8:
+    description: "FT8/WSJT-X with GridTracker mapping"
+    members: [hamlib, wsjtx, gridtracker]
+  aprs:
+    description: "APRS client stack"
+    members: [direwolf, yaac, qttermtcp]
+  sstv:
+    description: "Slow-scan television"
+    members: [hamlib, qsstv]
+  wx:
+    description: "Offline weather (staged GRIB files)"
+    members: [xygrib]
+  sdr:
+    description: "SDR monitoring & signal identification"
+    members: [sdrpp, dump1090, artemis]
+  mesh:
+    description: "LoRa/Meshtastic mesh management (spec §6.11)"
+    members: [meshtastic, meshtasticd, meshtastic-web]

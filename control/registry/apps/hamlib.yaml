@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: hamlib
+name: Hamlib (rigctld)
+category: core
+ui:
+  tagline: "Rig control daemon owned by the suite (localhost:4532)"
+install:
+  strategy: dnf
+  recipe: hamlib
+  packages: [hamlib, python3-hamlib]
+  note: "Install from Fedora 45 repos at air-gap time via kit-local dnf repo."
+launch:
+  via: managed-service
+  cmd: "rigctld -T 127.0.0.1 -p 4532 -v"
+config:
+  adapter: none
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

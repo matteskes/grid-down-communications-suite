@@ -1,0 +1,9 @@
+# Install recipe for commstatone (Phase 0 skeleton)
+# strategy: static — Static site/bundle shipped in kit; served on localhost by the suite.
+recipe:
+  id: commstatone
+  strategy: static
+  static:
+    src: kit/static/commstatone/
+    serve: localhost
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

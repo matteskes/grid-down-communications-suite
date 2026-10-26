@@ -1,0 +1,37 @@
+# Grid Down station profile — default template (spec §4)
+# Copy to ~/.config/grid-down/profiles/<id>.yaml and fill in. Never commit filled profiles.
+
+profile:
+  id: default
+  callsign: ""        # your callsign, e.g. W1AW
+  grid: ""            # Maidenhead grid square, e.g. FN31pr
+
+rig:
+  model: ""           # hamlib model id or name (see: rigctl -l)
+  path: /dev/ttyUSB0
+  baud: 38400
+
+audio:
+  backend: pipewire
+  presets: {}         # per-app loopback presets (Phase 2: control/core/audio.py)
+
+internet:
+  present: false      # air-gap master switch; Doctor enforces off-net behavior when false
+
+winlink:
+  secure_password: "" # stored encrypted at rest (Phase 3); never committed
+  service_codes: [PUBLIC]
+
+mesh:                 # LoRa / Meshtastic (spec §6.11)
+  device:
+    type: serial      # serial | tcp | ble
+    path: /dev/ttyUSB1
+    host: null
+  node:
+    long_name: ""
+    short_name: ""
+    region: ""        # e.g. US, EU_433 ...
+    modem_preset: ""  # e.g. LONG_FAST
+    channel_url: ""   # base64 channel config (PSK stays local)
+  daemon:
+    enabled: false    # true for Linux-native LoRa HAT via meshtasticd

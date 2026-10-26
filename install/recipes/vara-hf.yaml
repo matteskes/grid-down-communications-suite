@@ -1,0 +1,10 @@
+# Install recipe for vara-hf (Phase 0 skeleton)
+# strategy: wine — Installed into the shared VARA Wine prefix; installer user-supplied (kit-import/), never redistributed.
+recipe:
+  id: vara-hf
+  strategy: wine
+  wine:
+    prefix: /opt/grid-down/wine-prefix
+    installer: kit-import/PIN-ME.exe   # user-supplied, never redistributed (G6)
+    license: user-supplied
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

@@ -1,0 +1,9 @@
+# Install recipe for meshtastic (Phase 0 skeleton)
+# strategy: pip-vendored — Vendored wheels shipped in kit; installed offline with Fedora python3.
+recipe:
+  id: meshtastic
+  strategy: pip-vendored
+  pip:
+    wheels_dir: kit/wheels/
+    install: python3 -m pip install --no-index --find-links kit/wheels/ meshtastic
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

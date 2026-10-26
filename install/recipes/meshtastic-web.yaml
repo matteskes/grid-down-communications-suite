@@ -1,0 +1,9 @@
+# Install recipe for meshtastic-web (Phase 0 skeleton)
+# strategy: static — Static site/bundle shipped in kit; served on localhost by the suite.
+recipe:
+  id: meshtastic-web
+  strategy: static
+  static:
+    src: kit/static/meshtastic-web/
+    serve: localhost
+  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

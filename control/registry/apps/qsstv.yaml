@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: qsstv
+name: QSSTV
+category: voice_sstv
+ui:
+  tagline: "SSTV send/receive"
+install:
+  strategy: dnf
+  recipe: qsstv
+  packages: [qsstv]
+  note: "Install from Fedora 45 repos at air-gap time via kit-local dnf repo."
+launch:
+  via: desktop-app
+  cmd: "qsstv"
+config:
+  adapter: qsstv-conf
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

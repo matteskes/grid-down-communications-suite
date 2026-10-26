@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: qttermtcp
+name: QtTermTCP
+category: packet
+ui:
+  tagline: "Packet terminal for BPQ/AGW/KISS hosts (g8bpq)"
+install:
+  strategy: build
+  recipe: qttermtcp
+  packages: []
+  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+launch:
+  via: desktop-app
+  cmd: "/opt/grid-down/qttermtcp/QtTermTCP"
+config:
+  adapter: qttermtcp-cfg
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub

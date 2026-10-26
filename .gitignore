@@ -1,0 +1,21 @@
+# --- Grid Down ---
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Kit build artifacts (never commit kits — they contain user-supplied installers/licenses)
+kit/
+kit-staging/
+install/bundle-builder/builds/out/
+*.tar.zst
+*.iso
+
+# Local state
+*.state.json
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db

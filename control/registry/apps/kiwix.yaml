@@ -1,0 +1,18 @@
+# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+id: kiwix
+name: Kiwix
+category: reference
+ui:
+  tagline: "Offline ZIM library (Wikipedia med, ARRL docs, wikis)"
+install:
+  strategy: dnf
+  recipe: kiwix
+  packages: [kiwix-desktop]
+  note: "Install from Fedora 45 repos at air-gap time via kit-local dnf repo."
+launch:
+  via: desktop-app
+  cmd: "kiwix-desktop"
+config:
+  adapter: kiwix-library
+  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+state: stub
