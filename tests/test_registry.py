@@ -86,3 +86,16 @@ def test_wine_recipes_never_embed_download_urls():
             assert "http://" not in blob and "https://" not in blob, (
                 f"{rpath.name}: wine recipes must not embed download URLs (G6)"
             )
+
+
+def test_dnf_recipes_declare_repo(apps):
+    """Every dnf recipe names its source repo (kit splits repos at build time)."""
+    for a in apps:
+        if a["install"]["strategy"] != "dnf":
+            continue
+        r = yaml.safe_load((REC_DIR / f"{a['id']}.yaml").read_text())["recipe"]
+        repo = (r.get("dnf") or {}).get("repo")
+        assert repo in {"fedora", "rpmfusion-free"}, f"{a['id']}: bad dnf.repo: {repo!r}"
+    # ffmpeg comes from RPM Fusion (audit decision — docs/audit/f45-package-audit.md)
+    ff = yaml.safe_load((REC_DIR / "ffmpeg.yaml").read_text())["recipe"]
+    assert ff["dnf"]["repo"] == "rpmfusion-free"

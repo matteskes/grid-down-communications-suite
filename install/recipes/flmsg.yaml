@@ -1,9 +1,10 @@
 # Install recipe for flmsg (Phase 0 skeleton)
-# strategy: dnf — Install from Fedora 45 repos at air-gap time via kit-local dnf repo.
+# strategy: dnf — Install from Fedora 45 / RPM Fusion repos at air-gap time via the kit-local dnf repo.
 recipe:
   id: flmsg
   strategy: dnf
   dnf:
+    repo: fedora
     packages:
       - flmsg
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

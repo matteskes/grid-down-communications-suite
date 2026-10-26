@@ -161,7 +161,7 @@ APPS = [
 ]
 
 STRATEGY_NOTE = {
-    "dnf": "Install from Fedora 45 repos at air-gap time via kit-local dnf repo.",
+    "dnf": "Install from Fedora 45 / RPM Fusion repos at air-gap time via the kit-local dnf repo.",
     "dnf-verify": "Confirm present in F45 repos during Phase 0 audit; else fall back to pinned source build.",
     "build": "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.",
     "tarball": "Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.",
@@ -169,6 +169,15 @@ STRATEGY_NOTE = {
     "pip-vendored": "Vendored wheels shipped in kit; installed offline with Fedora python3.",
     "static": "Static site/bundle shipped in kit; served on localhost by the suite.",
 }
+
+# Which dnf repo each recipe's package set resolves from (kit-local repo split;
+# see docs/audit/f45-package-audit.md for the F45 audit decision). Default: fedora.
+DNF_REPO_DEFAULT = "fedora"
+DNF_REPO = {
+    "ffmpeg": "rpmfusion-free",  # RPM Fusion build; enablement via pinned release RPMs
+}
+
+
 def registry_yaml(app) -> str:
     (id_, name, cat, strat, pkgs, adapter, (via, cmd), tagline) = app
     pkgs_s = "[" + ", ".join(pkgs) + "]" if pkgs else "[]"
@@ -205,6 +214,7 @@ def recipe_yaml(app) -> str:
     ]
     if pkgs:
         lines.append("  dnf:")
+        lines.append(f"    repo: {DNF_REPO.get(id_, DNF_REPO_DEFAULT)}")
         lines.append("    packages:")
         lines += [f"      - {p}" for p in pkgs]
     if strat == "tarball":

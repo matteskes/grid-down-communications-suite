@@ -8,7 +8,7 @@ install:
   strategy: dnf
   recipe: fllog
   packages: [fllog]
-  note: "Install from Fedora 45 repos at air-gap time via kit-local dnf repo."
+  note: "Install from Fedora 45 / RPM Fusion repos at air-gap time via the kit-local dnf repo."
 launch:
   via: desktop-app
   cmd: "fllog"

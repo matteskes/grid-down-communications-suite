@@ -4,6 +4,7 @@ recipe:
   id: dump1090
   strategy: build
   dnf:
+    repo: fedora
     packages:
       - rtl-sdr
   source:
