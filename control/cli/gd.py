@@ -4,12 +4,15 @@
 """gd — Grid Down command-line control interface (M2).
 
 Implemented: version, apps list, bundles list, profile show, rig, audio
-(plan/up/down/status), launch, stop, status, doctor (spec §6.4/§6.6/§6.7).
-M2 added profile-driven rigctld (rig_argv) and the suite-owned PipeWire
-endpoint namespace (core/audio.py). M3a adds the Control Center skeleton
-(`gd gui` — Dashboard, spec §7) sharing core/supervisor + core/audio +
-core/doctor with this CLI in-process. Later phases add the remaining §7
-views (M3b/M3c), config apply (adapters), install progress, winehub.
+(plan/up/down/status), launch, stop, status, doctor, units install/uninstall/
+list (spec §6.4/§6.6/§6.7). M2 added profile-driven rigctld (rig_argv) and
+the suite-owned PipeWire endpoint namespace (core/audio.py). M3 adds the
+Control Center (`gd gui`, spec §7) sharing core/supervisor + core/audio +
+core/doctor with this CLI in-process. M4a adds the systemd user-unit backend
+(core/systemd.py): launch/stop/status grow --backend {auto,direct,systemd},
+`gd units` manages the unit set; the Supervisor API stays backend-neutral.
+Later phases add the remaining config apply (adapters), install progress,
+winehub.
 """
 from __future__ import annotations
 
@@ -21,10 +24,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import audio, doctor, profile, registry  # noqa: E402
+from core import audio, doctor, profile, registry, systemd  # noqa: E402
 from core.supervisor import PORTS, Supervisor, SupervisorError  # noqa: E402
 
-VERSION = "0.4.0-m3"
+VERSION = "0.5.0-m4a"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -33,11 +36,17 @@ def _fail(message: str) -> int:
     return 1
 
 
-def _build_supervisor(profile_data: dict | None = None) -> Supervisor:
+def _build_supervisor(profile_data: dict | None = None,
+                      backend: str | None = None) -> Supervisor:
+    """Backend-neutral factory: --backend flag > profile supervisor.backend >
+    auto (systemd iff grid-down units are installed and a user bus is
+    reachable, else direct — spec §6.5)."""
     apps = registry.load_registry(ROOT / "control" / "registry" / "apps")
     bundles = registry.load_bundles(ROOT / "control" / "registry" / "bundles.yaml")
     prof = profile.load_profile() if profile_data is None else profile_data
-    return Supervisor(apps, bundles, profile=prof)
+    kind = systemd.resolve_backend(prof, backend)
+    cls = systemd.SystemdSupervisor if kind == "systemd" else Supervisor
+    return cls(apps, bundles, profile=prof)
 
 
 def cmd_gui(args) -> int:
@@ -152,7 +161,10 @@ def cmd_doctor(args) -> int:
 
 
 def cmd_status(args) -> int:
-    snap = _build_supervisor().status()
+    try:
+        snap = _build_supervisor(backend=getattr(args, "backend", None)).status()
+    except SupervisorError as exc:  # e.g. --backend systemd without units installed
+        return _fail(str(exc))
     if args.json:
         print(json.dumps(snap, indent=2))
         return 0
@@ -166,7 +178,10 @@ def cmd_status(args) -> int:
         print(f"{r['id']:<16} {r['state']:<9} {pid:>7}  {r['via']:<16} {r['bundle'] or '-'}")
     running = sum(1 for r in rows if r["state"] == "running")
     stale = sum(1 for r in rows if r["state"] == "stale")
-    print(f"\n{running} running, {stale} stale")
+    failed = sum(1 for r in rows if r["state"] == "failed")
+    extra = f", {failed} failed" if failed else ""
+    print(f"\n{running} running, {stale} stale{extra} "
+          f"(backend: {snap.get('backend', 'direct')})")
     for name, b in snap["bundles"].items():
         if b["running"]:
             print(f"bundle {name}: {', '.join(b['running'])} ({len(b['running'])}/{b['total']})")
@@ -174,7 +189,7 @@ def cmd_status(args) -> int:
 
 
 def cmd_launch(args) -> int:
-    s = _build_supervisor()
+    s = _build_supervisor(backend=getattr(args, "backend", None))
     target = args.target
     if target == "all":
         return _fail("'all' is not a launch target — name an app or bundle "
@@ -200,7 +215,7 @@ def cmd_launch(args) -> int:
 
 
 def cmd_stop(args) -> int:
-    s = _build_supervisor()
+    s = _build_supervisor(backend=getattr(args, "backend", None))
     target = args.target
     try:
         if target == "all":
@@ -219,6 +234,66 @@ def cmd_stop(args) -> int:
         print(f"  {note}")
     if not out["notes"]:
         print("nothing to stop")
+    return 0
+
+
+def cmd_units(args) -> int:
+    """systemd user-unit management (spec §6.5, M4a): render + install the
+    grid-down-* unit set, remove it, or list installed-vs-expected drift."""
+    sup = _build_supervisor(backend="direct")  # rendering is backend-independent
+    if args.units_cmd == "install":
+        out = systemd.install_units(sup)
+        if args.json:
+            print(json.dumps(out, indent=2))
+            return 0
+        n_targets = sum(1 for name in out["written"] if name.endswith(".target"))
+        print(f"unit dir:   {out['unit_dir']}")
+        print(f"services:   {len(out['installed'])} installed")
+        print(f"targets:    {n_targets} installed")
+        if out["skipped"]:
+            print(f"skipped:    {', '.join(out['skipped'])} "
+                  "(wine-hub/cli-tool are not daemonized, spec §6.5)")
+        if out["unresolved"]:
+            print(f"unresolved: {len(out['unresolved'])} (no unit — app missing "
+                  "or placeholder unresolvable; fix and re-run)")
+            for app_id, why in out["unresolved"].items():
+                print(f"  {app_id}: {why}")
+        if out["reloaded"]:
+            print("daemon-reload: ok")
+        else:
+            print("daemon-reload: skipped (no systemd user session) — "
+                  "run `systemctl --user daemon-reload` after login")
+        return 0
+    if args.units_cmd == "uninstall":
+        removed = systemd.uninstall_units()
+        print(f"removed {len(removed)} grid-down unit file(s) "
+              f"from {systemd.user_unit_dir()}")
+        return 0
+    # list — installed vs freshly rendered expectation
+    d = systemd.user_unit_dir()
+    installed = {p.name: p.read_text() for p in systemd.installed_unit_paths()}
+    expected = systemd.expected_units(sup)
+    if args.json:
+        units = [{"unit": name, "expected": True, "installed": name in installed,
+                  "drifted": name in installed and installed[name] != text}
+                 for name, text in sorted(expected.items())]
+        units += [{"unit": name, "expected": False, "installed": True,
+                   "drifted": False} for name in sorted(installed)
+                  if name not in expected]
+        print(json.dumps({"unit_dir": str(d), "units": units}, indent=2))
+        return 0
+    print(f"{'UNIT':<42} STATE")
+    for name, text in sorted(expected.items()):
+        if name not in installed:
+            state = "not installed"
+        elif installed[name] != text:
+            state = "installed, DRIFTED (re-run: gd units install)"
+        else:
+            state = "installed, current"
+        print(f"{name:<42} {state}")
+    for name in sorted(name for name in installed if name not in expected):
+        print(f"{name:<42} installed, stale (not in registry/bundles anymore)")
+    print(f"\nunit dir: {d}")
     return 0
 
 
@@ -248,17 +323,39 @@ def main(argv: list[str] | None = None) -> int:
 
     p_launch = sub.add_parser("launch", help="launch an app or a bundle session")
     p_launch.add_argument("target", help="app id or bundle name")
+    p_launch.add_argument("--backend", choices=("auto", "direct", "systemd"),
+                          default=None, help="supervisor backend override "
+                          "(default: profile supervisor.backend, else auto)")
     p_launch.set_defaults(func=cmd_launch)
 
     p_stop = sub.add_parser("stop", help="stop an app, a bundle, or 'all'")
     p_stop.add_argument("target", help="app id, bundle name, or 'all'")
     p_stop.add_argument("--force", action="store_true",
                         help="override safety refusals (e.g. stopping rigctld with dependents up)")
+    p_stop.add_argument("--backend", choices=("auto", "direct", "systemd"),
+                        default=None, help="supervisor backend override")
     p_stop.set_defaults(func=cmd_stop)
 
     p_status = sub.add_parser("status", help="supervisor status (running/stale instances)")
     p_status.add_argument("--json", action="store_true", help="machine-readable snapshot")
+    p_status.add_argument("--backend", choices=("auto", "direct", "systemd"),
+                          default=None, help="supervisor backend override")
     p_status.set_defaults(func=cmd_status)
+
+    p_units = sub.add_parser("units",
+                             help="systemd user-unit backend (spec §6.5, M4)")
+    p_units_sub = p_units.add_subparsers(dest="units_cmd", required=True)
+    p_u_i = p_units_sub.add_parser("install",
+                                   help="render + write the grid-down-* unit set")
+    p_u_i.add_argument("--json", action="store_true")
+    p_u_i.set_defaults(func=cmd_units)
+    p_units_sub.add_parser("uninstall",
+                           help="remove all grid-down-* units (never others)"
+                           ).set_defaults(func=cmd_units)
+    p_u_l = p_units_sub.add_parser("list",
+                                   help="installed units vs registry expectation (drift)")
+    p_u_l.add_argument("--json", action="store_true")
+    p_u_l.set_defaults(func=cmd_units)
 
     p_rig = sub.add_parser("rig", help="show profile-resolved rigctld command (spec §6.4)")
     p_rig.add_argument("--json", action="store_true", help="machine-readable report")

@@ -22,6 +22,9 @@ audio:
       capture: grid_down_hf_out
       playback: grid_down_hf_in
 
+supervisor:
+  backend: auto       # direct | systemd | auto — systemd needs `gd units install` once (spec §6.5)
+
 internet:
   present: false      # air-gap master switch; Doctor enforces off-net behavior when false
 

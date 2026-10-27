@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
-"""Process supervisor for Grid Down (M1: direct backend).
+"""Process supervisor for Grid Down (direct backend + backend-neutral API).
 
 Launches, monitors, and tears down app processes and localhost services
-(docs/SPECIFICATION.md §6.5). M1 uses direct process-group supervision with a
-JSON state file so separate `gd` invocations share one view of reality. The
-systemd-user-unit backend (bundle targets with BindsTo) remains the Phase 2
-completion target for the Control Center GUI; `Supervisor` is the
-backend-neutral API both the CLI and the GUI program against.
+(docs/SPECIFICATION.md §6.5). This module is the direct process-group backend
+(JSON state file so separate `gd` invocations share one view of reality) and
+defines the backend-neutral `Supervisor` API both the CLI and the GUI program
+against. The systemd-user-unit backend (M4, spec §6.5) subclasses it in
+core/systemd.py — unit rendering, `systemctl --user` lifecycle, backend
+resolution; GUI/CLI callables are unchanged by the backend choice.
 
 Suite rules honored (spec §6.4, G4):
 - `hamlib` (rigctld, 127.0.0.1:4532) is the suite-owned rig singleton. It is
@@ -92,6 +93,8 @@ def pid_alive(pid: int) -> bool:
 
 class Supervisor:
     """Direct-backend supervisor over the app registry (spec §6.1/§6.5)."""
+
+    BACKEND = "direct"  # reported in status(); SystemdSupervisor overrides
 
     def __init__(self, apps: list[dict], bundles: dict | None = None,
                  state_dir: Path | None = None, app_root: Path | None = None,
@@ -448,4 +451,4 @@ class Supervisor:
             bundles[name] = {"running": [m for m in members if self.is_running(m)],
                              "total": len(members)}
         return {"apps": rows, "bundles": bundles, "updated": self.state.get("updated"),
-                "state_file": str(self.state_file())}
+                "backend": self.BACKEND, "state_file": str(self.state_file())}
