@@ -32,7 +32,7 @@ def test_resolve_preset_default_override_missing():
     prof = {"audio": {"presets": {"ardop": {"playback": "custom_sink"}}}}
     assert audio.resolve_preset("ardop", "playback", prof) == "custom_sink"
     # key absent from the profile's app entry -> documented default kicks in
-    assert audio.resolve_preset("ardop", "capture", prof) == "grid_down_hf_out"
+    assert audio.resolve_preset("ardop", "capture", prof) == "grid_down_hf_out.monitor"
     # neither profile nor default -> precise profile-key error
     with pytest.raises(audio.AudioError, match=r"presets\.pat\.capture"):
         audio.resolve_preset("pat", "capture", prof)
@@ -60,8 +60,11 @@ def test_argv_shapes():
     sink = audio.sink_argv("grid_down_hf_in", "hf")
     assert sink[:3] == ["pactl", "load-module", "module-null-sink"]
     assert "sink_name=grid_down_hf_in" in sink
+    # pipewire-pulse has no module-null-source: the 'out' endpoint is a null
+    # sink and apps capture from its .monitor (P2 VM acceptance finding)
     src = audio.source_argv("grid_down_hf_out", "hf")
-    assert src[2] == "module-null-source" and "source_name=grid_down_hf_out" in src
+    assert src[2] == "module-null-sink" and "sink_name=grid_down_hf_out" in src
+    assert audio.capture_name("grid_down_hf_out") == "grid_down_hf_out.monitor"
 
 
 def _fake_runner(listings: dict[str, str]):
@@ -84,7 +87,7 @@ def test_up_creates_missing_and_skips_existing():
     assert out["skipped"] == ["grid_down_hf_in"]
     created = [c["endpoint"] for c in out["created"]]
     assert "grid_down_hf_in" not in created and len(created) == 5
-    assert any("load-module" in c and "module-null-source" in c for c in run.calls if len(c) > 2)
+    assert any("sink_name=grid_down_hf_out" in " ".join(c) for c in run.calls if len(c) > 2)
 
 
 def test_down_unloads_only_owned_modules():
@@ -93,7 +96,7 @@ def test_down_unloads_only_owned_modules():
             [
                 "5\tmodule-null-sink\tsink_name=grid_down_hf_in node.name=grid_down_hf_in",
                 "6\tmodule-null-sink\tsink_name=user_desktop_audio",  # not ours
-                "7\tmodule-null-source\tsource_name=grid_down_hf_out",
+                "7\tmodule-null-sink\tsink_name=grid_down_hf_out node.name=grid_down_hf_out",
             ]
         )
     }
@@ -107,7 +110,8 @@ def test_down_unloads_only_owned_modules():
 def test_status_reports_present_missing():
     listings = {
         "sinks": "0\tgrid_down_hf_in\tstate=IDLE\n",
-        "sources": "1\tgrid_down_hf_out\tstate=IDLE\n",
+        # live capture node carries the .monitor suffix pipewire-pulse gives it
+        "sources": "1\tgrid_down_hf_out.monitor\tstate=IDLE\n",
     }
     st = audio.status(runner=_fake_runner(listings))
     assert st["present"] == ["grid_down_hf_in", "grid_down_hf_out"]

@@ -37,8 +37,10 @@ PREFIX = "grid_down_"
 
 # Launch-cmd placeholder defaults per app (profile audio.presets override).
 # Keys match the <tokens> used in control/registry/apps/*.yaml launch.cmd.
+# Capture tokens name the live monitor of the owned 'out' endpoint (see
+# source_argv: pipewire-pulse exposes it as <endpoint>.monitor).
 DEFAULT_PRESETS: dict[str, dict[str, str]] = {
-    "ardop": {"capture": "grid_down_hf_out", "playback": "grid_down_hf_in"},
+    "ardop": {"capture": "grid_down_hf_out.monitor", "playback": "grid_down_hf_in"},
 }
 
 
@@ -81,15 +83,26 @@ def sink_argv(name: str, role: str) -> list[str]:
 
 
 def source_argv(name: str, role: str) -> list[str]:
-    """Create the role's 'out' endpoint: a null source apps capture from."""
+    """Create the role's 'out' endpoint: apps capture from its monitor.
+
+    pipewire-pulse has no ``module-null-source`` (PulseAudio-only module —
+    found on the real Fedora 45 VM bus, P2 acceptance), so the source is a
+    null *sink* whose monitor is the capture node: the live PipeWire source
+    name is ``<name>.monitor`` (see :func:`capture_name`).
+    """
     return [
         "pactl",
         "load-module",
-        "module-null-source",
-        f"source_name={name}",
+        "module-null-sink",
+        f"sink_name={name}",
         f"node.name={name}",
-        f"source_properties=device.description=GridDown_{role}_out",
+        f"sink_properties=device.description=GridDown_{role}_out",
     ]
+
+
+def capture_name(name: str) -> str:
+    """Live PipeWire source name for an owned 'out' endpoint: ``<name>.monitor``."""
+    return f"{name}.monitor"
 
 
 def plan(profile: dict | None, exists=None) -> list[dict]:
@@ -149,10 +162,11 @@ def up(profile: dict | None, runner=None) -> dict:
 
 
 def _owned_listed(name: str, run) -> bool:
+    monitor = capture_name(name)
     for kind in ("sinks", "sources"):
         for line in run(["pactl", "list", "short", kind]).splitlines():
             cols = line.split("\t")
-            if len(cols) > 1 and cols[1] == name:
+            if len(cols) > 1 and cols[1] in (name, monitor):
                 return True
     return False
 

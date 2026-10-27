@@ -292,7 +292,8 @@ def test_placeholder_resolved_via_default_preset(sup):
         },
     }
     argv, _ = sup._resolve_cmd(app)
-    assert argv[-2:] == ["grid_down_hf_out", "grid_down_hf_in"]
+    # capture token resolves to the live monitor of the owned 'out' endpoint
+    assert argv[-2:] == ["grid_down_hf_out.monitor", "grid_down_hf_in"]
 
 
 def test_placeholder_partial_profile_override(sup):
