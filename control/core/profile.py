@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
-"""Station profile model (Phase 0 stub). Schema: docs/SPECIFICATION.md §4.
+"""Station profile model: load/resolve + atomic form saves.
+
+Schema: docs/SPECIFICATION.md §4. The GUI form savers (save_rig,
+save_station) share the _persist write path below.
 
 Resolution order:
   1. $GRID_DOWN_PROFILE (path to a profile YAML)
@@ -11,6 +14,8 @@ Resolution order:
 from __future__ import annotations
 
 import os
+import re
+from collections.abc import Callable
 from pathlib import Path
 
 REQUIRED_KEYS = ("profile",)
@@ -54,18 +59,43 @@ def load_profile(path: Path | None = None) -> dict:
     return data
 
 
+def _persist(mutate: Callable[[dict], None]) -> dict:
+    """Shared write path for the form savers (save_rig / save_station).
+
+    The shipped repo template (profiles/default.yaml) is never modified:
+    when it is the resolved profile, the full resolved content is written to
+    ~/.config/grid-down/profiles/<id>.yaml — which profile_path() prefers, so
+    the edit wins on the next load. Any other resolved profile is edited in
+    place, atomically (tmp + rename). `mutate(data)` mutates the loaded dict
+    in place; callers validate upstream, so a raised ProfileError writes
+    nothing.
+
+    Returns {"path": <written file>, "created": bool}.
+    """
+    resolved = profile_path()
+    target, created = resolved, False
+    if resolved == default_repo_profile():
+        head = load_profile(resolved).get("profile", {}) or {}
+        stem = str(head.get("id") or "station").strip() or "station"
+        target = Path.home() / ".config" / "grid-down" / "profiles" / f"{stem}.yaml"
+        created = not target.exists()
+
+    data = load_profile(resolved)  # base = resolved content: nothing is lost
+    mutate(data)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    tmp.write_text(_yaml().safe_dump(data, sort_keys=False, default_flow_style=False))
+    os.replace(tmp, target)
+    return {"path": str(target), "created": created}
+
+
 def save_rig(model: str, path: str, baud: str | None = None) -> dict:
     """Validate + persist the rig section (spec §4) into the active profile.
 
     Validation mirrors what supervisor.rig_argv/Doctor expect: model empty
     (hamlib Dummy, bench-safe) or a numeric hamlib id; baud numeric. Raises
-    ProfileError and writes nothing on bad input.
-
-    The shipped repo template (profiles/default.yaml) is never modified:
-    when it is the resolved profile, a full copy with the new rig values is
-    written to ~/.config/grid-down/profiles/<id>.yaml — which profile_path()
-    prefers, so the edit wins on the next load. Other writes edit in place,
-    atomically (tmp + rename). baud is only ever set, never cleared.
+    ProfileError and writes nothing on bad input. baud is only ever set,
+    never cleared.
 
     Returns {"path": <written file>, "created": bool, "rig": <new rig dict>}.
     """
@@ -82,22 +112,66 @@ def save_rig(model: str, path: str, baud: str | None = None) -> dict:
     if baud_s and not baud_s.isdigit():
         raise ProfileError(f"rig.baud {baud_s!r} is not numeric (e.g. 38400)")
 
-    resolved = profile_path()
-    target, created = resolved, False
-    if resolved == default_repo_profile():
-        head = load_profile(resolved).get("profile", {}) or {}
-        stem = str(head.get("id") or "station").strip() or "station"
-        target = Path.home() / ".config" / "grid-down" / "profiles" / f"{stem}.yaml"
-        created = not target.exists()
+    rig: dict = {}
 
-    data = load_profile(resolved)  # base = resolved content: nothing is lost
-    rig = data.setdefault("rig", {})
-    rig["model"] = model_s
-    rig["path"] = path_s
-    if baud_s:
-        rig["baud"] = baud_s
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    tmp.write_text(_yaml().safe_dump(data, sort_keys=False, default_flow_style=False))
-    os.replace(tmp, target)
-    return {"path": str(target), "created": created, "rig": dict(rig)}
+    def mutate(data: dict) -> None:
+        r = data.setdefault("rig", {})
+        r["model"] = model_s
+        r["path"] = path_s
+        if baud_s:
+            r["baud"] = baud_s
+        rig.clear()
+        rig.update(r)
+
+    out = _persist(mutate)
+    out["rig"] = dict(rig)
+    return out
+
+
+_CALLSIGN_RE = re.compile(r"^[A-Z0-9]{3,7}$")
+_GRID_RE = re.compile(r"^([A-R]{2})([0-9]{2})([A-X]{2})?$")
+
+
+def save_station(callsign: str, grid: str) -> dict:
+    """Validate + persist profile.callsign / profile.grid (spec §4).
+
+    callsign is uppercased and shape-checked (3-7 alphanumerics — `W1AW`,
+    `VE3XYZ`, `2E0ABC`); a portable suffix like `W1AW/6` is rejected, only
+    the base callsign is stored. grid must be a 4- or 6-character Maidenhead
+    square (A-R field pair, digit pair, optional A-X subsquare) and is
+    canonicalized to FN31pr case. Both may be empty: unlike rig.baud (set-
+    never-clear) these start empty in the shipped template and Doctor warns
+    while they are missing, so clearing is a legitimate state. Raises
+    ProfileError and writes nothing on bad input.
+
+    Returns {"path": <written file>, "created": bool, "profile": <new head>}.
+    """
+    call = str(callsign or "").strip().upper()
+    grid_s = str(grid or "").strip()
+    if call and not _CALLSIGN_RE.fullmatch(call):
+        raise ProfileError(
+            f"profile.callsign {call!r} does not look like a callsign"
+            " (e.g. W1AW — letters/digits, 3-7 characters)"
+        )
+    m = _GRID_RE.fullmatch(grid_s.upper()) if grid_s else None
+    if grid_s and not m:
+        raise ProfileError(
+            f"profile.grid {grid_s!r} is not a Maidenhead grid square"
+            " (4 or 6 characters, e.g. FN31 or FN31pr)"
+        )
+    grid_c = ""
+    if m:
+        grid_c = m.group(1) + m.group(2) + (m.group(3) or "").lower()
+
+    head: dict = {}
+
+    def mutate(data: dict) -> None:
+        h = data.setdefault("profile", {})
+        h["callsign"] = call
+        h["grid"] = grid_c
+        head.clear()
+        head.update(h)
+
+    out = _persist(mutate)
+    out["profile"] = dict(head)
+    return out

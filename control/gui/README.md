@@ -6,7 +6,9 @@ instances, doctor summary). **M3b:** Catalog (searchable table over the
 41-app registry) + Doctor (color-coded checks, copy-as-JSON). **M3c (v1,
 0.4.0-m3):** Bundles start/stop tiles (confirm dialog + notes pane), audio
 up/down actions on the Dashboard, read-only Profiles view. **Post-P2:** rig
-model/path/baud form on Profiles (atomic `save_rig`; repo template untouched).
+model/path/baud form on Profiles (atomic `save_rig`; repo template untouched)
+plus a station-identity form (callsign / Maidenhead grid, atomic
+`save_station`).
 **M4:** no view
 changes — views are backend-neutral; the Dashboard's instance panel reflects
 whatever `status()` reports, including the `backend` key (direct|systemd)

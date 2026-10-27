@@ -2,13 +2,13 @@
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
 """Profiles view (M3c): station profile + rig editing.
 
-M3c shipped the read-only YAML pane; the rig form (model / serial path /
-baud) came with the post-P2 pass — the station's most common edits without
-a text editor. Saves run in a SnapshotWorker like every other core call;
-`core/profile.save_rig` validates and writes atomically (never the repo
-template — a user profile is created instead). Fields prefill from the
-snapshot only while untouched: the window autorefreshes every 10 s and
-must not clobber mid-typing.
+M3c shipped the read-only YAML pane; the post-P2 passes added the two
+everyday forms without a text editor: rig model / serial path / baud and
+station identity (callsign / Maidenhead grid). Saves run in a SnapshotWorker
+like every other core call; `core/profile.save_rig` / `save_station` validate
+and write atomically (never the repo template — a user profile is created
+instead). Fields prefill from the snapshot only while untouched: the window
+autorefreshes every 10 s and must not clobber mid-typing.
 """
 
 from __future__ import annotations
@@ -41,25 +41,44 @@ class ProfilesView(QWidget):
         self._worker: SnapshotWorker | None = None
         self._dirty: set[str] = set()
 
-        form_box = QGroupBox("Rig (radio) — saved to the station profile")
-        form = QFormLayout(form_box)
+        rig_box = QGroupBox("Rig (radio) — saved to the station profile")
+        form = QFormLayout(rig_box)
         self.model_edit = QLineEdit(self)
         self.model_edit.setPlaceholderText("numeric hamlib id, e.g. 3073 (empty = Dummy)")
         self.path_edit = QLineEdit(self)
         self.path_edit.setPlaceholderText("/dev/ttyUSB0")
         self.baud_edit = QLineEdit(self)
         self.baud_edit.setPlaceholderText("38400")
-        edits = self._edits = (
+        rig_edits = (
             ("model", self.model_edit),
             ("path", self.path_edit),
             ("baud", self.baud_edit),
         )
-        for name, edit in edits:
-            edit.textEdited.connect(lambda _=None, n=name: self._dirty.add(n))
-            form.addRow(name.capitalize() + ":", edit)
         self.save_btn = QPushButton("Save rig", self)
         self.save_btn.clicked.connect(self._save)
+
+        station_box = QGroupBox("Station identity — saved to the station profile")
+        station_form = QFormLayout(station_box)
+        self.callsign_edit = QLineEdit(self)
+        self.callsign_edit.setPlaceholderText("W1AW (empty = unset)")
+        self.grid_edit = QLineEdit(self)
+        self.grid_edit.setPlaceholderText("Maidenhead square, e.g. FN31pr")
+        station_edits = (
+            ("callsign", self.callsign_edit),
+            ("grid", self.grid_edit),
+        )
+        self.station_save_btn = QPushButton("Save station", self)
+        self.station_save_btn.clicked.connect(self._save_station)
+
+        edits = self._edits = rig_edits + station_edits
+        for name, edit in edits:
+            edit.textEdited.connect(lambda _=None, n=name: self._dirty.add(n))
+        for name, edit in rig_edits:
+            form.addRow(name.capitalize() + ":", edit)
         form.addRow(self.save_btn)
+        for name, edit in station_edits:
+            station_form.addRow(name.capitalize() + ":", edit)
+        station_form.addRow(self.station_save_btn)
         self.save_status = QLabel("", self)
         self.save_status.setWordWrap(True)
 
@@ -69,7 +88,8 @@ class ProfilesView(QWidget):
         self.text.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
 
         lay = QVBoxLayout(self)
-        lay.addWidget(form_box)
+        lay.addWidget(rig_box)
+        lay.addWidget(station_box)
         lay.addWidget(self.save_status)
         lay.addWidget(self.path_label)
         lay.addWidget(self.text)
@@ -82,16 +102,20 @@ class ProfilesView(QWidget):
             f"  (station: {prof.get('id') or '(unset)'})"
         )
         self.text.setPlainText(models.profile_text(snap))
-        self._prefill(snap.get("rig") or {})
+        self._prefill(snap)
 
-    def _prefill(self, rig: dict) -> None:
+    def _prefill(self, snap: dict) -> None:
         """Dirty-until-confirmed: untouched fields prefill from the snapshot;
         edited fields are protected until the snapshot matches what's typed
         (i.e. the save round-tripped) — autorefresh never clobbers typing."""
+        rig = snap.get("rig") or {}
+        head = snap.get("profile") or {}
         values = (
             str(rig.get("model") or ""),
             str(rig.get("path") or ""),
             str(rig.get("baud") or ""),
+            str(head.get("callsign") or ""),
+            str(head.get("grid") or ""),
         )
         for (name, edit), value in zip(self._edits, values):
             if edit.text() == value:
@@ -131,4 +155,32 @@ class ProfilesView(QWidget):
     def _save_failed(self, message: str) -> None:
         self._busy = False
         self.save_status.setText(f"FAILED: {message}")
+        self.changed.emit()
+
+    def _save_station(self) -> None:
+        if self._busy:
+            return
+        callsign = self.callsign_edit.text().strip()
+        grid = self.grid_edit.text().strip()
+        self._busy = True
+        self.save_status.setText("saving station identity…")
+        svc = self.services
+        worker = SnapshotWorker(lambda: svc.station_save(callsign, grid), parent=self)
+        worker.done.connect(self._station_save_done)
+        worker.failed.connect(self._save_failed)
+        self._worker = worker
+        worker.start()
+
+    def _station_save_done(self, out: object) -> None:
+        self._busy = False
+        data = out or {}
+        where = data.get("path", "?")
+        verb = "created" if data.get("created") else "updated"
+        prof = data.get("profile") or {}
+        call = str(prof.get("callsign") or "(unset)")
+        square = str(prof.get("grid") or "(unset)")
+        self.save_status.setText(
+            f"station identity {verb}: {where} — callsign={call} grid={square};"
+            " the Doctor profile check flips to [ok]."
+        )
         self.changed.emit()

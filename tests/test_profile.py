@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
-"""core/profile.py save path (rig editing) — incl. the repo-template redirect."""
+"""core/profile.py save path (rig + station identity) — incl. the redirect."""
 
 from __future__ import annotations
 
@@ -79,3 +79,57 @@ def test_user_profile_wins_resolution_after_save(isolated_home, monkeypatch):
     monkeypatch.delenv("GRID_DOWN_PROFILE")
     assert profile.profile_path() == _user_profile(home)
     assert profile.load_profile()["rig"]["model"] == "3073"
+
+
+def test_save_station_redirects_repo_template_and_preserves_sections(isolated_home):
+    home, repo_default = isolated_home
+    original = repo_default.read_text()
+    out = profile.save_station("w1aw", "FN31PR")
+    target = _user_profile(home)
+    assert Path(out["path"]) == target and out["created"] is True
+    assert repo_default.read_text() == original  # template never touched
+    data = profile._yaml().safe_load(target.read_text())
+    assert data["profile"]["callsign"] == "W1AW"  # uppercased
+    assert data["profile"]["grid"] == "FN31pr"  # canonical Maidenhead case
+    template = profile._yaml().safe_load(original)
+    assert data["rig"] == template["rig"]  # rest of the profile copied, not lost
+
+
+def test_save_station_edits_user_profile_in_place_and_clears(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    user = tmp_path / ".config" / "grid-down" / "profiles" / "mine.yaml"
+    user.parent.mkdir(parents=True)
+    user.write_text(
+        "profile:\n  id: mine\n  callsign: W1AW\n  grid: FN31pr\n" "rig:\n  path: /dev/ttyUSB0\n"
+    )
+    monkeypatch.setenv("GRID_DOWN_PROFILE", str(user))
+    out = profile.save_station("N0CALL", "")  # grid explicitly cleared
+    assert Path(out["path"]) == user and out["created"] is False
+    data = profile.load_profile()
+    assert data["profile"] == {"id": "mine", "callsign": "N0CALL", "grid": ""}
+    assert data["rig"]["path"] == "/dev/ttyUSB0"  # rig untouched
+    assert not list(user.parent.glob("*.tmp"))  # atomic: tmp renamed away
+
+
+def test_save_station_rejects_bad_callsign_and_grid(isolated_home):
+    home, repo_default = isolated_home
+    original = repo_default.read_text()
+    with pytest.raises(profile.ProfileError):
+        profile.save_station("no", "FN31pr")  # too short
+    with pytest.raises(profile.ProfileError):
+        profile.save_station("W1AW/6", "FN31pr")  # portable suffix is not stored
+    with pytest.raises(profile.ProfileError):
+        profile.save_station("W1AW", "FN31p")  # odd length
+    with pytest.raises(profile.ProfileError):
+        profile.save_station("W1AW", "ZZ09pr")  # field letters run A-R
+    assert not _user_profile(home).exists()  # nothing written on bad input
+    assert repo_default.read_text() == original
+
+
+def test_save_station_allows_clearing_both_fields(isolated_home):
+    home, _ = isolated_home
+    profile.save_station("W1AW", "FN31pr")
+    out = profile.save_station("", "")  # unset both: legitimate (Doctor warns)
+    assert out["profile"]["callsign"] == "" and out["profile"]["grid"] == ""
+    data = profile._yaml().safe_load(_user_profile(home).read_text())
+    assert data["profile"]["callsign"] == "" and data["profile"]["grid"] == ""

@@ -122,6 +122,11 @@ def _fake_services() -> Services:
             "created": True,
             "rig": {"model": m, "path": p, "baud": b or ""},
         },
+        station_save=lambda c, g: {
+            "path": "/home/u/.config/grid-down/profiles/default.yaml",
+            "created": True,
+            "profile": {"id": "default", "callsign": c, "grid": g},
+        },
     )
 
 
@@ -144,6 +149,7 @@ def _spy_services(base: Services, **over) -> Services:
             "audio_up",
             "audio_down",
             "rig_save",
+            "station_save",
         )
     }
     fields.update(over)
@@ -391,3 +397,46 @@ def test_profiles_save_failure_surfaces(qtbot):
         view.save_btn.click()
     assert "FAILED" in view.save_status.text()
     assert "bad rig model" in view.save_status.text()
+
+
+def test_profiles_station_form_prefills_and_saves(qtbot):
+    calls = []
+    services = _spy_services(
+        _fake_services(),
+        station_save=lambda c, g: (
+            calls.append((c, g)),
+            {
+                "path": "/home/u/.config/grid-down/profiles/default.yaml",
+                "created": False,
+                "profile": {"id": "default", "callsign": c, "grid": g},
+            },
+        )[1],
+    )
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert view.callsign_edit.text() == "W1AW"
+    assert view.grid_edit.text() == "FN31pr"
+    qtbot.keyClicks(view.callsign_edit, "X")  # user edit -> dirty -> survives prefill
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.station_save_btn.click()
+    assert calls == [("W1AWX", "FN31pr")]
+    assert "station identity updated:" in view.save_status.text()
+    snap = _snap()
+    snap["profile"]["callsign"] = "K5ABC"
+    view.set_snapshot(snap)
+    assert view.callsign_edit.text() == "W1AWX"  # dirty field untouched
+
+
+def test_profiles_station_save_failure_surfaces(qtbot):
+    def boom(c, g):
+        raise RuntimeError("bad grid square")
+
+    services = _spy_services(_fake_services(), station_save=boom)
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.station_save_btn.click()
+    assert "FAILED" in view.save_status.text()
+    assert "bad grid square" in view.save_status.text()
