@@ -236,3 +236,126 @@ def save_audio(backend: str, rig_capture: str, ardop_capture: str, ardop_playbac
     out = _persist(mutate)
     out["audio"] = dict(audio_out)
     return out
+
+
+_MESH_TYPES = ("serial", "tcp", "ble")
+_MESH_HOST_RE = re.compile(r"^[A-Za-z0-9._:-]+$")
+_MESH_PATH_RE = re.compile(r"^[A-Za-z0-9._/:-]+$")
+_MESH_TOKEN_RE = re.compile(r"^[A-Za-z0-9_]*$")
+_MESH_URL_RE = re.compile(r"""^[^"'\s]*$""")
+_TRUE_WORDS = {"true", "yes", "1", "on"}
+
+
+def save_mesh(
+    dev_type: str,
+    dev_path: str,
+    dev_host: str,
+    long_name: str,
+    short_name: str,
+    region: str,
+    modem_preset: str,
+    channel_url: str,
+    daemon_enabled: str,
+) -> dict:
+    """Validate + persist the mesh section (spec §4 / §6.11).
+
+    dev_type selects how the node is reached: serial (dev_path required,
+    e.g. /dev/ttyUSB1), tcp (dev_host required, IP/hostname[:port]) or ble
+    (neither). dev_host is stored as null when empty, matching the template.
+    Node identity is the Meshtastic `configure` payload — long/short name
+    (short_name is capped at Meshtastic's 4 characters), region (US, EU_433,
+    …), modem preset (LONG_FAST, …) and the channel URL; the URL can carry
+    the PSK, so it only ever lands in the user profile (spec §9 — never the
+    repo template). daemon_enabled accepts true/false/yes/no/1/0 (empty =
+    template default false) and flips the meshtasticd unit at the next
+    `gd units install`. The profile itself is applied to the node by the
+    Phase 4 `meshtastic configure` adapter; nothing dials out from here.
+    Raises ProfileError and writes nothing on bad input.
+
+    Returns {"path": <written file>, "created": bool, "mesh": <new mesh dict>}.
+    """
+    type_s = str(dev_type or "").strip().lower() or "serial"
+    if type_s not in _MESH_TYPES:
+        raise ProfileError(
+            f"mesh.device.type {type_s!r} is not one of {'|'.join(_MESH_TYPES)}"
+            " (how the node is reached: USB serial, TCP, or Bluetooth)"
+        )
+    path_s = str(dev_path or "").strip()
+    if type_s == "serial" and not path_s:
+        raise ProfileError(
+            "mesh.device.path is required when device.type is serial"
+            " (e.g. /dev/ttyUSB1 — see `ls /dev/serial/by-id/`)"
+        )
+    if path_s and not _MESH_PATH_RE.fullmatch(path_s):
+        raise ProfileError(
+            f"mesh.device.path {path_s!r} is not a device path"
+            " (e.g. /dev/ttyUSB1 — no spaces or shell metacharacters)"
+        )
+    host_s = str(dev_host or "").strip()
+    if type_s == "tcp" and not host_s:
+        raise ProfileError(
+            "mesh.device.host is required when device.type is tcp"
+            " (IP or hostname, e.g. 192.168.1.50 or meshtastic.lan:4403)"
+        )
+    if host_s and not _MESH_HOST_RE.fullmatch(host_s):
+        raise ProfileError(
+            f"mesh.device.host {host_s!r} is not an IP/hostname"
+            " (no spaces, quotes, or URL schemes — just the host[:port])"
+        )
+    long_s = str(long_name or "").strip()
+    short_s = str(short_name or "").strip()
+    if short_s and len(short_s) > 4:
+        raise ProfileError(
+            f"mesh.node.short_name {short_s!r} is longer than Meshtastic's"
+            " 4-character limit (e.g. W1AW)"
+        )
+    region_s = str(region or "").strip()
+    if region_s and not _MESH_TOKEN_RE.fullmatch(region_s):
+        raise ProfileError(
+            f"mesh.node.region {region_s!r} is not a Meshtastic region id"
+            " (letters/digits/underscores, e.g. US or EU_433)"
+        )
+    preset_s = str(modem_preset or "").strip()
+    if preset_s and not _MESH_TOKEN_RE.fullmatch(preset_s):
+        raise ProfileError(
+            f"mesh.node.modem_preset {preset_s!r} is not a Meshtastic preset"
+            " (letters/digits/underscores, e.g. LONG_FAST)"
+        )
+    url_s = str(channel_url or "").strip()
+    if url_s and not _MESH_URL_RE.fullmatch(url_s):
+        raise ProfileError(
+            f"mesh.node.channel_url {url_s!r} is not a channel URL"
+            " (no spaces or quotes — paste it as meshtastic.org gives it)"
+        )
+    raw_daemon = str(daemon_enabled if daemon_enabled is not None else "").strip().lower()
+    if raw_daemon in _TRUE_WORDS:
+        daemon_b = True
+    elif raw_daemon in ("", "false", "no", "0", "off"):
+        daemon_b = False
+    else:
+        raise ProfileError(
+            f"mesh.daemon.enabled {raw_daemon!r} is not a boolean"
+            " (true/false — true runs meshtasticd for a LoRa HAT)"
+        )
+
+    mesh_out: dict = {}
+
+    def mutate(data: dict) -> None:
+        m = data.setdefault("mesh", {})
+        dev = m.setdefault("device", {})
+        dev["type"] = type_s
+        dev["path"] = path_s
+        dev["host"] = host_s or None
+        node_d = m.setdefault("node", {})
+        node_d["long_name"] = long_s
+        node_d["short_name"] = short_s
+        node_d["region"] = region_s
+        node_d["modem_preset"] = preset_s
+        node_d["channel_url"] = url_s
+        m.setdefault("daemon", {})["enabled"] = daemon_b
+        mesh_out.clear()
+        mesh_out.update(m)
+
+    out = _persist(mutate)
+    out["mesh"] = dict(mesh_out)
+    return out

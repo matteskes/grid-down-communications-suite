@@ -48,6 +48,7 @@ class Services:
     rig_save: Callable[[str, str, str], dict]
     station_save: Callable[[str, str], dict]
     audio_save: Callable[[str, str, str, str], dict]
+    mesh_save: Callable[[str, str, str, str, str, str, str, str, str], dict]
 
 
 def default_services(root: Path | None = None) -> Services:
@@ -121,6 +122,7 @@ def default_services(root: Path | None = None) -> Services:
         rig_save=profile.save_rig,
         station_save=profile.save_station,
         audio_save=profile.save_audio,
+        mesh_save=profile.save_mesh,
     )
 
 

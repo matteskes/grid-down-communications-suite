@@ -261,8 +261,12 @@ install state), Bundles (start/stop sessions), Profiles (form-driven YAML editin
 > table over the 41-app registry), Bundles (start/stop tiles + confirm dialog + notes pane,
 > calling `Supervisor.launch_bundle/stop_bundle` in-process), Doctor (color-coded checks +
 > copy-as-JSON), Profiles (YAML pane + rig model/path/baud (`save_rig`), station
-> identity — callsign/grid (`save_station`), and audio — backend / rig_capture /
-> ardop capture-playback presets (`save_audio`); atomic writes, never the repo
+> identity — callsign/grid (`save_station`), audio — backend / rig_capture /
+> ardop capture-playback presets (`save_audio`), and mesh — device
+> type/path/host, node identity (long/short name, region, modem preset,
+> channel URL) and the meshtasticd daemon switch (`save_mesh`; the node config
+> itself is applied later by the Phase 4 `meshtastic configure` adapter);
+> atomic writes, never the repo
 > template). Core is reached through a
 > dependency-injected service layer
 > (`control/gui/services.py` — pure Python, fakes in tests); every core call runs in a

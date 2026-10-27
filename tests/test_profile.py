@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
-"""core/profile.py save path (rig / station identity / audio) — incl. the redirect."""
+"""core/profile.py save path (rig / station identity / audio / mesh) — incl. the redirect."""
 
 from __future__ import annotations
 
@@ -197,3 +197,100 @@ def test_save_audio_cleared_presets_fall_back_to_defaults(isolated_home):
     # resolve_preset's falsy chain falls back to DEFAULT_PRESETS (core/audio.py)
     assert audio.resolve_preset("ardop", "capture", data) == "grid_down_hf_out.monitor"
     assert audio.resolve_preset("ardop", "playback", data) == "grid_down_hf_in"
+
+
+def test_save_mesh_redirects_repo_template_and_preserves_sections(isolated_home):
+    home, repo_default = isolated_home
+    original = repo_default.read_text()
+    out = profile.save_mesh(
+        "serial", "/dev/ttyUSB1", "", "W1AW Mesh", "W1AW", "US", "LONG_FAST", "", ""
+    )
+    target = _user_profile(home)
+    assert Path(out["path"]) == target and out["created"] is True
+    assert repo_default.read_text() == original  # template never touched
+    data = profile._yaml().safe_load(target.read_text())
+    assert data["mesh"]["device"] == {
+        "type": "serial",
+        "path": "/dev/ttyUSB1",
+        "host": None,  # empty stays null, matching the template
+    }
+    assert data["mesh"]["node"] == {
+        "long_name": "W1AW Mesh",
+        "short_name": "W1AW",
+        "region": "US",
+        "modem_preset": "LONG_FAST",
+        "channel_url": "",
+    }
+    assert data["mesh"]["daemon"]["enabled"] is False  # empty -> template default
+    template = profile._yaml().safe_load(original)
+    assert data["audio"] == template["audio"]  # rest of the profile copied, not lost
+
+
+def test_save_mesh_edits_user_profile_in_place_and_clears(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    user = tmp_path / ".config" / "grid-down" / "profiles" / "mine.yaml"
+    user.parent.mkdir(parents=True)
+    user.write_text(
+        "profile:\n  id: mine\n  callsign: W1AW\n"
+        "mesh:\n  device:\n    type: tcp\n    path: ''\n    host: meshtastic.lan\n"
+        "  node:\n    long_name: Old\n    short_name: OLD1\n    region: ''\n"
+        "    modem_preset: ''\n    channel_url: ''\n  daemon:\n    enabled: true\n"
+    )
+    monkeypatch.setenv("GRID_DOWN_PROFILE", str(user))
+    out = profile.save_mesh("ble", "", "", "New", "", "US", "LONG_FAST", "", "no")
+    assert Path(out["path"]) == user and out["created"] is False
+    data = profile.load_profile()
+    assert data["profile"]["callsign"] == "W1AW"  # head untouched
+    assert data["mesh"]["device"]["host"] is None  # cleared -> null (ble needs no host)
+    assert data["mesh"]["device"]["type"] == "ble"
+    assert data["mesh"]["daemon"]["enabled"] is False  # 'no' -> False
+    assert data["mesh"]["node"]["long_name"] == "New"
+    assert not list(user.parent.glob("*.tmp"))  # atomic: tmp renamed away
+
+
+def test_save_mesh_rejects_bad_type_host_and_names(isolated_home):
+    home, repo_default = isolated_home
+    original = repo_default.read_text()
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh("wifi", "", "", "", "", "", "", "", "")  # not serial/tcp/ble
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh("serial", "", "", "", "", "", "", "", "")  # serial needs a path
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh("tcp", "", "", "", "", "", "", "", "")  # tcp needs a host
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh("tcp", "", "my host", "", "", "", "", "", "")  # no spaces
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh("tcp", "", 'has"quote', "", "", "", "", "", "")  # no quotes
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh(
+            "serial", "/dev/ttyUSB1", "", "", "TOOLONG", "", "", "", ""
+        )  # short_name > 4 chars
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh(
+            "serial", "/dev/ttyUSB1", "", "", "", "U S", "", "", ""
+        )  # region is a token
+    with pytest.raises(profile.ProfileError):
+        profile.save_mesh(
+            "serial", "/dev/ttyUSB1", "", "", "", "", "", "", "maybe"
+        )  # daemon_enabled is a boolean
+    assert not _user_profile(home).exists()  # nothing written on bad input
+    assert repo_default.read_text() == original
+
+
+def test_save_mesh_defaults_and_channel_url(isolated_home):
+    home, _ = isolated_home
+    out = profile.save_mesh(
+        "",
+        "/dev/ttyUSB1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "https://meshtastic.org/e/#Q3VzdG9t",
+        "yes",
+    )
+    assert out["mesh"]["device"]["type"] == "serial"  # empty -> template default
+    assert out["mesh"]["daemon"]["enabled"] is True  # 'yes' -> True
+    assert out["mesh"]["node"]["channel_url"] == "https://meshtastic.org/e/#Q3VzdG9t"
+    assert Path(out["path"]) == _user_profile(home)

@@ -83,6 +83,17 @@ def _snap() -> dict:
                     }
                 },
             },
+            "mesh": {
+                "device": {"type": "serial", "path": "/dev/ttyUSB1", "host": None},
+                "node": {
+                    "long_name": "W1AW Mesh",
+                    "short_name": "W1AW",
+                    "region": "US",
+                    "modem_preset": "LONG_FAST",
+                    "channel_url": "",
+                },
+                "daemon": {"enabled": False},
+            },
         },
         "apps": {
             "ardop": {
@@ -146,6 +157,21 @@ def _fake_services() -> Services:
                 "presets": {"ardop": {"capture": ac, "playback": ap}},
             },
         },
+        mesh_save=lambda dt, dp, dh, ln, sn, rg, mp, cu, de: {
+            "path": "/home/u/.config/grid-down/profiles/default.yaml",
+            "created": True,
+            "mesh": {
+                "device": {"type": dt, "path": dp, "host": dh or None},
+                "node": {
+                    "long_name": ln,
+                    "short_name": sn,
+                    "region": rg,
+                    "modem_preset": mp,
+                    "channel_url": cu,
+                },
+                "daemon": {"enabled": de == "true"},
+            },
+        },
     )
 
 
@@ -170,6 +196,7 @@ def _spy_services(base: Services, **over) -> Services:
             "rig_save",
             "station_save",
             "audio_save",
+            "mesh_save",
         )
     }
     fields.update(over)
@@ -516,3 +543,50 @@ def test_profiles_audio_save_failure_surfaces(qtbot):
         view.audio_save_btn.click()
     assert "FAILED" in view.save_status.text()
     assert "bad audio backend" in view.save_status.text()
+
+
+def test_profiles_mesh_form_prefills_and_saves(qtbot):
+    calls = []
+    services = _spy_services(
+        _fake_services(),
+        mesh_save=lambda dt, dp, dh, ln, sn, rg, mp, cu, de: (
+            calls.append((dt, dp, dh, ln, sn, rg, mp, cu, de)),
+            {
+                "path": "/home/u/.config/grid-down/profiles/default.yaml",
+                "created": False,
+                "mesh": {"device": {"type": dt, "path": dp, "host": dh or None}},
+            },
+        )[1],
+    )
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    # combo/checkbox prefill from the snapshot
+    assert view.type_combo.currentText() == "serial"
+    assert view.daemon_check.isChecked() is False
+    assert view.dev_path_edit.text() == "/dev/ttyUSB1"
+    assert view.dev_host_edit.text() == ""  # host: null -> empty
+    assert view.long_name_edit.text() == "W1AW Mesh"
+    assert view.short_name_edit.text() == "W1AW"
+    qtbot.keyClicks(view.short_name_edit, "X")  # user edit -> dirty
+    view.daemon_check.click()  # user toggle -> dirty (clicked, not setChecked)
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.mesh_save_btn.click()
+    assert calls == [
+        ("serial", "/dev/ttyUSB1", "", "W1AW Mesh", "W1AWX", "US", "LONG_FAST", "", "true")
+    ]
+    assert "mesh updated:" in view.save_status.text()
+
+
+def test_profiles_mesh_save_failure_surfaces(qtbot):
+    def boom(dt, dp, dh, ln, sn, rg, mp, cu, de):
+        raise RuntimeError("mesh.device.path is required when device.type is serial")
+
+    services = _spy_services(_fake_services(), mesh_save=boom)
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.mesh_save_btn.click()
+    assert "FAILED" in view.save_status.text()
+    assert "mesh.device.path is required" in view.save_status.text()
