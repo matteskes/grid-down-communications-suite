@@ -274,12 +274,12 @@ Registry entries (41 apps) live in `control/registry/apps/`; install strategies:
 
 Post-audit state (2026-10-26; `docs/audit/f45-package-audit.md` is authoritative):
 
-- **dnf** — hamlib (+python3-hamlib), fldigi, direwolf, wsjtx, js8call, flamp, flmsg, fllog,
+- **dnf** — hamlib (+python3-hamlib), fldigi (ships flarq), direwolf, wsjtx, js8call, flamp, flmsg, fllog,
   qsstv, kiwix-desktop, audacity, sox, conky, snapshot, ffmpeg (needs RPM Fusion release rpms),
   wine 11.20 (x86_64), winetricks, java-25-openjdk (YAAC runtime), nodejs, rtl-sdr, php-cli,
   createrepo_c, python3-pip
 - **build** (pinned git sources in fedora:45 container) — ardop, wsjtx-improved, qttermtcp,
-  paracon, sdrpp, dump1090, flarq, flwrap, xygrib, osm-navit
+  paracon, sdrpp, dump1090, flwrap, xygrib, osm-navit
 - **tarball** — pinned upstream artifacts: pat, chattervox (npm), yaac (jar), artemis (.rpm,
   AresValley GPL-3.0 v4.2), gridtracker, js8spotter, meshtasticd (RPM), commstatone (static)
 - **wine** — user-supplied installers into shared prefix: vara-hf, vara-fm, vara-sat, vara-chat,

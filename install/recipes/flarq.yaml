@@ -1,11 +1,12 @@
 # Install recipe for flarq (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# strategy: dnf — flarq ships inside Fedora's fldigi package (Provides: flarq = 4.2.13;
+# verified in the fedora:45 container — docs/audit/f45-package-audit.md, Flags #4).
 recipe:
   id: flarq
-  strategy: build
+  strategy: dnf
   license: GPL-2.0-or-later
-  source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
-    build_container: fedora:45
+  dnf:
+    repo: fedora
+    packages:
+      - fldigi
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

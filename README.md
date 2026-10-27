@@ -70,6 +70,10 @@ python3 control/cli/gd.py stop <app|bundle|all> # reverse order; rigctld stopped
 
 # Fedora 45 package audit (online machine, uses Docker)
 bash tools/run-audit.sh > docs/audit/f45-package-audit.md
+
+# style gates: ruff + black + isort (also run automatically on commit)
+bash tools/lint.sh
+ln -sf ../../tools/pre-commit .git/hooks/pre-commit   # one-time hook install
 ```
 
 Supervisor state lives in `$XDG_STATE_HOME/grid-down/supervisor.json`

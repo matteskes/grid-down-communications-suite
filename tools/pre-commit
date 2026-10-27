@@ -1,0 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
+# Git pre-commit hook: runs the style gates (tools/lint.sh) before every commit.
+# Install (one-time, per clone): ln -sf ../../tools/pre-commit .git/hooks/pre-commit
+exec "$(git rev-parse --show-toplevel)/tools/lint.sh"

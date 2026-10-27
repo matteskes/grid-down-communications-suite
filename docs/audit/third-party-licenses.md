@@ -53,7 +53,7 @@ the kit builder into the manifest.
 | osm-navit | navit-gps/navit | GPL-2.0 | |
 | dump1090 | fork-dependent | BSD-3-Clause (antirez original) / GPL-2.0-or-later (FlightAware, mutability) | pin the fork — Flags #3 |
 | flwrap | W1HKJ | GPL-2.0-or-later | exact tag verify at pin |
-| flarq | W1HKJ | GPL-2.0-or-later | likely provided by fldigi RPM — Flags #4 |
+| flarq | W1HKJ | GPL-2.0-or-later | shipped by fldigi RPM (verified in container) — Flags #4 resolved |
 | wsjtx-improved | WSJT-X improved fork | GPL-3.0-or-later | derivative of GPL-3 WSJT-X |
 | yaac | KA2DDO/YAAC | LGPL (family) | exact version verify at pin — Flags #6 |
 | qttermtcp | g8bpq/QtTermTCP | **none found** | Flags #1 — do not ship until resolved |
@@ -86,10 +86,11 @@ the kit builder into the manifest.
 3. **dump1090** — recipe must pin the fork: antirez original (BSD-3-Clause) or
    FlightAware/mutability (GPL-2.0-or-later). Either is compatible with the MIT umbrella;
    record the choice in the manifest.
-4. **flarq** — Fedora's `fldigi` package Provides: flarq = 4.2.13 (mdapi), so
-   `dnf install fldigi` ships flarq; the audit's "MISSING → build" decision is likely moot.
-   Container check at kit build: `dnf install -y fldigi && test -x /usr/bin/flarq`; if confirmed,
-   retire `install/recipes/flarq.yaml` (addendum in `f45-package-audit.md`).
+4. **flarq** — RESOLVED 2026-10-26: Fedora's `fldigi` package Provides: flarq = 4.2.13 (mdapi),
+   confirmed in the fedora:45 container (`dnf install -y fldigi && test -x /usr/bin/flarq` →
+   present). flarq now rides a dnf recipe installing `fldigi`; the pinned-source build recipe is
+   retired (addendum in `f45-package-audit.md`). RPM `License:` tag still captured at kit build
+   per Flags #5.
 5. **W1HKJ suite / qsstv exact tags** — capture authoritative `License:` tags via rpm at kit
    build (distro sources were bot-walled during research).
 6. **yaac** — confirm the LGPL version ("or-later"?) from the jar's bundled license at pin.

@@ -3,15 +3,15 @@ id: flarq
 name: flarq
 category: hf
 ui:
-  tagline: "ARQ data modem companion to fldigi (absent from F45 repos; pinned source build)"
+  tagline: "ARQ data modem companion to fldigi (shipped by the fldigi RPM — Provides: flarq)"
 install:
-  strategy: build
+  strategy: dnf
   recipe: flarq
-  packages: []
-  note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
+  packages: [fldigi]
+  note: "Delivered by Fedora's fldigi package (Provides: flarq = 4.2.13; verified in the fedora:45 container — docs/audit/f45-package-audit.md)."
 launch:
   via: desktop-app
-  cmd: "/opt/grid-down/flarq/bin/flarq"
+  cmd: "flarq"
 config:
   adapter: flarq-xmlrpc
   native_path: TBD   # pin exact native config path per station (Phase 3/4)

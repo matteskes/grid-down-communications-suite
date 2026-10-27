@@ -119,7 +119,7 @@ gd 0.4.0-m3
 | fllog | dnf-verify | **dnf** | AVAILABLE |
 | qsstv | dnf-verify | **dnf** | AVAILABLE |
 | kiwix-desktop | dnf-verify | **dnf** | AVAILABLE |
-| flarq | dnf | **build** | MISSING (glob empty) — pinned source build |
+| flarq | dnf | **build** | MISSING (glob empty) — **resolved: dnf via fldigi** (see Post-audit correction) |
 | flwrap | dnf-verify | **build** | MISSING (glob empty) |
 | xygrib | dnf-verify | **build** | MISSING (glob empty) |
 | osm-navit | dnf-verify | **build** | MISSING (glob empty) |
@@ -148,12 +148,14 @@ gd 0.4.0-m3
 
 ## Post-audit correction (2026-10-26, license-research pass)
 
-- **flarq** — Fedora's `fldigi` package **Provides: flarq = 4.2.13** (Fedora mdapi), i.e.
-  `dnf install fldigi` ships flarq. The `MISSING flarq` result above only means "no package
-  *named* flarq", so the **build** decision for flarq is likely moot. Verify in the container at
-  kit-build time (`dnf install -y fldigi && test -x /usr/bin/flarq`); if confirmed, retire
-  `install/recipes/flarq.yaml` and keep flarq in the registry as an app delivered by the fldigi
-  package. Same-family note: flwrap remains genuinely absent (no Provides found) — build stands.
+- **flarq — RESOLVED 2026-10-26** — Fedora's `fldigi` package **Provides: flarq = 4.2.13** (Fedora
+  mdapi), i.e. `dnf install fldigi` ships flarq; the `MISSING flarq` result above only meant "no
+  package *named* flarq". **Verified in-container (`fedora:45`, aarch64, 2026-10-26):**
+  `dnf repoquery --whatprovides flarq` → `fldigi-0:4.2.13-1.fc45`; `dnf install -y fldigi` then
+  `test -x /usr/bin/flarq` → present. Applied: the pinned-source **build** recipe became a **dnf**
+  recipe installing the `fldigi` package (the file stays — one recipe per app is a test contract,
+  `tests/test_registry.py`); registry entry is dnf/fldigi with `cmd: flarq`. Same-family note:
+  flwrap remains genuinely absent (no Provides found) — build stands.
   Details: `docs/audit/third-party-licenses.md` (Flags #4).
 - Full license inventory for every catalog app: `docs/audit/third-party-licenses.md`.
 
