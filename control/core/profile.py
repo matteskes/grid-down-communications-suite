@@ -3,7 +3,7 @@
 """Station profile model: load/resolve + atomic form saves.
 
 Schema: docs/SPECIFICATION.md §4. The GUI form savers (save_rig,
-save_station) share the _persist write path below.
+save_station, save_audio) share the _persist write path below.
 
 Resolution order:
   1. $GRID_DOWN_PROFILE (path to a profile YAML)
@@ -60,7 +60,7 @@ def load_profile(path: Path | None = None) -> dict:
 
 
 def _persist(mutate: Callable[[dict], None]) -> dict:
-    """Shared write path for the form savers (save_rig / save_station).
+    """Shared write path for the form savers (save_rig / save_station / save_audio).
 
     The shipped repo template (profiles/default.yaml) is never modified:
     when it is the resolved profile, the full resolved content is written to
@@ -174,4 +174,65 @@ def save_station(callsign: str, grid: str) -> dict:
 
     out = _persist(mutate)
     out["profile"] = dict(head)
+    return out
+
+
+_AUDIO_NAME_RE = re.compile(r"^[A-Za-z0-9._:/~+-]+$")
+
+
+def save_audio(backend: str, rig_capture: str, ardop_capture: str, ardop_playback: str) -> dict:
+    """Validate + persist the audio section (spec §4) into the active profile.
+
+    backend: only 'pipewire' is implemented (core/audio.py drives pactl from
+    pipewire-pulse), so anything else is rejected; empty stores the template
+    default 'pipewire'. rig_capture names the physical rig capture source for
+    the Phase 3 loopback (empty = loopback pending — `gd audio plan` surfaces
+    it, Doctor does not key off it). The ardop capture/playback presets
+    override DEFAULT_PRESETS (core/audio.py); clearing a preset pops the key
+    so resolve_preset falls back to the default (its lookup is falsy-based).
+    Non-empty names must be PipeWire/Pulse endpoint names — no spaces, quotes
+    or shell metacharacters, since supervisor expands them into launch cmds.
+    Raises ProfileError and writes nothing on bad input.
+
+    Returns {"path": <written file>, "created": bool, "audio": <new audio dict>}.
+    """
+    backend_s = str(backend or "").strip() or "pipewire"
+    if backend_s != "pipewire":
+        raise ProfileError(
+            f"audio.backend {backend_s!r} is not implemented — only 'pipewire'"
+            " (core/audio.py drives pactl from pipewire-pulse)"
+        )
+    rig_capture_s = str(rig_capture or "").strip()
+    ardop = {
+        "capture": str(ardop_capture or "").strip(),
+        "playback": str(ardop_playback or "").strip(),
+    }
+    for key, value in (
+        ("audio.rig_capture", rig_capture_s),
+        ("audio.presets.ardop.capture", ardop["capture"]),
+        ("audio.presets.ardop.playback", ardop["playback"]),
+    ):
+        if value and not _AUDIO_NAME_RE.fullmatch(value):
+            raise ProfileError(
+                f"{key} {value!r} is not a PipeWire/Pulse endpoint name"
+                " (no spaces, quotes, or shell metacharacters)"
+            )
+
+    audio_out: dict = {}
+
+    def mutate(data: dict) -> None:
+        a = data.setdefault("audio", {})
+        a["backend"] = backend_s
+        a["rig_capture"] = rig_capture_s
+        ard = a.setdefault("presets", {}).setdefault("ardop", {})
+        for short, value in ardop.items():
+            if value:
+                ard[short] = value
+            else:
+                ard.pop(short, None)
+        audio_out.clear()
+        audio_out.update(a)
+
+    out = _persist(mutate)
+    out["audio"] = dict(audio_out)
     return out

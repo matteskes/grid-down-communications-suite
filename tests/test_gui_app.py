@@ -73,6 +73,16 @@ def _snap() -> dict:
         "profile_raw": {
             "profile": {"id": "default", "callsign": "W1AW", "grid": "FN31pr"},
             "rig": {"model": "", "path": "", "baud": ""},
+            "audio": {
+                "backend": "pipewire",
+                "rig_capture": "",
+                "presets": {
+                    "ardop": {
+                        "capture": "grid_down_hf_out.monitor",
+                        "playback": "grid_down_hf_in",
+                    }
+                },
+            },
         },
         "apps": {
             "ardop": {
@@ -127,6 +137,15 @@ def _fake_services() -> Services:
             "created": True,
             "profile": {"id": "default", "callsign": c, "grid": g},
         },
+        audio_save=lambda be, rc, ac, ap: {
+            "path": "/home/u/.config/grid-down/profiles/default.yaml",
+            "created": True,
+            "audio": {
+                "backend": be or "pipewire",
+                "rig_capture": rc,
+                "presets": {"ardop": {"capture": ac, "playback": ap}},
+            },
+        },
     )
 
 
@@ -150,6 +169,7 @@ def _spy_services(base: Services, **over) -> Services:
             "audio_down",
             "rig_save",
             "station_save",
+            "audio_save",
         )
     }
     fields.update(over)
@@ -440,3 +460,59 @@ def test_profiles_station_save_failure_surfaces(qtbot):
         view.station_save_btn.click()
     assert "FAILED" in view.save_status.text()
     assert "bad grid square" in view.save_status.text()
+
+
+def test_profiles_audio_form_prefills_and_saves(qtbot):
+    calls = []
+    services = _spy_services(
+        _fake_services(),
+        audio_save=lambda be, rc, ac, ap: (
+            calls.append((be, rc, ac, ap)),
+            {
+                "path": "/home/u/.config/grid-down/profiles/default.yaml",
+                "created": False,
+                "audio": {
+                    "backend": be or "pipewire",
+                    "rig_capture": rc,
+                    "presets": {"ardop": {"capture": ac, "playback": ap}},
+                },
+            },
+        )[1],
+    )
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert view.backend_edit.text() == "pipewire"
+    assert view.rig_capture_edit.text() == ""
+    assert view.ardop_capture_edit.text() == "grid_down_hf_out.monitor"
+    assert view.ardop_playback_edit.text() == "grid_down_hf_in"
+    qtbot.keyClicks(view.rig_capture_edit, "alsa_input.usb-codex")
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.audio_save_btn.click()
+    assert calls == [
+        (
+            "pipewire",
+            "alsa_input.usb-codex",
+            "grid_down_hf_out.monitor",
+            "grid_down_hf_in",
+        )
+    ]
+    assert "audio updated:" in view.save_status.text()
+    snap = _snap()
+    snap["profile_raw"]["audio"]["rig_capture"] = "other_source"
+    view.set_snapshot(snap)
+    assert view.rig_capture_edit.text() == "alsa_input.usb-codex"  # dirty field untouched
+
+
+def test_profiles_audio_save_failure_surfaces(qtbot):
+    def boom(be, rc, ac, ap):
+        raise RuntimeError("bad audio backend")
+
+    services = _spy_services(_fake_services(), audio_save=boom)
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.audio_save_btn.click()
+    assert "FAILED" in view.save_status.text()
+    assert "bad audio backend" in view.save_status.text()

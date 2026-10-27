@@ -47,6 +47,7 @@ class Services:
     audio_down: Callable[[], dict]
     rig_save: Callable[[str, str, str], dict]
     station_save: Callable[[str, str], dict]
+    audio_save: Callable[[str, str, str, str], dict]
 
 
 def default_services(root: Path | None = None) -> Services:
@@ -119,6 +120,7 @@ def default_services(root: Path | None = None) -> Services:
         audio_down=_audio_down,
         rig_save=profile.save_rig,
         station_save=profile.save_station,
+        audio_save=profile.save_audio,
     )
 
 

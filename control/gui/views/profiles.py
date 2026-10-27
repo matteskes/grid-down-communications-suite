@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
-"""Profiles view (M3c): station profile + rig editing.
+"""Profiles view (M3c): station profile + rig / audio editing.
 
-M3c shipped the read-only YAML pane; the post-P2 passes added the two
-everyday forms without a text editor: rig model / serial path / baud and
-station identity (callsign / Maidenhead grid). Saves run in a SnapshotWorker
-like every other core call; `core/profile.save_rig` / `save_station` validate
-and write atomically (never the repo template — a user profile is created
-instead). Fields prefill from the snapshot only while untouched: the window
-autorefreshes every 10 s and must not clobber mid-typing.
+M3c shipped the read-only YAML pane; the post-P2 passes added the everyday
+forms without a text editor: rig model / serial path / baud, station
+identity (callsign / Maidenhead grid), and audio (backend / rig capture /
+ardop capture-playback presets). Saves run in a SnapshotWorker like every
+other core call; `core/profile.save_rig` / `save_station` / `save_audio`
+validate and write atomically (never the repo template — a user profile is
+created instead). Fields prefill from the snapshot only while untouched: the
+window autorefreshes every 10 s and must not clobber mid-typing.
 """
 
 from __future__ import annotations
@@ -70,7 +71,28 @@ class ProfilesView(QWidget):
         self.station_save_btn = QPushButton("Save station", self)
         self.station_save_btn.clicked.connect(self._save_station)
 
-        edits = self._edits = rig_edits + station_edits
+        audio_box = QGroupBox("Audio (PipeWire) — saved to the station profile")
+        audio_form = QFormLayout(audio_box)
+        self.backend_edit = QLineEdit(self)
+        self.backend_edit.setPlaceholderText("pipewire (only implemented backend)")
+        self.rig_capture_edit = QLineEdit(self)
+        self.rig_capture_edit.setPlaceholderText(
+            "physical rig source, e.g. alsa_input.usb-codex (empty = loopback pending)"
+        )
+        self.ardop_capture_edit = QLineEdit(self)
+        self.ardop_capture_edit.setPlaceholderText("empty = default grid_down_hf_out.monitor")
+        self.ardop_playback_edit = QLineEdit(self)
+        self.ardop_playback_edit.setPlaceholderText("empty = default grid_down_hf_in")
+        audio_edits = (
+            ("backend", self.backend_edit),
+            ("rig_capture", self.rig_capture_edit),
+            ("ardop_capture", self.ardop_capture_edit),
+            ("ardop_playback", self.ardop_playback_edit),
+        )
+        self.audio_save_btn = QPushButton("Save audio", self)
+        self.audio_save_btn.clicked.connect(self._save_audio)
+
+        edits = self._edits = rig_edits + station_edits + audio_edits
         for name, edit in edits:
             edit.textEdited.connect(lambda _=None, n=name: self._dirty.add(n))
         for name, edit in rig_edits:
@@ -79,6 +101,15 @@ class ProfilesView(QWidget):
         for name, edit in station_edits:
             station_form.addRow(name.capitalize() + ":", edit)
         station_form.addRow(self.station_save_btn)
+        audio_rows = (
+            ("Backend:", self.backend_edit),
+            ("Rig capture:", self.rig_capture_edit),
+            ("Ardop capture:", self.ardop_capture_edit),
+            ("Ardop playback:", self.ardop_playback_edit),
+        )
+        for label, edit in audio_rows:
+            audio_form.addRow(label, edit)
+        audio_form.addRow(self.audio_save_btn)
         self.save_status = QLabel("", self)
         self.save_status.setWordWrap(True)
 
@@ -90,6 +121,7 @@ class ProfilesView(QWidget):
         lay = QVBoxLayout(self)
         lay.addWidget(rig_box)
         lay.addWidget(station_box)
+        lay.addWidget(audio_box)
         lay.addWidget(self.save_status)
         lay.addWidget(self.path_label)
         lay.addWidget(self.text)
@@ -110,12 +142,18 @@ class ProfilesView(QWidget):
         (i.e. the save round-tripped) — autorefresh never clobbers typing."""
         rig = snap.get("rig") or {}
         head = snap.get("profile") or {}
+        audio_sec = (snap.get("profile_raw") or {}).get("audio") or {}
+        ardop = (audio_sec.get("presets") or {}).get("ardop") or {}
         values = (
             str(rig.get("model") or ""),
             str(rig.get("path") or ""),
             str(rig.get("baud") or ""),
             str(head.get("callsign") or ""),
             str(head.get("grid") or ""),
+            str(audio_sec.get("backend") or ""),
+            str(audio_sec.get("rig_capture") or ""),
+            str(ardop.get("capture") or ""),
+            str(ardop.get("playback") or ""),
         )
         for (name, edit), value in zip(self._edits, values):
             if edit.text() == value:
@@ -182,5 +220,35 @@ class ProfilesView(QWidget):
         self.save_status.setText(
             f"station identity {verb}: {where} — callsign={call} grid={square};"
             " the Doctor profile check flips to [ok]."
+        )
+        self.changed.emit()
+
+    def _save_audio(self) -> None:
+        if self._busy:
+            return
+        backend = self.backend_edit.text().strip()
+        rig_capture = self.rig_capture_edit.text().strip()
+        ardop_capture = self.ardop_capture_edit.text().strip()
+        ardop_playback = self.ardop_playback_edit.text().strip()
+        self._busy = True
+        self.save_status.setText("saving audio…")
+        svc = self.services
+        worker = SnapshotWorker(
+            lambda: svc.audio_save(backend, rig_capture, ardop_capture, ardop_playback),
+            parent=self,
+        )
+        worker.done.connect(self._audio_save_done)
+        worker.failed.connect(self._save_failed)
+        self._worker = worker
+        worker.start()
+
+    def _audio_save_done(self, out: object) -> None:
+        self._busy = False
+        data = out or {}
+        where = data.get("path", "?")
+        verb = "created" if data.get("created") else "updated"
+        self.save_status.setText(
+            f"audio {verb}: {where} — presets apply on the next app (re)start;"
+            " `gd audio plan` reflects rig_capture."
         )
         self.changed.emit()

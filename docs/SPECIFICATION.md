@@ -260,15 +260,16 @@ install state), Bundles (start/stop sessions), Profiles (form-driven YAML editin
 > Dashboard (station/rig/audio/instances/doctor + audio up/down actions), Catalog (filterable
 > table over the 41-app registry), Bundles (start/stop tiles + confirm dialog + notes pane,
 > calling `Supervisor.launch_bundle/stop_bundle` in-process), Doctor (color-coded checks +
-> copy-as-JSON), Profiles (YAML pane + rig model/path/baud form (`save_rig`) and
-> station identity — callsign/grid (`save_station`); atomic writes, never the repo
+> copy-as-JSON), Profiles (YAML pane + rig model/path/baud (`save_rig`), station
+> identity — callsign/grid (`save_station`), and audio — backend / rig_capture /
+> ardop capture-playback presets (`save_audio`); atomic writes, never the repo
 > template). Core is reached through a
 > dependency-injected service layer
 > (`control/gui/services.py` — pure Python, fakes in tests); every core call runs in a
 > worker thread; any failing section degrades to "unavailable" instead of killing the UI.
 > PySide6 on the target comes from the Fedora repos (`python3-pyside6`, see
 > `docs/audit/f45-package-audit.md`); pip wheels are dev/CI-only. Remaining profile-form
-> sections (audio, mesh), install-state columns, winehub controls, and the
+> sections (mesh), install-state columns, winehub controls, and the
 > tray/launcher stay out of scope.
 
 ## 8. App catalog & install strategies
