@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Grid Down Control Center
+GenericName=Station Control
+Comment=Air-gap ham/emcom station control: supervisor, bundles, doctor, wine hub
+Exec=gd gui
+TryExec=gd
+Icon=grid-down
+Terminal=false
+Categories=Network;HamRadio;Utility;
+Keywords=ham;radio;emcom;winlink;js8;meshtastic;vara;
+StartupNotify=true
+StartupWMClass=Grid Down Control Center
+X-KDE-StartupNotify=true

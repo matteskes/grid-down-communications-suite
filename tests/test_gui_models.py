@@ -126,6 +126,22 @@ def test_catalog_rows_overlay_running_state():
     assert models.catalog_rows(snap)[0]["state"] == "running"
 
 
+def test_catalog_rows_include_install_state():
+    apps = {"ardop": {"name": "ARDOP TNC"}, "zz-plain": {}}
+    snap = _snap(
+        apps=apps,
+        install={"ardop": {"state": "partial", "detail": "missing packages: flrig"}},
+    )
+    rows = models.catalog_rows(snap)
+    assert rows[0]["install"] == "partial"
+    assert rows[0]["install_detail"] == "missing packages: flrig"
+    assert rows[1]["install"] == "-" and rows[1]["install_detail"] == ""
+    # install-section error degrades the cells, not the page
+    snap = _snap(apps=apps, install={}, errors={"install": "RuntimeError: boom"})
+    rows = models.catalog_rows(snap)
+    assert [(r["install"], r["install_detail"]) for r in rows] == [("-", ""), ("-", "")]
+
+
 def test_catalog_rows_empty_on_section_error():
     assert models.catalog_rows(_snap(apps={}, errors={"apps": "boom"})) == []
 

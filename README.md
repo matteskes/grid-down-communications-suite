@@ -8,7 +8,7 @@ designed to be **built online, installed offline, and run fully offline**.
 
 - Full design and scope: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) (v0.3)
 - Fedora 45 package audit: [`docs/audit/f45-package-audit.md`](docs/audit/f45-package-audit.md)
-- Status: **Phase 2 accepted — v0.5.0-m4 on a real Fedora 45 aarch64 VM (GNOME/Wayland): doctor fail=0, systemd `BindsTo=` stop propagation, Control Center bundle start/stop** — evidence: `docs/audit/phase2-vm-acceptance.md`
+- Status: **Phase 2 controls complete — v0.6.0-m5: M1–M5 shipped (CLI v1, supervisor + systemd-unit backend, Control Center v1 + install-state columns + wine hub panel + tray/launcher, rigctld/audio ownership, `gd winehub`)** — outstanding from P2: the §10 Fedora GUI-VM acceptance pass; evidence: `docs/audit/phase2-vm-acceptance.md`
 
 ## Why
 
@@ -58,15 +58,19 @@ python3 -m pytest tests/ -q
 # CLI
 python3 control/cli/gd.py version
 python3 control/cli/gd.py apps list          # 41 registered apps
+python3 control/cli/gd.py apps list --state  # + install-state probe per app (M5)
 python3 control/cli/gd.py bundles list       # session bundles (§6.3)
 python3 control/cli/gd.py doctor             # station preflight (§6.7)
 python3 control/cli/gd.py rig                # profile-resolved rigctld argv (§6.4)
 python3 control/cli/gd.py audio plan        # owned PipeWire endpoint graph (§6.4 M2)
 python3 control/cli/gd.py audio up          # create grid_down_* endpoints (idempotent)
-python3 control/cli/gd.py gui                # Control Center GUI skeleton (§7, M3a)
+python3 control/cli/gd.py gui                # Control Center GUI (§7, M3+M5: tray via gd gui)
 python3 control/cli/gd.py status             # supervisor instances
 python3 control/cli/gd.py launch <app|bundle>   # e.g. launch winlink (rigctld auto-starts)
 python3 control/cli/gd.py stop <app|bundle|all> # reverse order; rigctld stopped last
+python3 control/cli/gd.py winehub status     # VARA wine hub (§6.4 M5)
+python3 control/cli/gd.py winehub start vara-hf # + stop / map <n> <device> / unmap <n>
+sh tools/install-launcher.sh                 # user-local GUI launcher + icon (M5)
 
 # Fedora 45 package audit (online machine, uses Docker)
 bash tools/run-audit.sh > docs/audit/f45-package-audit.md
@@ -85,7 +89,7 @@ Supervisor state lives in `$XDG_STATE_HOME/grid-down/supervisor.json`
 |---|---|
 | P0 | Scaffold, spec v0.3, F45 package audit *(done)* |
 | P1 | Installer library + kit builder skeleton; first online↔air-gap round-trip (dnf-only subset) |
-| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(in progress — M1: CLI v1 + supervisor + doctor; M2: rigctld-from-profile + audio endpoints; M3a: GUI skeleton + Dashboard; M3b: Catalog + Doctor; M3c: Bundles/audio/Profiles — GUI v1 done; remaining: systemd-unit launch backend, install progress, winehub)* |
+| P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(M1–M5 shipped: M1 CLI v1 + supervisor + doctor; M2 rigctld-from-profile + audio endpoints; M3 GUI v1 (Dashboard/Catalog/Bundles/Doctor/Profiles); M4 systemd-unit launch backend; M5 install-state columns + `gd winehub` + GUI wine-hub panel + tray/launcher. Outstanding: §10 Fedora GUI-VM acceptance pass. Per-app install recipes and config adapters are P3/P4.)* |
 | P3 | VARA/Wine Hub; Winlink session bundle end-to-end |
 | P4 | Remaining apps + LoRa/Meshtastic recipes, adapters, localhost services |
 | P5 | Offline USB kit, bootstrap hardening, docs, drills |

@@ -24,6 +24,8 @@ sys.path.insert(0, str(ROOT / "control"))
 pytest.importorskip("PySide6")
 pytest.importorskip("pytestqt")
 
+from PySide6.QtCore import Qt  # noqa: E402
+
 from gui.main_window import MainWindow  # noqa: E402
 from gui.services import Services  # noqa: E402
 from gui.views.bundles import BundlesView  # noqa: E402
@@ -110,6 +112,17 @@ def _snap() -> dict:
             },
             "js8call": {"name": "JS8Call", "category": "winlink", "ui": {}},
         },
+        "install": {
+            "ardop": {"state": "installed", "detail": "/usr/bin/ardopc"},
+            "direwolf": {"state": "missing", "detail": "direwolf not on PATH"},
+        },
+        "winehub": {
+            "prefix": True,
+            "prefix_path": "/opt/grid-down/wine-prefix",
+            "wine": "/usr/bin/wine",
+            "com": {"com5": "/dev/ttyUSB0"},
+            "apps": [{"id": "vara-hf", "exe": "VARA.exe", "running": False, "pid": None}],
+        },
         "doctor": {
             "results": [],
             "counts": {"ok": 8, "warn": 5, "fail": 0, "skip": 4},
@@ -172,6 +185,10 @@ def _fake_services() -> Services:
                 "daemon": {"enabled": de == "true"},
             },
         },
+        install_state=lambda: snap["install"],
+        winehub_status=lambda: snap["winehub"],
+        winehub_start=lambda app_id: {"id": app_id, "state": "running", "pid": 4242},
+        winehub_stop=lambda app_id: {"id": app_id, "state": "stopped"},
     )
 
 
@@ -197,6 +214,10 @@ def _spy_services(base: Services, **over) -> Services:
             "station_save",
             "audio_save",
             "mesh_save",
+            "install_state",
+            "winehub_status",
+            "winehub_start",
+            "winehub_stop",
         )
     }
     fields.update(over)
@@ -368,7 +389,8 @@ def test_catalog_columns_and_state(qtbot):
     view.set_snapshot(_snap())
     assert view.model.data(view.model.index(0, 0)) == "ardop"  # sorted by id
     assert view.model.data(view.model.index(0, 1)) == "ARDOP TNC"
-    assert view.model.data(view.model.index(0, 4)) == "-"  # not running
+    assert view.model.data(view.model.index(0, 4)) == "installed"  # install probe (M5)
+    assert view.model.data(view.model.index(0, 5)) == "-"  # not running
     assert view.model.data(view.model.index(0, 0), 3) == "ARDOP modem"  # tooltip
     assert view.model.data(view.model.index(2, 0), 3) is None  # js8call: none
 
@@ -590,3 +612,87 @@ def test_profiles_mesh_save_failure_surfaces(qtbot):
         view.mesh_save_btn.click()
     assert "FAILED" in view.save_status.text()
     assert "mesh.device.path is required" in view.save_status.text()
+
+
+# --------------------------------------------------- M5: install col + wine hub + tray
+def _wine_buttons(view):
+    """(start, stop) QPushButtons of the first wine-hub app row."""
+    from PySide6.QtWidgets import QPushButton
+
+    btns = []
+    for i in range(view.winehub_btns.count()):
+        w = view.winehub_btns.itemAt(i).widget()
+        if isinstance(w, QPushButton):
+            btns.append(w)
+    return btns[0], btns[1]
+
+
+def test_catalog_has_install_column_and_winehub_panel(qtbot):
+    view = CatalogView(_fake_services())
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert view.model.columnCount() == 6
+    headers = [view.model.headerData(i, Qt.Orientation.Horizontal) for i in range(6)]
+    assert "install" in headers
+    col = headers.index("install")
+    assert view.model.index(0, col).data() == "installed"  # ardop sorts first
+    assert "prefix present" in view.winehub_label.text()
+    assert "com5->/dev/ttyUSB0" in view.winehub_label.text()
+    start, stop = _wine_buttons(view)
+    assert start.isEnabled() and not stop.isEnabled()  # vara-hf stopped, gate open
+
+
+def test_catalog_winehub_panel_disabled_without_prefix_or_wine(qtbot):
+    snap = _snap()
+    snap["winehub"] = dict(snap["winehub"], prefix=False, wine=None)
+    view = CatalogView(_fake_services())
+    qtbot.addWidget(view)
+    view.set_snapshot(snap)
+    assert "ABSENT" in view.winehub_label.text()
+    start, stop = _wine_buttons(view)
+    assert not start.isEnabled() and not stop.isEnabled()
+
+
+def test_catalog_winehub_start_action_runs_off_ui_thread(qtbot):
+    calls = []
+    services = _spy_services(
+        _fake_services(),
+        winehub_start=lambda app_id: (
+            calls.append(app_id),
+            {"id": app_id, "state": "running", "pid": 4242},
+        )[1],
+    )
+    view = CatalogView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    start, _stop = _wine_buttons(view)
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        start.click()
+    assert calls == ["vara-hf"]
+    assert "running: vara-hf" in view.winehub_label.text()
+
+
+def test_catalog_winehub_stop_and_failure_surfaces(qtbot):
+    def boom(app_id):
+        raise RuntimeError("wine prefix not installed yet")
+
+    services = _spy_services(_fake_services(), winehub_stop=boom)
+    view = CatalogView(services)
+    qtbot.addWidget(view)
+    snap = _snap()
+    snap["winehub"]["apps"][0]["running"] = True
+    view.set_snapshot(snap)
+    _start, stop = _wine_buttons(view)
+    assert stop.isEnabled()
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        stop.click()
+    assert "FAILED" in view.winehub_label.text()
+    assert "wine prefix not installed yet" in view.winehub_label.text()
+
+
+def test_main_window_tray_is_noop_offscreen(qtbot):
+    win = MainWindow(_fake_services(), autostart=False)
+    qtbot.addWidget(win)
+    assert win.tray.available is False  # offscreen: no system-tray host
+    win.set_snapshot(_snap())  # tray.update must stay a safe no-op
+    assert win.tray.available is False

@@ -161,7 +161,13 @@ Loopbacking the endpoints to the physical rig interface (`audio.rig_capture`) la
 Phase 3 adapter work; `gd audio plan` prints the intended graph either way.
 - **Wine hub:** one prefix at `/opt/grid-down/wine-prefix` for the VARA family + VarAC;
   `gd winehub` wraps start/stop and serial/COM mapping. Installers/licenses never leave
-  `install/kit-import/` (G6).
+  `install/kit-import/` (G6). **M5 (0.6.0-m5) ships the plumbing:** `core/winehub.py`
+  (single source for the prefix path) with `gd winehub status|start|stop|map|unmap` —
+  status = prefix + wine binary + `dosdevices/comN` map + running pids (`<state>/winehub.json`);
+  start/stop = detached `wine <exe>` with `WINEPREFIX` set, SIGTERM→SIGKILL teardown and
+  stale-pid cleanup; COM mapping = validated com1–com32 symlinks. Every verb refuses cleanly
+  when the prefix or wine is missing. Phase 3 adds VARA end-to-end: per-app install probes,
+  licenses, and a real on-air session (§10).
 
 ### 6.5 Supervisor & services
 
@@ -228,8 +234,11 @@ device presence, PipeWire tooling, §6.6 port occupancy, supervisor state hygien
 instances), profile sanity, wine-prefix presence, air-gap switch report. **M2 adds:** rig-model
 sanity (warns on Dummy fallback and non-numeric `rig.model`) and the owned-endpoint audit
 (missing `grid_down_*` endpoints → warn with `gd audio up`), which retires the deep PipeWire
-graph audit from the deferred list. Deferred with an explicit `skip` line in every report:
-kit manifest verify, Meshtastic VID:PID probe, per-app phone-home scan.
+graph audit from the deferred list. **M5 upgrades the wine check** to the wine hub (§6.4):
+prefix presence + wine binary + COM-map report via `core/winehub.py` (skip while the prefix
+is absent, warn when the prefix exists but wine is not installed). Deferred with an explicit
+`skip` line in every report: kit manifest verify, Meshtastic VID:PID probe, per-app
+phone-home scan.
 
 ### 6.8 Offline kit contents
 
@@ -275,6 +284,20 @@ install state), Bundles (start/stop sessions), Profiles (form-driven YAML editin
 > `docs/audit/f45-package-audit.md`); pip wheels are dev/CI-only. Remaining profile-form
 > sections (mesh), install-state columns, winehub controls, and the
 > tray/launcher stay out of scope.
+>
+> **M5 note (2026-10-26):** 0.6.0-m5 ships the last P2 controls. Catalog gains the
+> `install` column — one probe per registry app from `core/install_state.py`
+> (`rpm -q` batched for dnf apps, `shutil.which` on the launch binary for
+> build/tarball/pip-vendored, `<app_root>/<id>` docroot for static, shared-prefix
+> check for wine; tooltip carries the probe detail) — and the Wine hub panel
+> (prefix/wine/COM status line + start/stop per wine-hub app, buttons gated on
+> prefix+wine, same worker-thread pattern as Bundles). The tray lands as an
+> availability-gated `TrayController` (`gui/tray.py`: Show/Hide/Quit, tooltip =
+> doctor tally, clean no-op headless or with `gd gui --no-tray`; no
+> appindicator dependency), and `packaging/` + `tools/install-launcher.sh`
+> install a user-local `.desktop` launcher + SVG icon. **P2 remaining work is
+> the §10 Fedora GUI-VM acceptance pass only;** VARA end-to-end (per-app
+> install probes inside the prefix, licenses, on-air session) is Phase 3 (§10).
 
 ## 8. App catalog & install strategies
 

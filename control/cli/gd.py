@@ -11,8 +11,10 @@ Control Center (`gd gui`, spec §7) sharing core/supervisor + core/audio +
 core/doctor with this CLI in-process. M4a adds the systemd user-unit backend
 (core/systemd.py): launch/stop/status grow --backend {auto,direct,systemd},
 `gd units` manages the unit set; the Supervisor API stays backend-neutral.
-Later phases add the remaining config apply (adapters), install progress,
-winehub.
+M5 adds the wine hub (`gd winehub`, core/winehub.py: status/start/stop/COM
+map over the shared VARA prefix) and install-state probes
+(`gd apps list --state`, core/install_state.py). Later phases add the
+remaining config apply (adapters) and per-app install recipes.
 """
 
 from __future__ import annotations
@@ -25,10 +27,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import audio, doctor, profile, registry, systemd  # noqa: E402
+from core import audio, doctor, install_state, profile, registry, systemd, winehub  # noqa: E402
 from core.supervisor import PORTS, Supervisor, SupervisorError  # noqa: E402
 
-VERSION = "0.5.0-m4"
+VERSION = "0.6.0-m5"
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -70,13 +72,37 @@ def cmd_version(_args) -> int:
 
 def cmd_apps(args) -> int:
     apps = registry.load_registry(ROOT / "control" / "registry" / "apps")
+    states = install_state.app_states(apps) if args.state else None
     if args.json:
+        if states is not None:
+            apps = [dict(a, install_state=states.get(a["id"], {})) for a in apps]
         print(json.dumps(apps, indent=2))
         return 0
-    print(f"{'ID':<16} {'CATEGORY':<12} {'STRATEGY':<12} NAME")
+    head = f"{'ID':<16} {'CATEGORY':<12} {'STRATEGY':<12}"
+    row = "{id:<16} {category:<12} {strategy:<12}"
+    if states is not None:
+        head += f" {'STATE':<10}"
+        row += " {state:<10}"
+    head += " NAME"
+    row += " {name}"
+    print(head)
     for a in apps:
-        print(f"{a['id']:<16} {a['category']:<12} {a['install']['strategy']:<12} {a['name']}")
+        st = (states or {}).get(a["id"], {})
+        print(
+            row.format(
+                id=a["id"],
+                category=a["category"],
+                strategy=a["install"]["strategy"],
+                state=st.get("state", "?"),
+                name=a["name"],
+            )
+        )
     print(f"\n{len(apps)} apps registered")
+    if states is not None:
+        tally: dict[str, int] = {}
+        for st in states.values():
+            tally[st["state"]] = tally.get(st["state"], 0) + 1
+        print("install state: " + ", ".join(f"{v} {k}" for k, v in sorted(tally.items())))
     return 0
 
 
@@ -328,6 +354,49 @@ def cmd_units(args) -> int:
     return 0
 
 
+def cmd_winehub(args) -> int:
+    """VARA wine hub (spec §6.4, M5): status/start/stop + COM mapping.
+
+    Lifecycle lives in core/winehub.py — one shared prefix, pid table under
+    the state dir, clean refusals when the prefix or wine is missing."""
+    hub = winehub.WineHub(registry.load_registry(ROOT / "control" / "registry" / "apps"))
+    action = args.winehub_cmd
+    if action == "status":
+        st = hub.status()
+        if args.json:
+            print(json.dumps(st, indent=2))
+            return 0
+        print(f"prefix: {'present' if st['prefix'] else 'ABSENT'} ({st['prefix_path']})")
+        print(f"wine:   {st['wine'] or 'not on PATH'}")
+        if st["com"]:
+            for c, d in sorted(st["com"].items()):
+                print(f"com:    {c} -> {d}")
+        else:
+            print("com:    (none mapped — gd winehub map <n> <device>)")
+        if not st["apps"]:
+            print("apps:   (no wine-hub apps registered)")
+        for a in st["apps"]:
+            mark = f"running (pid {a['pid']})" if a["running"] else "stopped"
+            print(f"app:    {a['id']:<16} {mark}  [{a['exe'] or 'no .exe in launch.cmd'}]")
+        return 0
+    if action == "map":
+        out = hub.map_serial(f"com{args.com}", args.device)
+        print(f"{out['state']}: {out['com']} -> {out['device']}")
+        return 0
+    if action == "unmap":
+        out = hub.unmap(f"com{args.com}")
+        print(f"{out['state']}: {out['com']} (was {out['device']})")
+        return 0
+    out = hub.start(args.app) if action == "start" else hub.stop(args.app)
+    line = f"{out['state']}: {out['id']}"
+    if out.get("pid"):
+        line += f" (pid {out['pid']})"
+    if out.get("log"):
+        line += f" — log: {out['log']}"
+    print(line)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="gd", description="Grid Down control CLI")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -338,6 +407,11 @@ def main(argv: list[str] | None = None) -> int:
     p_apps_sub = p_apps.add_subparsers(dest="apps_cmd", required=True)
     p_list = p_apps_sub.add_parser("list", help="list registered apps")
     p_list.add_argument("--json", action="store_true")
+    p_list.add_argument(
+        "--state",
+        action="store_true",
+        help="probe install state per app (rpm query / PATH / docroot / wine prefix)",
+    )
     p_list.set_defaults(func=cmd_apps)
 
     p_b = sub.add_parser("bundles", help="session bundle operations")
@@ -399,6 +473,29 @@ def main(argv: list[str] | None = None) -> int:
     p_u_l.add_argument("--json", action="store_true")
     p_u_l.set_defaults(func=cmd_units)
 
+    p_wh = sub.add_parser(
+        "winehub", help="VARA wine hub: shared prefix lifecycle + COM map (spec §6.4, M5)"
+    )
+    p_wh_sub = p_wh.add_subparsers(dest="winehub_cmd", required=True)
+    p_wh_s = p_wh_sub.add_parser("status", help="prefix, wine binary, COM map, running apps")
+    p_wh_s.add_argument("--json", action="store_true", help="machine-readable report")
+    p_wh_s.set_defaults(func=cmd_winehub)
+    p_wh_x = p_wh_sub.add_parser("start", help="start a wine-hub app (VARA family)")
+    p_wh_x.add_argument("app", help="wine-hub app id (see: gd apps list)")
+    p_wh_x.set_defaults(func=cmd_winehub)
+    p_wh_t = p_wh_sub.add_parser("stop", help="stop a running wine-hub app")
+    p_wh_t.add_argument("app", help="wine-hub app id")
+    p_wh_t.set_defaults(func=cmd_winehub)
+    p_wh_m = p_wh_sub.add_parser(
+        "map", help="map COMn to a serial device (dosdevices symlink, §6.4)"
+    )
+    p_wh_m.add_argument("com", type=int, help="COM port number, 1-32 (e.g. 5 -> COM5)")
+    p_wh_m.add_argument("device", help="serial device node (e.g. /dev/ttyUSB0)")
+    p_wh_m.set_defaults(func=cmd_winehub)
+    p_wh_u = p_wh_sub.add_parser("unmap", help="remove a COM mapping")
+    p_wh_u.add_argument("com", type=int, help="COM port number, 1-32")
+    p_wh_u.set_defaults(func=cmd_winehub)
+
     p_rig = sub.add_parser("rig", help="show profile-resolved rigctld command (spec §6.4)")
     p_rig.add_argument("--json", action="store_true", help="machine-readable report")
     p_rig.set_defaults(func=cmd_rig)
@@ -423,7 +520,13 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return args.func(args)
-    except (SupervisorError, registry.RegistryError, profile.ProfileError, audio.AudioError) as exc:
+    except (
+        SupervisorError,
+        winehub.WinehubError,
+        registry.RegistryError,
+        profile.ProfileError,
+        audio.AudioError,
+    ) as exc:
         return _fail(str(exc))
 
 

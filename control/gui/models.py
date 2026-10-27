@@ -86,15 +86,18 @@ def error_lines(snap: dict) -> list[str]:
 
 
 def catalog_rows(snap: dict) -> list[dict]:
-    """One row per registry app: id/name/category/via + live supervisor state."""
+    """One row per registry app: id/name/category/via + live supervisor state
+    + install-state probe (M5: `install` cell, detail kept for the tooltip)."""
     if _err(snap, "apps"):
         return []
     state_by_id = {
         str(r.get("id")): str(r.get("state")) for r in (snap.get("instances") or {}).get("apps", [])
     }
+    install_by_id = {str(k): (v or {}) for k, v in (snap.get("install") or {}).items()}
     rows = []
     for app_id, app in sorted((snap.get("apps") or {}).items()):
         app = app or {}
+        inst = install_by_id.get(str(app_id), {})
         rows.append(
             {
                 "app": str(app_id),
@@ -103,6 +106,8 @@ def catalog_rows(snap: dict) -> list[dict]:
                 "via": str((app.get("launch") or {}).get("via") or "-"),
                 "tagline": str((app.get("ui") or {}).get("tagline") or ""),
                 "state": state_by_id.get(str(app_id), "-"),
+                "install": str(inst.get("state") or "-"),
+                "install_detail": str(inst.get("detail") or ""),
             }
         )
     return rows

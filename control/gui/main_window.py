@@ -5,7 +5,9 @@
 The Dashboard page shipped in M3a; Bundles/Catalog/Doctor/Profile landed in
 M3b/M3c (spec §7). The window owns the autorefresh timer and fans each
 snapshot out to every page (until the P2 VM pass the live window only fed
-the Dashboard, leaving the other pages empty outside --selfcheck).
+the Dashboard, leaving the other pages empty outside --selfcheck). M5 adds
+the availability-gated TrayController: constructed with the window, updated
+from every snapshot, a clean no-op when no system tray exists.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QHBoxLayout, QListWidget, QMainWindow, QStackedWidget, QWidget
 
 from gui.services import Services, snapshot
+from gui.tray import TrayController
 from gui.views.bundles import BundlesView
 from gui.views.catalog import CatalogView
 from gui.views.dashboard import DashboardView
@@ -25,7 +28,13 @@ PAGES = ("Dashboard", "Bundles", "Catalog", "Doctor", "Profile")
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, services: Services, autostart: bool = True, parent=None):
+    def __init__(
+        self,
+        services: Services,
+        autostart: bool = True,
+        parent=None,
+        use_tray: bool = True,
+    ):
         super().__init__(parent)
         self.services = services
         self.setWindowTitle("Grid Down — Control Center")
@@ -57,6 +66,9 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.nav)
         lay.addWidget(stack, 1)
         self.setCentralWidget(central)
+
+        # Tray is availability-gated (headless/trayless desktops: no-op).
+        self.tray = TrayController(self, enabled=use_tray)
 
         self._worker: SnapshotWorker | None = None
         self._timer = QTimer(self)
@@ -107,3 +119,4 @@ class MainWindow(QMainWindow):
         self.catalog.set_snapshot(snap)
         self.doctor.set_snapshot(snap)
         self.profiles.set_snapshot(snap)
+        self.tray.update(snap)

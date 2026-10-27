@@ -18,6 +18,17 @@ applied later by the Phase 4 `meshtastic configure` adapter.
 changes — views are backend-neutral; the Dashboard's instance panel reflects
 whatever `status()` reports, including the `backend` key (direct|systemd)
 introduced with the systemd user-unit backend (`core/systemd.py`).
+**M5 (0.6.0-m5):** Catalog gains the `install` column — install-state probes
+from `core/install_state.py` (batched `rpm -q` for dnf apps, `shutil.which`
+on the launch binary for build/tarball/pip-vendored, docroot check for
+static, shared-prefix check for wine; tooltip = probe detail) — plus the
+**Wine hub panel** (§6.4): prefix/wine/COM status line and start/stop per
+wine-hub app through the same worker-thread pattern as Bundles, buttons
+disabled while the prefix or wine is missing. The system tray
+(`tray.py`, `TrayController`) is availability-gated — Show/Hide/Quit menu,
+tooltip mirroring the doctor tally, clean no-op headless or with
+`gd gui --no-tray` — and `tools/install-launcher.sh` installs a user-local
+`.desktop` launcher + `packaging/grid-down.svg` icon.
 
 ## Layout
 
@@ -25,11 +36,13 @@ introduced with the systemd user-unit backend (`core/systemd.py`).
   (in-process, spec §7/G1 — never via the `gd` CLI). Tests inject fakes here.
 - `models.py` — pure snapshot → display rows (unit-testable without Qt).
 - `workers.py` — `SnapshotWorker(QThread)` so core calls never block the UI.
+- `tray.py` — `TrayController`: tray icon + menu when the desktop offers
+  one; permanent no-op otherwise.
 - `views/` — one module per spec §7 view (`dashboard`, `bundles`, `catalog`,
   `doctor`, `profiles`).
-- `main_window.py` — nav sidebar + stacked pages.
+- `main_window.py` — nav sidebar + stacked pages (+ tray lifecycle).
 - `app.py` — QApplication entry; `--selfcheck` builds the window, applies one
-  real snapshot and exits (headless-safe).
+  real snapshot and exits (headless-safe); `--no-tray` opts out of the tray.
 
 ## Run / test
 

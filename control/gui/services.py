@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from core import audio, doctor, profile, registry
+from core import audio, doctor, install_state, profile, registry, winehub
 from core.supervisor import PORTS, Supervisor
 
 
@@ -49,6 +49,10 @@ class Services:
     station_save: Callable[[str, str], dict]
     audio_save: Callable[[str, str, str, str], dict]
     mesh_save: Callable[[str, str, str, str, str, str, str, str, str], dict]
+    install_state: Callable[[], dict]
+    winehub_status: Callable[[], dict]
+    winehub_start: Callable[[str], dict]
+    winehub_stop: Callable[[str], dict]
 
 
 def default_services(root: Path | None = None) -> Services:
@@ -105,6 +109,11 @@ def default_services(root: Path | None = None) -> Services:
             return apps
         return {str((a or {}).get("id", f"app-{i}")): (a or {}) for i, a in enumerate(apps or [])}
 
+    def _app_list() -> list[dict]:
+        return apps if isinstance(apps, list) else list(apps.values())
+
+    hub = winehub.WineHub(_app_list())
+
     return Services(
         version=lambda: VERSION,
         profile=_profile,
@@ -123,6 +132,10 @@ def default_services(root: Path | None = None) -> Services:
         station_save=profile.save_station,
         audio_save=profile.save_audio,
         mesh_save=profile.save_mesh,
+        install_state=lambda: install_state.app_states(_app_list()),
+        winehub_status=hub.status,
+        winehub_start=hub.start,
+        winehub_stop=hub.stop,
     )
 
 
@@ -155,6 +168,8 @@ def snapshot(svc: Services) -> dict:
         "instances": collect("instances", svc.instances, {}),
         "apps": collect("apps", svc.apps, {}),
         "bundles": collect("bundles", svc.bundles, {}),
+        "install": collect("install", svc.install_state, {}),
+        "winehub": collect("winehub", svc.winehub_status, {}),
         "doctor": {
             "results": results,
             "counts": _counts(results),

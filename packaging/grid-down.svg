@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SPDX-License-Identifier: MIT
+  Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
+  Grid Down Control Center icon: falling-power-line motif over a station mast
+  (amber = degraded grid). Single-color-agnostic paths, flat, scalable.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="2" y="2" width="60" height="60" rx="12" fill="#1e2430"/>
+  <!-- lightning slash: the grid-down event -->
+  <path d="M40 6 L24 30 L33 30 L22 52 L46 24 L36 24 L48 6 Z"
+        fill="#f0a63c" stroke="#1e2430" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- station mast -->
+  <path d="M12 54 L18 26 L24 54" fill="none" stroke="#8fb4d9" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="18" y1="26" x2="18" y2="16" stroke="#8fb4d9" stroke-width="2"
+        stroke-linecap="round"/>
+  <circle cx="18" cy="13" r="2.6" fill="#8fb4d9"/>
+  <!-- RF arcs -->
+  <path d="M10 10 A 11 11 0 0 1 26 10" fill="none" stroke="#8fb4d9"
+        stroke-width="2" stroke-linecap="round" opacity="0.85"/>
+  <path d="M6 6 A 16.5 16.5 0 0 1 30 6" fill="none" stroke="#8fb4d9"
+        stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+  <!-- ground line -->
+  <line x1="8" y1="56" x2="56" y2="56" stroke="#8fb4d9" stroke-width="2.5"
+        stroke-linecap="round"/>
+</svg>

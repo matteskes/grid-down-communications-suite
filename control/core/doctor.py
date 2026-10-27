@@ -11,8 +11,10 @@ PipeWire tooling, §6.6 loopback port occupancy, supervisor state hygiene
 (stale instances, §6.5), profile sanity, wine-prefix presence, air-gap
 switch report. M4 adds the systemd user-unit check (§6.5): unit-set drift
 vs a fresh render, and — with a user bus reachable — services outliving
-every bound target. Deferred: kit manifest verification, deep PipeWire graph
-audit, Meshtastic VID:PID probe, per-app phone-home scan.
+every bound target. M5 upgrades the wine check to the wine hub (§6.4):
+prefix + wine binary + COM mapping report via core/winehub. Deferred: kit
+manifest verification, deep PipeWire graph audit, Meshtastic VID:PID probe,
+per-app phone-home scan.
 """
 
 from __future__ import annotations
@@ -29,12 +31,13 @@ from pathlib import Path
 try:  # package import (gd CLI, pytest)
     from . import audio, registry
     from . import supervisor as sup
-    from . import systemd
+    from . import systemd, winehub
 except ImportError:  # pragma: no cover - sibling import inside control/
     import audio
     import registry
     import supervisor as sup  # type: ignore
-    import systemd  # type: ignore
+    import systemd
+    import winehub  # type: ignore
 
 PORTS = sup.PORTS
 
@@ -45,7 +48,8 @@ USB_SERIAL_GLOBS = (
     "/dev/cu.usbserial*",
     "/dev/cu.usbmodem*",
 )
-WINE_PREFIX = Path("/opt/grid-down/wine-prefix")
+# Wine prefix lives in core/winehub.py (single source, M5) — doctor and the
+# install-state probe both read it from there.
 
 DEFERRED = (
     "kit manifest sha256 verification (needs kit/ from a build)",
@@ -303,11 +307,33 @@ def _check_profile(profile_data: dict | None) -> list[CheckResult]:
 
 
 def _check_wine() -> CheckResult:
-    if WINE_PREFIX.is_dir():
-        return CheckResult("wine", "VARA wine prefix", "ok", str(WINE_PREFIX))
-    return CheckResult(
-        "wine", "VARA wine prefix", "skip", f"{WINE_PREFIX} not installed yet (Phase 3 wine hub)"
-    )
+    """VARA wine hub (M5): prefix + wine + COM map, driven by core/winehub."""
+    try:
+        st = winehub.WineHub(apps=[]).status()
+    except Exception as exc:  # doctor contract: failures are data, never raises
+        return CheckResult("wine", "VARA wine hub", "warn", f"could not check: {exc}")
+    if not st["prefix"]:
+        return CheckResult(
+            "wine",
+            "VARA wine hub",
+            "skip",
+            f"{st['prefix_path']} not installed yet (kit postinst creates it; "
+            "`gd winehub status` for detail)",
+        )
+    if not st["wine"]:
+        return CheckResult(
+            "wine",
+            "VARA wine hub",
+            "warn",
+            f"prefix {st['prefix_path']} present but the wine binary is not on "
+            "PATH — install it (Fedora 45: sudo dnf install wine)",
+        )
+    detail = f"prefix {st['prefix_path']}"
+    if st["com"]:
+        detail += "; " + ", ".join(f"{c}->{d}" for c, d in sorted(st["com"].items()))
+    else:
+        detail += "; no COM mappings (gd winehub map)"
+    return CheckResult("wine", "VARA wine hub", "ok", detail)
 
 
 def _check_deferred() -> CheckResult:
