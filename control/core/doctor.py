@@ -322,7 +322,9 @@ def _load_registry() -> tuple[list[dict], dict]:
     )
 
 
-def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
+def _check_systemd_units(
+    state_dir: Path | None = None, profile_data: dict | None = None
+) -> CheckResult:
     """M4 (§6.5): one result covering the optional systemd backend —
     skip when no units are installed; WARN on drift vs a fresh render;
     FAIL when a running service would outlive every target bound to it."""
@@ -340,7 +342,13 @@ def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
         apps, bundles = _load_registry()
         n_svc = sum(1 for p in installed if p.name.endswith(".service"))
         n_tgt = len(installed) - n_svc
-        if systemd.units_current(sup.Supervisor(apps, bundles, state_dir=state_dir)):
+        # render with the same profile the installer used (`gd units install`
+        # builds its Supervisor from profile.load_profile()): the rig section
+        # shapes hamlib's ExecStart, so a bare Supervisor here would flag
+        # every profiled install as drifted (P2 Fedora 45 VM finding)
+        if systemd.units_current(
+            sup.Supervisor(apps, bundles, state_dir=state_dir, profile=profile_data)
+        ):
             status = "ok"
             detail = (
                 f"{len(installed)} units installed, current with "
@@ -394,7 +402,7 @@ def run_checks(
     results = [_check_platform(), _check_dialout(), _check_serial(), _check_audio()]
     results += _check_ports(ports, instances)
     results.append(_check_state(state_dir))
-    results.append(_check_systemd_units(state_dir))
+    results.append(_check_systemd_units(state_dir, profile_data))
     results += _check_profile(profile_data)
     results.append(_check_rig_model(profile_data))
     results.append(_check_wine())

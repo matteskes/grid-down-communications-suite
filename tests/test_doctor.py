@@ -104,3 +104,30 @@ def test_audio_check_and_deferred_no_pipewire(tmp_path):
         assert audio_chk.status == "skip"
     deferred = next(r for r in results if r.id == "deferred")
     assert "PipeWire" not in deferred.detail  # graph audit implemented in M2
+
+
+def test_systemd_check_matches_profiled_render(tmp_path, monkeypatch):
+    """P2 VM-pass regression: `gd units install` renders through a Supervisor
+    built with profile.load_profile() (the rig section shapes hamlib's
+    ExecStart), so the drift check must render with the same profile — a bare
+    Supervisor flagged every profiled install as 'drifted' on the real Fedora
+    45 VM bus."""
+    xdg = tmp_path / "xdg"
+    state = tmp_path / "state"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    monkeypatch.setenv("XDG_STATE_HOME", str(state))
+    from core import registry, supervisor, systemd
+
+    apps = registry.load_registry(ROOT / "control" / "registry" / "apps")
+    bundles = registry.load_bundles(ROOT / "control" / "registry" / "bundles.yaml")
+    prof = {"rig": {"path": "/dev/ttyUSB0", "baud": 38400}, "audio": {"presets": {}}}
+    systemd.install_units(
+        supervisor.Supervisor(apps, bundles, profile=prof),
+        unit_dir=xdg / "systemd" / "user",
+    )
+    # state_dir stays None so both sides render the same (default) log paths —
+    # the only input under test is the profile
+    results = doctor.run_checks(profile_data=prof)
+    row = next(r for r in results if r.id == "systemd")
+    assert row.status == "ok", row.detail
+    assert "current" in row.detail
