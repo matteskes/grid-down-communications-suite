@@ -27,6 +27,7 @@ PAGES = ("Dashboard", "Bundles", "Catalog", "Doctor", "Profile")
 class MainWindow(QMainWindow):
     def __init__(self, services: Services, autostart: bool = True, parent=None):
         super().__init__(parent)
+        self.services = services
         self.setWindowTitle("Grid Down — Control Center")
         self.resize(960, 640)
 

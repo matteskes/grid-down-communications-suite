@@ -209,6 +209,16 @@ def test_main_window_snapshot_fans_out_to_all_pages(qtbot):
     assert win.profiles.text.toPlainText()
 
 
+def test_main_window_autostart_delivers_snapshot(qtbot):
+    """The autostart worker must actually deliver: MainWindow stores services
+    and start_autorefresh populates the pages (P2 VM finding — the worker
+    died on a missing self.services and every page stayed empty)."""
+    win = MainWindow(_fake_services(), autostart=True)
+    qtbot.addWidget(win)
+    qtbot.waitUntil(lambda: len(win.bundles._tiles) > 0, timeout=10_000)
+    assert win.dashboard.header_labels["Version"].text() == "0.5.0-m4"
+
+
 def test_bundles_tiles_counts_and_cancel(qtbot):
     view = BundlesView(_fake_services())
     qtbot.addWidget(view)
