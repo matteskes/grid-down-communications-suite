@@ -5,20 +5,27 @@
 Row building stays in gui.models (pure); this widget only colors and shows,
 so offscreen tests can drive it with dict-shaped fake results.
 """
+
 from __future__ import annotations
 
 import json
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QPushButton,
-                               QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui import models
 from gui.services import Services
 
-STATUS_COLOR = {"ok": "#1a7f37", "warn": "#9a6700",
-                "fail": "#b02020", "skip": "#6e7781"}
+STATUS_COLOR = {"ok": "#1a7f37", "warn": "#9a6700", "fail": "#b02020", "skip": "#6e7781"}
 
 
 class DoctorView(QWidget):
@@ -51,16 +58,14 @@ class DoctorView(QWidget):
         self.tree.clear()
         self._results = list(((snap.get("doctor") or {}).get("results")) or [])
         for status, title, detail in models.doctor_rows(snap):
-            item = QTreeWidgetItem([models.DOCTOR_GLYPH.get(status, status),
-                                    title, detail])
+            item = QTreeWidgetItem([models.DOCTOR_GLYPH.get(status, status), title, detail])
             item.setForeground(0, QColor(STATUS_COLOR.get(status, "#000000")))
             self.tree.addTopLevelItem(item)
         self.summary_label.setText("\n".join(models.doctor_lines(snap)) or "—")
 
     def copy_json(self) -> str:
         """Serialize current results (doctor.to_json shape); also to clipboard."""
-        payload = json.dumps(
-            {"checks": [self._asdict(r) for r in self._results]}, indent=2)
+        payload = json.dumps({"checks": [self._asdict(r) for r in self._results]}, indent=2)
         QApplication.clipboard().setText(payload)
         return payload
 

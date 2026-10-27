@@ -28,6 +28,7 @@ State layout (override dir with $GRID_DOWN_STATE_DIR):
 Known limitations (M1): no port-ready wait after spawn (Doctor reports port
 state), PID reuse is not detected, concurrent writers are last-write-wins.
 """
+
 from __future__ import annotations
 
 import json
@@ -47,8 +48,8 @@ try:  # package import (gd CLI, pytest)
 except ImportError:  # pragma: no cover - sibling import inside control/
     import audio  # type: ignore
 
-RIG_ID = "hamlib"      # suite-owned rigctld singleton (spec §6.4)
-TERM_GRACE_S = 5.0     # SIGTERM → SIGKILL escalation window
+RIG_ID = "hamlib"  # suite-owned rigctld singleton (spec §6.4)
+TERM_GRACE_S = 5.0  # SIGTERM → SIGKILL escalation window
 STATE_VERSION = 1
 
 # Loopback services owned by the suite (spec §6.6)
@@ -96,15 +97,20 @@ class Supervisor:
 
     BACKEND = "direct"  # reported in status(); SystemdSupervisor overrides
 
-    def __init__(self, apps: list[dict], bundles: dict | None = None,
-                 state_dir: Path | None = None, app_root: Path | None = None,
-                 profile: dict | None = None):
+    def __init__(
+        self,
+        apps: list[dict],
+        bundles: dict | None = None,
+        state_dir: Path | None = None,
+        app_root: Path | None = None,
+        profile: dict | None = None,
+    ):
         self.apps: dict[str, dict] = {a["id"]: a for a in apps}
         self.bundles: dict = bundles or {}
         self.state_dir = Path(state_dir) if state_dir else default_state_dir()
         root = app_root or os.environ.get("GRID_DOWN_APP_ROOT") or "/opt/grid-down"
         self.app_root = Path(root).expanduser()
-        self.profile = profile or {}   # station profile (rig + audio.presets, §4)
+        self.profile = profile or {}  # station profile (rig + audio.presets, §4)
         self._rig_dependents = self._compute_rig_dependents()
         self.state = self._load_state()
 
@@ -131,7 +137,7 @@ class Supervisor:
             return {"version": STATE_VERSION, "instances": {}}
         try:
             data = json.loads(path.read_text())
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return {"version": STATE_VERSION, "instances": {}}
         data.setdefault("instances", {})
         return data
@@ -161,8 +167,9 @@ class Supervisor:
         return sorted(a for a in self.state["instances"] if self._entry(a))
 
     def stale_ids(self) -> list[str]:
-        return sorted(a for a, e in self.state["instances"].items()
-                      if not pid_alive(e.get("pid", -1)))
+        return sorted(
+            a for a, e in self.state["instances"].items() if not pid_alive(e.get("pid", -1))
+        )
 
     def is_running(self, app_id: str) -> bool:
         return self._entry(app_id) is not None
@@ -192,8 +199,9 @@ class Supervisor:
                 notes.append(f"skip {app_id} ({via}: managed elsewhere / interactive)")
                 continue
             res = self.launch(app_id, bundle=name)
-            notes.append(f"{res['state']}: {app_id}"
-                         + (f" (pid {res['pid']})" if res.get("pid") else ""))
+            notes.append(
+                f"{res['state']}: {app_id}" + (f" (pid {res['pid']})" if res.get("pid") else "")
+            )
         return {"bundle": name, "notes": notes}
 
     def _ensure_rig(self, bundle: str | None) -> None:
@@ -202,7 +210,8 @@ class Supervisor:
         if RIG_ID not in self.apps:
             raise SupervisorError(
                 f"{RIG_ID} (rigctld) is not in the registry — refusing to launch a "
-                "radio app without rig control (spec §6.4)")
+                "radio app without rig control (spec §6.4)"
+            )
         self.launch(RIG_ID, bundle=bundle)
 
     def rig_argv(self) -> tuple[list[str], list[str]]:
@@ -224,16 +233,19 @@ class Supervisor:
         model = str(rig.get("model") or "").strip()
         if not model:
             argv += ["-m", "1"]
-            notes.append("rig.model unset — hamlib Dummy backend (loopback-safe, "
-                         "no radio); set rig.model to the numeric id from "
-                         "`rigctl -l` for field use")
+            notes.append(
+                "rig.model unset — hamlib Dummy backend (loopback-safe, "
+                "no radio); set rig.model to the numeric id from "
+                "`rigctl -l` for field use"
+            )
         elif model.isdigit():
             argv += ["-m", model]
         else:
             raise SupervisorError(
                 f"rig.model {model!r} is not a numeric hamlib id — rigctld accepts "
                 "the id column of `rigctl -l` (e.g. 3073); leave rig.model empty "
-                "for the Dummy backend")
+                "for the Dummy backend"
+            )
         if rig.get("path"):
             argv += ["-r", str(rig["path"])]
         if rig.get("baud"):
@@ -249,13 +261,19 @@ class Supervisor:
             fh.flush()
             try:
                 proc = subprocess.Popen(
-                    argv, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT,
-                    start_new_session=True, cwd=str(cwd) if cwd else None)
+                    argv,
+                    stdin=subprocess.DEVNULL,
+                    stdout=fh,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    cwd=str(cwd) if cwd else None,
+                )
             except FileNotFoundError as exc:
                 raise SupervisorError(
                     f"{app['id']}: executable not found ({exc.filename}) — is the app "
-                    "installed? air-gap install: bootstrap.sh --kit <dir>") from None
-            except PermissionError as exc:
+                    "installed? air-gap install: bootstrap.sh --kit <dir>"
+                ) from None
+            except PermissionError:
                 raise SupervisorError(f"{app['id']}: {argv[0]} is not executable") from None
         # fast-fail: apps with bad args usually die instantly
         time.sleep(0.3)
@@ -263,9 +281,15 @@ class Supervisor:
         if rc is not None:
             self._reap(proc.pid)
             raise SupervisorError(f"{app['id']}: exited immediately (rc={rc}) — see {log}")
-        return {"pid": proc.pid, "pgid": proc.pid, "argv": argv,
-                "via": app.get("launch", {}).get("via", "?"),
-                "bundle": bundle, "started": _now(), "log": str(log)}
+        return {
+            "pid": proc.pid,
+            "pgid": proc.pid,
+            "argv": argv,
+            "via": app.get("launch", {}).get("via", "?"),
+            "bundle": bundle,
+            "started": _now(),
+            "log": str(log),
+        }
 
     def _resolve_cmd(self, app: dict) -> tuple[list[str], Path | None]:
         app_id = app["id"]
@@ -277,8 +301,10 @@ class Supervisor:
         if via == "wine-hub":
             raise SupervisorError(f"{app_id}: wine-hub apps are managed by 'gd winehub' (Phase 3)")
         if via == "cli-tool":
-            raise SupervisorError(f"{app_id}: interactive CLI tool — run it in your terminal; "
-                                  "the supervisor manages services and desktop apps")
+            raise SupervisorError(
+                f"{app_id}: interactive CLI tool — run it in your terminal; "
+                "the supervisor manages services and desktop apps"
+            )
         if via == "local-service":
             return self._local_service_cmd(app)
         if not cmd:
@@ -298,12 +324,16 @@ class Supervisor:
             else:
                 tokens.append(t)
         if any(re.search(r"[<>\[\]{}]", t) for t in tokens):
-            raise SupervisorError(f"{app_id}: launch.cmd has placeholders ({cmd}) — needs "
-                                  "profile/audio wiring (Phase 3) before it can be supervised")
+            raise SupervisorError(
+                f"{app_id}: launch.cmd has placeholders ({cmd}) — needs "
+                "profile/audio wiring (Phase 3) before it can be supervised"
+            )
         argv = [os.path.expandvars(os.path.expanduser(t)) for t in tokens]
         if not shutil.which(argv[0]) and not Path(argv[0]).is_file():
-            raise SupervisorError(f"{app_id}: executable not found: {argv[0]} — is the app "
-                                  "installed? air-gap install: bootstrap.sh --kit <dir>")
+            raise SupervisorError(
+                f"{app_id}: executable not found: {argv[0]} — is the app "
+                "installed? air-gap install: bootstrap.sh --kit <dir>"
+            )
         return argv, None
 
     def _local_service_cmd(self, app: dict) -> tuple[list[str], Path]:
@@ -313,15 +343,28 @@ class Supervisor:
             raise SupervisorError(f"{app_id}: local-service with no port assigned (spec §6.6)")
         docroot = self.app_root / app_id
         if not docroot.is_dir():
-            raise SupervisorError(f"{app_id}: content not installed (expected {docroot}); "
-                                  "serving is available after kit install (bootstrap.sh --kit)")
+            raise SupervisorError(
+                f"{app_id}: content not installed (expected {docroot}); "
+                "serving is available after kit install (bootstrap.sh --kit)"
+            )
         if app_id == "js8spotter":  # PHP app (spec §6.6)
             php = shutil.which("php")
             if php is None:
                 raise SupervisorError("js8spotter needs php-cli on PATH (dnf install php-cli)")
             return [php, "-S", f"127.0.0.1:{port}", "-t", str(docroot)], docroot
-        return ([sys.executable, "-m", "http.server", str(port),
-                 "--bind", "127.0.0.1", "--directory", str(docroot)], docroot)
+        return (
+            [
+                sys.executable,
+                "-m",
+                "http.server",
+                str(port),
+                "--bind",
+                "127.0.0.1",
+                "--directory",
+                str(docroot),
+            ],
+            docroot,
+        )
 
     # ---------------------------------------------------------------- stop
     def stop(self, app_id: str, force: bool = False) -> dict:
@@ -338,7 +381,8 @@ class Supervisor:
             if blockers:
                 raise SupervisorError(
                     f"refusing to stop {RIG_ID}: rig-dependent apps still running "
-                    f"({', '.join(blockers)}) — stop them first or use --force (spec §6.4)")
+                    f"({', '.join(blockers)}) — stop them first or use --force (spec §6.4)"
+                )
         self._kill_group(entry)
         del self.state["instances"][app_id]
         self._save_state()
@@ -349,7 +393,7 @@ class Supervisor:
         pgid = entry.get("pgid", pid)
         try:
             os.killpg(pgid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
+        except ProcessLookupError, PermissionError:
             pass
         deadline = time.monotonic() + TERM_GRACE_S
         while time.monotonic() < deadline and pid_alive(pid):
@@ -357,7 +401,7 @@ class Supervisor:
         if pid_alive(pid):
             try:
                 os.killpg(pgid, signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
+            except ProcessLookupError, PermissionError:
                 pass
         self._reap(pid)
 
@@ -395,8 +439,9 @@ class Supervisor:
             except SupervisorError as exc:
                 errors.append(str(exc))
         if RIG_ID in members and self.is_running(RIG_ID):
-            others = [a for a in self.running_ids()
-                      if self.is_rig_dependent(a) and a not in members]
+            others = [
+                a for a in self.running_ids() if self.is_rig_dependent(a) and a not in members
+            ]
             if others:
                 notes.append(f"{RIG_ID} left running (still used by: {', '.join(others)})")
             else:
@@ -437,18 +482,28 @@ class Supervisor:
                 state = "-"
             if state == "-" and not include_stopped:
                 continue
-            rows.append({
-                "id": app_id, "state": state,
-                "pid": entry.get("pid") if entry else None,
-                "started": entry.get("started") if entry else None,
-                "bundle": entry.get("bundle") if entry else None,
-                "via": self.apps[app_id].get("launch", {}).get("via", "?"),
-                "log": entry.get("log") if entry else None,
-            })
+            rows.append(
+                {
+                    "id": app_id,
+                    "state": state,
+                    "pid": entry.get("pid") if entry else None,
+                    "started": entry.get("started") if entry else None,
+                    "bundle": entry.get("bundle") if entry else None,
+                    "via": self.apps[app_id].get("launch", {}).get("via", "?"),
+                    "log": entry.get("log") if entry else None,
+                }
+            )
         bundles = {}
         for name, bundle in self.bundles.items():
             members = bundle.get("members", [])
-            bundles[name] = {"running": [m for m in members if self.is_running(m)],
-                             "total": len(members)}
-        return {"apps": rows, "bundles": bundles, "updated": self.state.get("updated"),
-                "backend": self.BACKEND, "state_file": str(self.state_file())}
+            bundles[name] = {
+                "running": [m for m in members if self.is_running(m)],
+                "total": len(members),
+            }
+        return {
+            "apps": rows,
+            "bundles": bundles,
+            "updated": self.state.get("updated"),
+            "backend": self.BACKEND,
+            "state_file": str(self.state_file()),
+        }

@@ -11,6 +11,7 @@ the CLI — it never shells out to `gd`). Tests build `Services` from fakes.
 demoted to an error string in `errors` — the dashboard degrades per-section
 (e.g. no pactl on the box) instead of dying.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -59,19 +60,24 @@ def default_services(root: Path | None = None) -> Services:
     def _profile() -> dict:
         data = profile.load_profile() or {}
         head = data.get("profile", {}) or {}
-        return {"path": str(profile.profile_path()),
-                "id": str(head.get("id", "") or ""),
-                "callsign": str(head.get("callsign", "") or ""),
-                "grid": str(head.get("grid", "") or "")}
+        return {
+            "path": str(profile.profile_path()),
+            "id": str(head.get("id", "") or ""),
+            "callsign": str(head.get("callsign", "") or ""),
+            "grid": str(head.get("grid", "") or ""),
+        }
 
     def _rig() -> dict:
         argv, notes = _sup().rig_argv()
         rig = (profile.load_profile() or {}).get("rig", {}) or {}
-        return {"argv": [str(a) for a in argv], "notes": [str(n) for n in notes],
-                "endpoint": f"127.0.0.1:{PORTS['hamlib']}",
-                "model": str(rig.get("model") or ""),
-                "path": str(rig.get("path") or ""),
-                "baud": str(rig.get("baud") or "")}
+        return {
+            "argv": [str(a) for a in argv],
+            "notes": [str(n) for n in notes],
+            "endpoint": f"127.0.0.1:{PORTS['hamlib']}",
+            "model": str(rig.get("model") or ""),
+            "path": str(rig.get("path") or ""),
+            "baud": str(rig.get("baud") or ""),
+        }
 
     def _doctor() -> list:
         return doctor.run_checks(profile_data=profile.load_profile())
@@ -93,15 +99,23 @@ def default_services(root: Path | None = None) -> Services:
         # contract is a dict keyed by id so views/tests can index directly.
         if isinstance(apps, dict):
             return apps
-        return {str((a or {}).get("id", f"app-{i}")): (a or {})
-                for i, a in enumerate(apps or [])}
+        return {str((a or {}).get("id", f"app-{i}")): (a or {}) for i, a in enumerate(apps or [])}
 
-    return Services(version=lambda: VERSION, profile=_profile,
-                    profile_raw=profile.load_profile, rig=_rig,
-                    audio=audio.status, instances=lambda: _sup().status(),
-                    apps=_apps, bundles=lambda: bundles, doctor=_doctor,
-                    bundle_start=_bundle_start, bundle_stop=_bundle_stop,
-                    audio_up=_audio_up, audio_down=_audio_down)
+    return Services(
+        version=lambda: VERSION,
+        profile=_profile,
+        profile_raw=profile.load_profile,
+        rig=_rig,
+        audio=audio.status,
+        instances=lambda: _sup().status(),
+        apps=_apps,
+        bundles=lambda: bundles,
+        doctor=_doctor,
+        bundle_start=_bundle_start,
+        bundle_stop=_bundle_stop,
+        audio_up=_audio_up,
+        audio_down=_audio_down,
+    )
 
 
 def _counts(results: list) -> dict:
@@ -133,8 +147,11 @@ def snapshot(svc: Services) -> dict:
         "instances": collect("instances", svc.instances, {}),
         "apps": collect("apps", svc.apps, {}),
         "bundles": collect("bundles", svc.bundles, {}),
-        "doctor": {"results": results, "counts": _counts(results),
-                   "all_ok": doctor.all_ok(results)},
+        "doctor": {
+            "results": results,
+            "counts": _counts(results),
+            "all_ok": doctor.all_ok(results),
+        },
         "errors": errors,
     }
 

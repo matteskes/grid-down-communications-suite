@@ -14,6 +14,7 @@ core/doctor with this CLI in-process. M4a adds the systemd user-unit backend
 Later phases add the remaining config apply (adapters), install progress,
 winehub.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -36,8 +37,7 @@ def _fail(message: str) -> int:
     return 1
 
 
-def _build_supervisor(profile_data: dict | None = None,
-                      backend: str | None = None) -> Supervisor:
+def _build_supervisor(profile_data: dict | None = None, backend: str | None = None) -> Supervisor:
     """Backend-neutral factory: --backend flag > profile supervisor.backend >
     auto (systemd iff grid-down units are installed and a user bus is
     reachable, else direct — spec §6.5)."""
@@ -55,9 +55,11 @@ def cmd_gui(args) -> int:
     try:
         from gui.app import main as gui_main
     except ImportError as exc:
-        return _fail("PySide6 is not available "
-                     "(Fedora 45: sudo dnf install python3-pyside6; "
-                     f"dev venv: pip install PySide6-Essentials) — {exc}")
+        return _fail(
+            "PySide6 is not available "
+            "(Fedora 45: sudo dnf install python3-pyside6; "
+            f"dev venv: pip install PySide6-Essentials) — {exc}"
+        )
     return gui_main(["--selfcheck"] if args.selfcheck else [])
 
 
@@ -102,14 +104,24 @@ def cmd_rig(args) -> int:
     argv, notes = _build_supervisor(prof).rig_argv()
     rig = prof.get("rig", {}) or {}
     if args.json:
-        print(json.dumps({"argv": argv, "notes": notes,
-                          "endpoint": f"127.0.0.1:{PORTS['hamlib']}",
-                          "profile_rig": rig}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "argv": argv,
+                    "notes": notes,
+                    "endpoint": f"127.0.0.1:{PORTS['hamlib']}",
+                    "profile_rig": rig,
+                },
+                indent=2,
+            )
+        )
         return 0
     print("rigctld argv: " + shlex.join(argv))
     print(f"endpoint: 127.0.0.1:{PORTS['hamlib']} — suite-owned singleton (spec §6.4/G4)")
-    print(f"profile rig: model={rig.get('model') or '(unset → Dummy)'} "
-          f"path={rig.get('path') or '(unset)'} baud={rig.get('baud') or '(unset)'}")
+    print(
+        f"profile rig: model={rig.get('model') or '(unset → Dummy)'} "
+        f"path={rig.get('path') or '(unset)'} baud={rig.get('baud') or '(unset)'}"
+    )
     for note in notes:
         print(f"note: {note}")
     return 0
@@ -124,12 +136,15 @@ def cmd_audio(args) -> int:
         for st in steps:
             print(f"{st['endpoint']:<26} {st['kind']:<7} {st['state']}")
         rig_capture = (prof.get("audio", {}) or {}).get("rig_capture") or ""
-        pending = (f"rig-interface loopback from '{rig_capture}'"
-                   if rig_capture else "rig-interface loopback (set audio.rig_capture)")
+        pending = (
+            f"rig-interface loopback from '{rig_capture}'"
+            if rig_capture
+            else "rig-interface loopback (set audio.rig_capture)"
+        )
         print(f"\npending (Phase 3 adapters): {pending}")
-        defaults = ", ".join(f"{a}.{k}={v}"
-                             for a, pv in audio.DEFAULT_PRESETS.items()
-                             for k, v in pv.items())
+        defaults = ", ".join(
+            f"{a}.{k}={v}" for a, pv in audio.DEFAULT_PRESETS.items() for k, v in pv.items()
+        )
         print(f"launch-arg presets (profile audio.presets overrides): {defaults}")
         return 0
     if action == "status":
@@ -180,8 +195,9 @@ def cmd_status(args) -> int:
     stale = sum(1 for r in rows if r["state"] == "stale")
     failed = sum(1 for r in rows if r["state"] == "failed")
     extra = f", {failed} failed" if failed else ""
-    print(f"\n{running} running, {stale} stale{extra} "
-          f"(backend: {snap.get('backend', 'direct')})")
+    print(
+        f"\n{running} running, {stale} stale{extra} " f"(backend: {snap.get('backend', 'direct')})"
+    )
     for name, b in snap["bundles"].items():
         if b["running"]:
             print(f"bundle {name}: {', '.join(b['running'])} ({len(b['running'])}/{b['total']})")
@@ -192,8 +208,10 @@ def cmd_launch(args) -> int:
     s = _build_supervisor(backend=getattr(args, "backend", None))
     target = args.target
     if target == "all":
-        return _fail("'all' is not a launch target — name an app or bundle "
-                     "(see: gd apps list / gd bundles list)")
+        return _fail(
+            "'all' is not a launch target — name an app or bundle "
+            "(see: gd apps list / gd bundles list)"
+        )
     try:
         if target in s.bundles:
             out = s.launch_bundle(target)
@@ -251,35 +269,48 @@ def cmd_units(args) -> int:
         print(f"services:   {len(out['installed'])} installed")
         print(f"targets:    {n_targets} installed")
         if out["skipped"]:
-            print(f"skipped:    {', '.join(out['skipped'])} "
-                  "(wine-hub/cli-tool are not daemonized, spec §6.5)")
+            print(
+                f"skipped:    {', '.join(out['skipped'])} "
+                "(wine-hub/cli-tool are not daemonized, spec §6.5)"
+            )
         if out["unresolved"]:
-            print(f"unresolved: {len(out['unresolved'])} (no unit — app missing "
-                  "or placeholder unresolvable; fix and re-run)")
+            print(
+                f"unresolved: {len(out['unresolved'])} (no unit — app missing "
+                "or placeholder unresolvable; fix and re-run)"
+            )
             for app_id, why in out["unresolved"].items():
                 print(f"  {app_id}: {why}")
         if out["reloaded"]:
             print("daemon-reload: ok")
         else:
-            print("daemon-reload: skipped (no systemd user session) — "
-                  "run `systemctl --user daemon-reload` after login")
+            print(
+                "daemon-reload: skipped (no systemd user session) — "
+                "run `systemctl --user daemon-reload` after login"
+            )
         return 0
     if args.units_cmd == "uninstall":
         removed = systemd.uninstall_units()
-        print(f"removed {len(removed)} grid-down unit file(s) "
-              f"from {systemd.user_unit_dir()}")
+        print(f"removed {len(removed)} grid-down unit file(s) " f"from {systemd.user_unit_dir()}")
         return 0
     # list — installed vs freshly rendered expectation
     d = systemd.user_unit_dir()
     installed = {p.name: p.read_text() for p in systemd.installed_unit_paths()}
     expected = systemd.expected_units(sup)
     if args.json:
-        units = [{"unit": name, "expected": True, "installed": name in installed,
-                  "drifted": name in installed and installed[name] != text}
-                 for name, text in sorted(expected.items())]
-        units += [{"unit": name, "expected": False, "installed": True,
-                   "drifted": False} for name in sorted(installed)
-                  if name not in expected]
+        units = [
+            {
+                "unit": name,
+                "expected": True,
+                "installed": name in installed,
+                "drifted": name in installed and installed[name] != text,
+            }
+            for name, text in sorted(expected.items())
+        ]
+        units += [
+            {"unit": name, "expected": False, "installed": True, "drifted": False}
+            for name in sorted(installed)
+            if name not in expected
+        ]
         print(json.dumps({"unit_dir": str(d), "units": units}, indent=2))
         return 0
     print(f"{'UNIT':<42} STATE")
@@ -323,37 +354,48 @@ def main(argv: list[str] | None = None) -> int:
 
     p_launch = sub.add_parser("launch", help="launch an app or a bundle session")
     p_launch.add_argument("target", help="app id or bundle name")
-    p_launch.add_argument("--backend", choices=("auto", "direct", "systemd"),
-                          default=None, help="supervisor backend override "
-                          "(default: profile supervisor.backend, else auto)")
+    p_launch.add_argument(
+        "--backend",
+        choices=("auto", "direct", "systemd"),
+        default=None,
+        help="supervisor backend override " "(default: profile supervisor.backend, else auto)",
+    )
     p_launch.set_defaults(func=cmd_launch)
 
     p_stop = sub.add_parser("stop", help="stop an app, a bundle, or 'all'")
     p_stop.add_argument("target", help="app id, bundle name, or 'all'")
-    p_stop.add_argument("--force", action="store_true",
-                        help="override safety refusals (e.g. stopping rigctld with dependents up)")
-    p_stop.add_argument("--backend", choices=("auto", "direct", "systemd"),
-                        default=None, help="supervisor backend override")
+    p_stop.add_argument(
+        "--force",
+        action="store_true",
+        help="override safety refusals (e.g. stopping rigctld with dependents up)",
+    )
+    p_stop.add_argument(
+        "--backend",
+        choices=("auto", "direct", "systemd"),
+        default=None,
+        help="supervisor backend override",
+    )
     p_stop.set_defaults(func=cmd_stop)
 
     p_status = sub.add_parser("status", help="supervisor status (running/stale instances)")
     p_status.add_argument("--json", action="store_true", help="machine-readable snapshot")
-    p_status.add_argument("--backend", choices=("auto", "direct", "systemd"),
-                          default=None, help="supervisor backend override")
+    p_status.add_argument(
+        "--backend",
+        choices=("auto", "direct", "systemd"),
+        default=None,
+        help="supervisor backend override",
+    )
     p_status.set_defaults(func=cmd_status)
 
-    p_units = sub.add_parser("units",
-                             help="systemd user-unit backend (spec §6.5, M4)")
+    p_units = sub.add_parser("units", help="systemd user-unit backend (spec §6.5, M4)")
     p_units_sub = p_units.add_subparsers(dest="units_cmd", required=True)
-    p_u_i = p_units_sub.add_parser("install",
-                                   help="render + write the grid-down-* unit set")
+    p_u_i = p_units_sub.add_parser("install", help="render + write the grid-down-* unit set")
     p_u_i.add_argument("--json", action="store_true")
     p_u_i.set_defaults(func=cmd_units)
-    p_units_sub.add_parser("uninstall",
-                           help="remove all grid-down-* units (never others)"
-                           ).set_defaults(func=cmd_units)
-    p_u_l = p_units_sub.add_parser("list",
-                                   help="installed units vs registry expectation (drift)")
+    p_units_sub.add_parser(
+        "uninstall", help="remove all grid-down-* units (never others)"
+    ).set_defaults(func=cmd_units)
+    p_u_l = p_units_sub.add_parser("list", help="installed units vs registry expectation (drift)")
     p_u_l.add_argument("--json", action="store_true")
     p_u_l.set_defaults(func=cmd_units)
 
@@ -363,23 +405,25 @@ def main(argv: list[str] | None = None) -> int:
 
     p_a = sub.add_parser("audio", help="suite-owned PipeWire endpoints (spec §6.6, G4)")
     p_a_sub = p_a.add_subparsers(dest="audio_cmd", required=True)
-    for name, hlp in (("plan", "print the planned owned endpoint graph"),
-                      ("up", "create missing grid_down_* endpoints (idempotent)"),
-                      ("down", "unload grid_down_* modules (never others)"),
-                      ("status", "list present/missing owned endpoints")):
+    for name, hlp in (
+        ("plan", "print the planned owned endpoint graph"),
+        ("up", "create missing grid_down_* endpoints (idempotent)"),
+        ("down", "unload grid_down_* modules (never others)"),
+        ("status", "list present/missing owned endpoints"),
+    ):
         p = p_a_sub.add_parser(name, help=hlp)
         p.set_defaults(func=cmd_audio, audio_cmd=name)
 
     p_gui = sub.add_parser("gui", help="launch the Control Center GUI (spec §7)")
-    p_gui.add_argument("--selfcheck", action="store_true",
-                       help="build the window, apply one snapshot, exit")
+    p_gui.add_argument(
+        "--selfcheck", action="store_true", help="build the window, apply one snapshot, exit"
+    )
     p_gui.set_defaults(func=cmd_gui)
 
     args = ap.parse_args(argv)
     try:
         return args.func(args)
-    except (SupervisorError, registry.RegistryError, profile.ProfileError,
-            audio.AudioError) as exc:
+    except (SupervisorError, registry.RegistryError, profile.ProfileError, audio.AudioError) as exc:
         return _fail(str(exc))
 
 

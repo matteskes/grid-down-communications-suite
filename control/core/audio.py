@@ -25,6 +25,7 @@ Rules enforced here:
 Backend: ``pactl`` from pipewire-pulse (Fedora 45 ships it). ``plan()`` and
 ``resolve_preset()`` are pure and testable without any audio stack.
 """
+
 from __future__ import annotations
 
 import re
@@ -62,22 +63,33 @@ def resolve_preset(app_id: str, key: str, profile: dict | None) -> str:
         raise AudioError(
             f"audio preset unresolved: {app_id}.{key} — set "
             f"audio.presets.{app_id}.{key} in the station profile "
-            f"(defaults live in control/core/audio.py; see 'gd audio plan')")
+            f"(defaults live in control/core/audio.py; see 'gd audio plan')"
+        )
     return str(value)
 
 
 def sink_argv(name: str, role: str) -> list[str]:
     """Create the role's 'in' endpoint: a null sink apps play into."""
-    return ["pactl", "load-module", "module-null-sink",
-            f"sink_name={name}", f"node.name={name}",
-            f"sink_properties=device.description=GridDown_{role}_in"]
+    return [
+        "pactl",
+        "load-module",
+        "module-null-sink",
+        f"sink_name={name}",
+        f"node.name={name}",
+        f"sink_properties=device.description=GridDown_{role}_in",
+    ]
 
 
 def source_argv(name: str, role: str) -> list[str]:
     """Create the role's 'out' endpoint: a null source apps capture from."""
-    return ["pactl", "load-module", "module-null-source",
-            f"source_name={name}", f"node.name={name}",
-            f"source_properties=device.description=GridDown_{role}_out"]
+    return [
+        "pactl",
+        "load-module",
+        "module-null-source",
+        f"source_name={name}",
+        f"node.name={name}",
+        f"source_properties=device.description=GridDown_{role}_out",
+    ]
 
 
 def plan(profile: dict | None, exists=None) -> list[dict]:
@@ -91,11 +103,17 @@ def plan(profile: dict | None, exists=None) -> list[dict]:
     for role in ROLES:
         for direction, kind in (("in", "sink"), ("out", "source")):
             name = endpoint_name(role, direction)
-            argv = (sink_argv(name, role) if kind == "sink"
-                    else source_argv(name, role))
+            argv = sink_argv(name, role) if kind == "sink" else source_argv(name, role)
             live = bool(exists and exists(name))
-            steps.append({"endpoint": name, "role": role, "kind": kind,
-                          "argv": argv, "state": "exists" if live else "create"})
+            steps.append(
+                {
+                    "endpoint": name,
+                    "role": role,
+                    "kind": kind,
+                    "argv": argv,
+                    "state": "exists" if live else "create",
+                }
+            )
     return steps
 
 
@@ -103,11 +121,12 @@ def _runner(argv: list[str]) -> str:
     """Default pactl runner: returns stdout, raises AudioError on failure."""
     exe = shutil.which("pactl")
     if exe is None:
-        raise AudioError("pactl not found — install pipewire-pulse (Fedora 45: "
-                         "dnf install pipewire-pulse); 'gd audio plan' works offline")
+        raise AudioError(
+            "pactl not found — install pipewire-pulse (Fedora 45: "
+            "dnf install pipewire-pulse); 'gd audio plan' works offline"
+        )
     try:
-        proc = subprocess.run([exe, *argv[1:]], capture_output=True, text=True,
-                              timeout=10)
+        proc = subprocess.run([exe, *argv[1:]], capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise AudioError(f"pactl {' '.join(argv[1:2] or ['?'])} failed: {exc}") from None
     if proc.returncode != 0:
@@ -157,8 +176,6 @@ def down(_profile: dict | None = None, runner=None) -> dict:
 def status(runner=None) -> dict:
     """Which owned endpoints exist right now (no state changes)."""
     run = runner or _runner
-    expected = [endpoint_name(role, direction)
-                for role in ROLES for direction in ("in", "out")]
+    expected = [endpoint_name(role, direction) for role in ROLES for direction in ("in", "out")]
     present = [e for e in expected if _owned_listed(e, run)]
     return {"present": present, "missing": [e for e in expected if e not in present]}
-

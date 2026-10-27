@@ -28,6 +28,7 @@ Validation without a user session: unit files are pure text (tested here),
 tests drive `SystemdSupervisor` through a fake `systemctl` shim. Real
 `systemctl --user` acceptance is the P2 Fedora GUI VM pass (spec §10).
 """
+
 from __future__ import annotations
 
 import os
@@ -38,9 +39,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:  # package import (gd CLI, pytest)
-    from .supervisor import Supervisor, SupervisorError, RIG_ID
+    from .supervisor import RIG_ID, Supervisor, SupervisorError
 except ImportError:  # pragma: no cover - sibling import inside control/
-    from supervisor import Supervisor, SupervisorError, RIG_ID  # type: ignore
+    from supervisor import RIG_ID, Supervisor, SupervisorError  # type: ignore
 
 UNIT_PREFIX = "grid-down-"
 SKIP_VIAS = ("wine-hub", "cli-tool")  # no units, never daemonized (§6.5)
@@ -65,7 +66,7 @@ def target_name(bundle: str) -> str:
 
 def app_id_from_unit(unit: str) -> str | None:
     if unit.startswith(UNIT_PREFIX) and unit.endswith(".service"):
-        return unit[len(UNIT_PREFIX):-len(".service")]
+        return unit[len(UNIT_PREFIX) : -len(".service")]
     return None
 
 
@@ -79,14 +80,12 @@ def user_unit_dir() -> Path:
 
 def bundles_for(app_id: str, bundles: dict) -> list[str]:
     """Names of bundles whose member list contains app_id (sorted)."""
-    return sorted(name for name, b in bundles.items()
-                  if app_id in b.get("members", []))
+    return sorted(name for name, b in bundles.items() if app_id in b.get("members", []))
 
 
 def target_members(members: list, apps: dict) -> list[str]:
     """Bundle members that get units: wine-hub/cli-tool are never daemonized."""
-    return [m for m in members
-            if apps.get(m, {}).get("launch", {}).get("via") not in SKIP_VIAS]
+    return [m for m in members if apps.get(m, {}).get("launch", {}).get("via") not in SKIP_VIAS]
 
 
 def service_bound_targets(app_id: str, bundles: dict) -> list[str]:
@@ -104,21 +103,22 @@ def service_unit_text(app: dict, bundles: dict, state_dir: Path, argv: list) -> 
     would exec, quoted with shlex.join for systemd's ExecStart parser."""
     app_id = app["id"]
     log = Path(state_dir) / "logs" / f"{app_id}.log"
-    lines = ["[Unit]",
-             f"Description=Grid Down — {app.get('name') or app_id}"]
+    lines = ["[Unit]", f"Description=Grid Down — {app.get('name') or app_id}"]
     # BindsTo only: stop propagation from each containing target. No After= on
     # this side — the target is already After= its members; the reverse edge
     # would be an ordering cycle (systemd-analyze verify rejects those).
     for bound in service_bound_targets(app_id, bundles):
         lines.append(f"BindsTo={bound}")
-    lines += ["",
-              "[Service]",
-              "Type=simple",
-              f"ExecStart={shlex.join(str(a) for a in argv)}",
-              f"StandardOutput=append:{log}",
-              f"StandardError=append:{log}",
-              "Restart=no",
-              ""]
+    lines += [
+        "",
+        "[Service]",
+        "Type=simple",
+        f"ExecStart={shlex.join(str(a) for a in argv)}",
+        f"StandardOutput=append:{log}",
+        f"StandardError=append:{log}",
+        "Restart=no",
+        "",
+    ]
     return "\n".join(lines)
 
 
@@ -159,8 +159,7 @@ def expected_units(sup: Supervisor) -> dict[str, str]:
             argv, _cwd = sup._resolve_cmd(app)
         except SupervisorError:
             continue
-        out[service_name(app_id)] = service_unit_text(
-            app, sup.bundles, sup.state_dir, argv)
+        out[service_name(app_id)] = service_unit_text(app, sup.bundles, sup.state_dir, argv)
     for name, bundle in sorted(sup.bundles.items()):
         members = target_members(list(bundle.get("members", [])), sup.apps)
         out[target_name(name)] = target_unit_text(name, bundle, members)
@@ -207,12 +206,14 @@ def install_units(sup: Supervisor, unit_dir: Path | None = None) -> dict:
         text = target_unit_text(name, bundle, members)
         (d / target_name(name)).write_text(text)
         written.append(target_name(name))
-    return {"unit_dir": str(d),
-            "installed": sorted(installed),
-            "unresolved": dict(sorted(unresolved.items())),
-            "skipped": sorted(skipped),
-            "written": sorted(written),
-            "reloaded": daemon_reload()}
+    return {
+        "unit_dir": str(d),
+        "installed": sorted(installed),
+        "unresolved": dict(sorted(unresolved.items())),
+        "skipped": sorted(skipped),
+        "written": sorted(written),
+        "reloaded": daemon_reload(),
+    }
 
 
 def uninstall_units(unit_dir: Path | None = None) -> list[str]:
@@ -228,15 +229,18 @@ def uninstall_units(unit_dir: Path | None = None) -> list[str]:
 # --------------------------------------------------------- systemctl glue
 def _run(*args: str, timeout: float = 30.0) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(["systemctl", "--user", *args],
-                              capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(
+            ["systemctl", "--user", *args], capture_output=True, text=True, timeout=timeout
+        )
     except FileNotFoundError:
         raise SystemdError(
             "systemctl not found — the systemd backend needs a systemd host "
-            "(Fedora 45 ships systemd; check your PATH)") from None
+            "(Fedora 45 ships systemd; check your PATH)"
+        ) from None
     except subprocess.TimeoutExpired:
         raise SystemdError(
-            f"systemctl --user {' '.join(args)} timed out after {timeout:.0f}s") from None
+            f"systemctl --user {' '.join(args)} timed out after {timeout:.0f}s"
+        ) from None
 
 
 def systemctl_user(*args: str, timeout: float = 30.0) -> subprocess.CompletedProcess:
@@ -254,8 +258,11 @@ def backend_available() -> tuple[bool, str]:
     if shutil.which("systemctl") is None:
         return False, "systemctl not found on PATH (not a systemd host?)"
     if not os.environ.get("XDG_RUNTIME_DIR"):
-        return (False, "XDG_RUNTIME_DIR unset — no systemd user session "
-                       "(log into a graphical/systemd session first)")
+        return (
+            False,
+            "XDG_RUNTIME_DIR unset — no systemd user session "
+            "(log into a graphical/systemd session first)",
+        )
     try:
         res = _run("is-system-running")
     except SystemdError as exc:
@@ -284,11 +291,13 @@ def resolve_backend(profile: dict | None = None, flag: str | None = None) -> str
     'auto'. auto = systemd only when a user bus is reachable AND grid-down
     units are installed; otherwise direct (never fails). An explicit systemd
     request that cannot be honored raises with the fix in the message."""
-    want = str(flag or ((profile or {}).get("supervisor", {}) or {}).get("backend")
-               or "auto").strip().lower()
+    want = (
+        str(flag or ((profile or {}).get("supervisor", {}) or {}).get("backend") or "auto")
+        .strip()
+        .lower()
+    )
     if want not in ("auto", "direct", "systemd"):
-        raise SupervisorError(
-            f"unknown supervisor backend '{want}' — use auto|direct|systemd")
+        raise SupervisorError(f"unknown supervisor backend '{want}' — use auto|direct|systemd")
     if want == "direct":
         return "direct"
     if want == "systemd":
@@ -298,7 +307,8 @@ def resolve_backend(profile: dict | None = None, flag: str | None = None) -> str
         if not installed_unit_paths():
             raise SupervisorError(
                 "systemd backend unavailable: no grid-down units installed — "
-                "install them with: gd units install")
+                "install them with: gd units install"
+            )
         return "systemd"
     ok, _why = backend_available()
     return "systemd" if (ok and installed_unit_paths()) else "direct"
@@ -366,20 +376,17 @@ class SystemdSupervisor(Supervisor):
 
     def running_ids(self) -> list[str]:
         states = self._unit_states()
-        return sorted(a for a, s in states.items()
-                      if s == "running" and a in self.apps)
+        return sorted(a for a, s in states.items() if s == "running" and a in self.apps)
 
     def stale_ids(self) -> list[str]:
         """Failed units are the systemd analogue of the direct backend's
         stale entries (operator attention / stop clears them)."""
         states = self._unit_states()
-        return sorted(a for a, s in states.items()
-                      if s == "failed" and a in self.apps)
+        return sorted(a for a, s in states.items() if s == "failed" and a in self.apps)
 
     def _main_pid(self, app_id: str) -> int | None:
         try:
-            res = systemctl_user("show", service_name(app_id),
-                                 "--property=MainPID", "--value")
+            res = systemctl_user("show", service_name(app_id), "--property=MainPID", "--value")
         except SystemdError as exc:
             raise SupervisorError(str(exc)) from None
         val = res.stdout.strip().splitlines()[0] if res.stdout.strip() else "0"
@@ -389,13 +396,11 @@ class SystemdSupervisor(Supervisor):
     def launch(self, app_id: str, bundle: str | None = None) -> dict:
         app = self.app(app_id)
         if self.is_running(app_id):
-            return {"id": app_id, "state": "already-running",
-                    "pid": self._main_pid(app_id)}
+            return {"id": app_id, "state": "already-running", "pid": self._main_pid(app_id)}
         if self.is_rig_dependent(app_id):
             self._ensure_rig(bundle=bundle)
         entry = self._spawn(app, bundle)
-        return {"id": app_id, "state": "running",
-                "pid": entry["pid"], "log": entry["log"]}
+        return {"id": app_id, "state": "running", "pid": entry["pid"], "log": entry["log"]}
 
     def _spawn(self, app: dict, bundle: str | None) -> dict:
         app_id = app["id"]
@@ -406,8 +411,13 @@ class SystemdSupervisor(Supervisor):
             systemctl_user("start", service_name(app_id))
         except SystemdError as exc:
             raise SupervisorError(f"{app_id}: {exc}") from None
-        return {"pid": self._main_pid(app_id), "pgid": None,
-                "started": _now(), "bundle": bundle, "log": log}
+        return {
+            "pid": self._main_pid(app_id),
+            "pgid": None,
+            "started": _now(),
+            "bundle": bundle,
+            "log": log,
+        }
 
     def launch_bundle(self, name: str) -> dict:
         bundle = self.bundles.get(name)
@@ -429,8 +439,10 @@ class SystemdSupervisor(Supervisor):
         except SystemdError as exc:
             raise SupervisorError(f"bundle {name}: {exc}") from None
         up = sorted(set(self.running_ids()) & (set(members) - {RIG_ID}))
-        notes.append(f"target {target} active — {len(up)} unit(s) running: "
-                     f"{', '.join(up) if up else '-'}")
+        notes.append(
+            f"target {target} active — {len(up)} unit(s) running: "
+            f"{', '.join(up) if up else '-'}"
+        )
         return {"bundle": name, "notes": notes}
 
     def stop(self, app_id: str, force: bool = False) -> dict:
@@ -449,7 +461,8 @@ class SystemdSupervisor(Supervisor):
             if blockers:
                 raise SupervisorError(
                     f"refusing to stop {RIG_ID}: rig-dependent apps still running "
-                    f"({', '.join(blockers)}) — stop them first or use --force (spec §6.4)")
+                    f"({', '.join(blockers)}) — stop them first or use --force (spec §6.4)"
+                )
         try:
             systemctl_user("stop", service_name(app_id))
         except SystemdError as exc:
@@ -469,8 +482,9 @@ class SystemdSupervisor(Supervisor):
             raise SupervisorError(f"bundle {name}: {exc}") from None
         notes = [f"target {target} stopped"]
         if RIG_ID in members and self.is_running(RIG_ID):
-            others = [a for a in self.running_ids()
-                      if self.is_rig_dependent(a) and a not in members]
+            others = [
+                a for a in self.running_ids() if self.is_rig_dependent(a) and a not in members
+            ]
             if others:
                 notes.append(f"{RIG_ID} left running (still used by: {', '.join(others)})")
             else:
@@ -486,29 +500,31 @@ class SystemdSupervisor(Supervisor):
             s = states.get(app_id, "-")
             if s == "-" and not include_stopped:
                 continue
-            rows.append({
-                "id": app_id,
-                "state": s,
-                "pid": self._main_pid(app_id) if s == "running" else None,
-                "started": None,
-                "bundle": None,
-                "via": self.apps[app_id].get("launch", {}).get("via", "?"),
-                "log": str(self.state_dir / "logs" / f"{app_id}.log")
-                       if s == "running" else None,
-            })
+            rows.append(
+                {
+                    "id": app_id,
+                    "state": s,
+                    "pid": self._main_pid(app_id) if s == "running" else None,
+                    "started": None,
+                    "bundle": None,
+                    "via": self.apps[app_id].get("launch", {}).get("via", "?"),
+                    "log": (
+                        str(self.state_dir / "logs" / f"{app_id}.log") if s == "running" else None
+                    ),
+                }
+            )
         bundles = {}
         for name, bundle in self.bundles.items():
             members = bundle.get("members", [])
-            bundles[name] = {"running": [m for m in members
-                                         if states.get(m) == "running"],
-                             "total": len(members)}
-        return {"apps": rows,
-                "bundles": bundles,
-                "updated": _now(),
-                "backend": self.BACKEND,
-                "state_file": str(self.state_file()),
-                "unit_dir": str(user_unit_dir())}
-
-
-
-
+            bundles[name] = {
+                "running": [m for m in members if states.get(m) == "running"],
+                "total": len(members),
+            }
+        return {
+            "apps": rows,
+            "bundles": bundles,
+            "updated": _now(),
+            "backend": self.BACKEND,
+            "state_file": str(self.state_file()),
+            "unit_dir": str(user_unit_dir()),
+        }

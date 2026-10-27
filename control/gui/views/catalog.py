@@ -6,12 +6,19 @@ Read-only per the M3 plan (install-state columns and launch controls stay
 CLI-side); this page answers "what exists, what it is, what's running".
 Filtering is a QSortFilterProxyModel over the pure rows from gui.models.
 """
+
 from __future__ import annotations
 
-from PySide6.QtCore import QAbstractTableModel, QSortFilterProxyModel, \
-    QModelIndex, Qt
-from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
-                               QLineEdit, QTableView, QVBoxLayout, QWidget)
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QTableView,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui import models
 from gui.services import Services
@@ -45,8 +52,7 @@ class CatalogModel(QAbstractTableModel):
             return str(row.get("tagline")) or None
         return None
 
-    def headerData(self, section: int, orientation: Qt.Orientation,
-                   role: int = Qt.DisplayRole):
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             return COLUMNS[section]
         return None

@@ -9,6 +9,7 @@ is tested pure; `SystemdSupervisor` lifecycle is driven through the shim;
 backend resolution is a matrix over flag/profile/units/bus presence.
 Real `systemctl --user` acceptance is the P2 Fedora GUI VM pass (spec §10).
 """
+
 from __future__ import annotations
 
 import json
@@ -22,12 +23,18 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "control"))
 
-from core import systemd  # noqa: E402
-from core.supervisor import Supervisor, SupervisorError  # noqa: E402
+from core.supervisor import SupervisorError  # noqa: E402
 from core.systemd import (  # noqa: E402
-    RIG_ID, SystemdSupervisor, install_units, resolve_backend, service_name,
-    service_unit_text, target_members, target_name, target_unit_text,
-    uninstall_units, units_current,
+    RIG_ID,
+    SystemdSupervisor,
+    install_units,
+    resolve_backend,
+    service_name,
+    service_unit_text,
+    target_members,
+    target_unit_text,
+    uninstall_units,
+    units_current,
 )
 
 SHIM = """#!/usr/bin/env python3
@@ -47,25 +54,31 @@ SLEEPER = f"{sys.executable} -c 'import time; time.sleep(60)'"
 
 def _apps() -> list[dict]:
     return [
-        {"id": "hamlib", "name": "hamlib (rigctld)",
-         "launch": {"via": "managed-service", "cmd": "rigctld-fake -T 127.0.0.1"}},
+        {
+            "id": "hamlib",
+            "name": "hamlib (rigctld)",
+            "launch": {"via": "managed-service", "cmd": "rigctld-fake -T 127.0.0.1"},
+        },
         {"id": "term", "name": "Terminal", "launch": {"via": "desktop-app", "cmd": SLEEPER}},
         {"id": "dep", "name": "Dependent", "launch": {"via": "desktop-app", "cmd": SLEEPER}},
-        {"id": "bad", "name": "Broken", "launch": {"via": "desktop-app",
-                                                   "cmd": "ardopc 8515 <capture> <playback>"}},
-        {"id": "vara", "name": "VARA HF", "launch": {"via": "wine-hub",
-                                                     "cmd": "VARA.exe (via gd winehub)"}},
+        {
+            "id": "bad",
+            "name": "Broken",
+            "launch": {"via": "desktop-app", "cmd": "ardopc 8515 <capture> <playback>"},
+        },
+        {
+            "id": "vara",
+            "name": "VARA HF",
+            "launch": {"via": "wine-hub", "cmd": "VARA.exe (via gd winehub)"},
+        },
         {"id": "tool", "name": "Mesh CLI", "launch": {"via": "cli-tool", "cmd": "meshtastic"}},
     ]
 
 
 BUNDLES = {
-    "wb": {"members": ["hamlib", "term"],
-           "description": "test bundle one"},
-    "wb2": {"members": ["hamlib", "dep"],
-            "description": "test bundle two"},
-    "mixed": {"members": ["hamlib", "tool", "vara", "term"],
-              "description": "mixed bundle"},
+    "wb": {"members": ["hamlib", "term"], "description": "test bundle one"},
+    "wb2": {"members": ["hamlib", "dep"], "description": "test bundle two"},
+    "mixed": {"members": ["hamlib", "tool", "vara", "term"], "description": "mixed bundle"},
 }
 
 
@@ -89,13 +102,13 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setenv("GRID_DOWN_STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("GD_SHIM_LOG", str(logf))
     monkeypatch.setenv("GD_SHIM_RESPONSES", str(respf))
-    return SimpleNamespace(tmp=tmp_path, log=logf, responses=respf,
-                           unit_dir=tmp_path / "config" / "systemd" / "user")
+    return SimpleNamespace(
+        tmp=tmp_path, log=logf, responses=respf, unit_dir=tmp_path / "config" / "systemd" / "user"
+    )
 
 
 def _sup(sd) -> SystemdSupervisor:
-    return SystemdSupervisor(_apps(), BUNDLES, state_dir=sd.tmp / "state",
-                             app_root=sd.tmp / "opt")
+    return SystemdSupervisor(_apps(), BUNDLES, state_dir=sd.tmp / "state", app_root=sd.tmp / "opt")
 
 
 def _calls(sd) -> list[list[str]]:
@@ -163,9 +176,14 @@ def test_install_layout_and_skips(sd):
     assert set(out["unresolved"]) == {"bad"}  # placeholder cmd: no unit, reported
     assert sorted(out["installed"]) == ["dep", "hamlib", "term"]
     written = {Path(name).name for name in out["written"]}
-    assert written == {"grid-down-hamlib.service", "grid-down-term.service",
-                       "grid-down-dep.service", "grid-down-wb.target",
-                       "grid-down-wb2.target", "grid-down-mixed.target"}
+    assert written == {
+        "grid-down-hamlib.service",
+        "grid-down-term.service",
+        "grid-down-dep.service",
+        "grid-down-wb.target",
+        "grid-down-wb2.target",
+        "grid-down-mixed.target",
+    }
     assert (sd.unit_dir / "grid-down-wb.target").is_file()
     assert not (sd.unit_dir / "grid-down-vara.service").exists()
     assert out["reloaded"] is True
@@ -198,8 +216,9 @@ def test_uninstall_removes_only_grid_down_units(sd):
 def test_launch_and_stop_lifecycle(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"show|grid-down-term.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "4242\n"}})
+    _respond(
+        sd, {"show|grid-down-term.service|--property=MainPID|--value": {"rc": 0, "out": "4242\n"}}
+    )
     res = sup.launch("term")
     assert res["state"] == "running"
     assert res["pid"] == 4242
@@ -208,21 +227,27 @@ def test_launch_and_stop_lifecycle(sd):
     assert not (sup.state_dir / "supervisor.json").exists()  # systemd owns truth
 
     # second launch with the unit active -> already-running, no new start call
-    _respond(sd, {"show|grid-down-term.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "4242\n"},
-                  "list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-term.service") + "\n"}})
+    _respond(
+        sd,
+        {
+            "show|grid-down-term.service|--property=MainPID|--value": {"rc": 0, "out": "4242\n"},
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-term.service") + "\n",
+            },
+        },
+    )
     starts = sum(1 for c in _calls(sd) if c[:2] == ["start", "grid-down-term.service"])
     res2 = sup.launch("term")
     assert res2["state"] == "already-running"
-    assert sum(1 for c in _calls(sd)
-               if c[:2] == ["start", "grid-down-term.service"]) == starts
+    assert sum(1 for c in _calls(sd) if c[:2] == ["start", "grid-down-term.service"]) == starts
 
     # stop clears the unit; stopping again refuses (unit now inactive)
     assert sup.stop("term") == {"id": "term", "state": "stopped", "notes": []}
     assert ["stop", "grid-down-term.service"] in _calls(sd)
-    _respond(sd, {"show|grid-down-term.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "0\n"}})  # unit inactive: gone from list-units
+    _respond(
+        sd, {"show|grid-down-term.service|--property=MainPID|--value": {"rc": 0, "out": "0\n"}}
+    )  # unit inactive: gone from list-units
     with pytest.raises(SupervisorError, match="not running"):
         sup.stop("term")
 
@@ -230,9 +255,15 @@ def test_launch_and_stop_lifecycle(sd):
 def test_stop_clears_failed_unit(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-term.service",
-                                              active="failed", sub="failed") + "\n"}})
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-term.service", active="failed", sub="failed") + "\n",
+            }
+        },
+    )
     res = sup.stop("term")
     assert res["state"] == "failed-cleared"  # stale-entry parity with direct backend
 
@@ -249,8 +280,9 @@ def test_launch_bundle_starts_rig_then_target_once(sd):
     sup = _sup(sd)
     install_units(sup)
     # phase 1: nothing running -> rig first, then one target start
-    _respond(sd, {"show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"}})
+    _respond(
+        sd, {"show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"}}
+    )
     out = sup.launch_bundle("wb")
     calls = _calls(sd)
     rig_start = calls.index(["start", "grid-down-hamlib.service"])
@@ -261,10 +293,16 @@ def test_launch_bundle_starts_rig_then_target_once(sd):
     assert any("target grid-down-wb.target active" in n for n in out["notes"])
 
     # phase 2: rig already up -> "already-running" note, target start again
-    _respond(sd, {"show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"},
-                  "list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-hamlib.service") + "\n"}})
+    _respond(
+        sd,
+        {
+            "show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"},
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-hamlib.service") + "\n",
+            },
+        },
+    )
     out2 = sup.launch_bundle("wb")
     assert "already-running: hamlib" in out2["notes"]
 
@@ -272,10 +310,16 @@ def test_launch_bundle_starts_rig_then_target_once(sd):
 def test_launch_bundle_notes_skips(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"},
-                  "list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-hamlib.service") + "\n"}})
+    _respond(
+        sd,
+        {
+            "show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"},
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-hamlib.service") + "\n",
+            },
+        },
+    )
     out = sup.launch_bundle("mixed")
     assert "skip tool (cli-tool: managed elsewhere / interactive)" in out["notes"]
     assert "skip vara (wine-hub: managed elsewhere / interactive)" in out["notes"]
@@ -285,11 +329,22 @@ def test_stop_bundle_keeps_rig_used_elsewhere(sd):
     sup = _sup(sd)
     install_units(sup)
     # hamlib (wb+wb2), term (wb), dep (wb2) all running: stopping wb keeps rig
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": "\n".join([
-                      _units_row("grid-down-hamlib.service"),
-                      _units_row("grid-down-term.service"),
-                      _units_row("grid-down-dep.service")]) + "\n"}})
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": "\n".join(
+                    [
+                        _units_row("grid-down-hamlib.service"),
+                        _units_row("grid-down-term.service"),
+                        _units_row("grid-down-dep.service"),
+                    ]
+                )
+                + "\n",
+            }
+        },
+    )
     out = sup.stop_bundle("wb")
     assert ["stop", "grid-down-wb.target"] in _calls(sd)
     assert not any(c == ["stop", "grid-down-hamlib.service"] for c in _calls(sd))
@@ -300,10 +355,16 @@ def test_stop_bundle_keeps_rig_used_elsewhere(sd):
 def test_stop_bundle_stops_rig_when_last_user(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"},
-                  "list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-hamlib.service") + "\n"}})
+    _respond(
+        sd,
+        {
+            "show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"},
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-hamlib.service") + "\n",
+            },
+        },
+    )
     out = sup.stop_bundle("wb2")  # only hamlib is running (dep not up)
     assert ["stop", "grid-down-hamlib.service"] in _calls(sd)
     assert "stopped: hamlib" in out["notes"]
@@ -312,10 +373,18 @@ def test_stop_bundle_stops_rig_when_last_user(sd):
 def test_rig_guard_preserved(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": "\n".join([
-                      _units_row("grid-down-hamlib.service"),
-                      _units_row("grid-down-term.service")]) + "\n"}})
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": "\n".join(
+                    [_units_row("grid-down-hamlib.service"), _units_row("grid-down-term.service")]
+                )
+                + "\n",
+            }
+        },
+    )
     with pytest.raises(SupervisorError, match="refusing to stop hamlib"):
         sup.stop(RIG_ID)
     res = sup.stop(RIG_ID, force=True)
@@ -326,16 +395,24 @@ def test_rig_guard_preserved(sd):
 def test_status_reports_backend_and_failed(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"show|grid-down-term.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "4242\n"},
-                  "show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"},
-                  "list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": "\n".join([
-                      _units_row("grid-down-hamlib.service"),
-                      _units_row("grid-down-term.service"),
-                      _units_row("grid-down-dep.service",
-                                 active="failed", sub="failed")]) + "\n"}})
+    _respond(
+        sd,
+        {
+            "show|grid-down-term.service|--property=MainPID|--value": {"rc": 0, "out": "4242\n"},
+            "show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"},
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": "\n".join(
+                    [
+                        _units_row("grid-down-hamlib.service"),
+                        _units_row("grid-down-term.service"),
+                        _units_row("grid-down-dep.service", active="failed", sub="failed"),
+                    ]
+                )
+                + "\n",
+            },
+        },
+    )
     snap = sup.status()
     assert snap["backend"] == "systemd"
     rows = {r["id"]: r for r in snap["apps"]}
@@ -352,21 +429,34 @@ def test_status_reports_backend_and_failed(sd):
 def test_stale_ids_are_failed_units(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-dep.service",
-                                              active="failed", sub="failed") + "\n"}})
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-dep.service", active="failed", sub="failed") + "\n",
+            }
+        },
+    )
     assert sup.stale_ids() == ["dep"]
 
 
 def test_stop_all_leaves_nothing_running(sd):
     sup = _sup(sd)
     install_units(sup)
-    _respond(sd, {"show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"},
-                  "list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": "\n".join([
-                      _units_row("grid-down-hamlib.service"),
-                      _units_row("grid-down-term.service")]) + "\n"}})
+    _respond(
+        sd,
+        {
+            "show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"},
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": "\n".join(
+                    [_units_row("grid-down-hamlib.service"), _units_row("grid-down-term.service")]
+                )
+                + "\n",
+            },
+        },
+    )
     # force=True: the shim's list-units answer is static (real systemd would
     # report term inactive by the time the rig is stopped, so the guard cannot
     # trip in production — stop_all stops dependents first).
@@ -411,6 +501,7 @@ def test_resolve_backend_matrix(sd, monkeypatch):
 def test_cli_units_install_list_uninstall(sd, capsys, monkeypatch):
     sys.path.insert(0, str(ROOT / "control" / "cli"))
     import gd
+
     monkeypatch.setattr(gd.registry, "load_registry", lambda *_a, **_k: _apps())
     monkeypatch.setattr(gd.registry, "load_bundles", lambda *_a, **_k: dict(BUNDLES))
     assert gd.main(["units", "install"]) == 0
@@ -430,12 +521,19 @@ def test_cli_units_install_list_uninstall(sd, capsys, monkeypatch):
 def test_cli_status_backend_flag_with_shim(sd, capsys, monkeypatch):
     sys.path.insert(0, str(ROOT / "control" / "cli"))
     import gd
+
     monkeypatch.setattr(gd, "ROOT", ROOT)  # registry paths are repo-relative
     install_units(_sup(sd))
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-hamlib.service") + "\n"},
-                  "show|grid-down-hamlib.service|--property=MainPID|--value":
-                  {"rc": 0, "out": "1111\n"}})
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-hamlib.service") + "\n",
+            },
+            "show|grid-down-hamlib.service|--property=MainPID|--value": {"rc": 0, "out": "1111\n"},
+        },
+    )
     assert gd.main(["status", "--backend", "systemd"]) == 0
     text = capsys.readouterr().out
     assert "backend: systemd" in text
@@ -449,10 +547,9 @@ def test_cli_status_backend_flag_with_shim(sd, capsys, monkeypatch):
 # ---------------------------------------------------------------- doctor
 def _doctor_units_result(sd, monkeypatch):
     from core import doctor
-    monkeypatch.setattr(doctor.registry, "load_registry",
-                        lambda *_a, **_k: _apps())
-    monkeypatch.setattr(doctor.registry, "load_bundles",
-                        lambda *_a, **_k: dict(BUNDLES))
+
+    monkeypatch.setattr(doctor.registry, "load_registry", lambda *_a, **_k: _apps())
+    monkeypatch.setattr(doctor.registry, "load_bundles", lambda *_a, **_k: dict(BUNDLES))
     results = doctor.run_checks(state_dir=sd.tmp / "state", profile_data={})
     return results, next(r for r in results if r.id == "systemd")
 
@@ -478,10 +575,16 @@ def test_doctor_units_ok_then_drift_warn(sd, monkeypatch):
 
 def test_doctor_units_outliving_target_fails(sd, monkeypatch):
     install_units(_sup(sd))
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-term.service") + "\n"},
-                  "list-units|--all|grid-down-*.target|--no-legend|--plain":
-                  {"rc": 0, "out": ""}})  # every target inactive
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-term.service") + "\n",
+            },
+            "list-units|--all|grid-down-*.target|--no-legend|--plain": {"rc": 0, "out": ""},
+        },
+    )  # every target inactive
     _r, unit_check = _doctor_units_result(sd, monkeypatch)
     assert unit_check.status == "fail"
     assert "grid-down-term.service" in unit_check.detail
@@ -490,15 +593,19 @@ def test_doctor_units_outliving_target_fails(sd, monkeypatch):
 
 def test_doctor_units_bound_target_running_is_clean(sd, monkeypatch):
     install_units(_sup(sd))
-    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-term.service") + "\n"},
-                  "list-units|--all|grid-down-*.target|--no-legend|--plain":
-                  {"rc": 0, "out": _units_row("grid-down-wb.target") + "\n"}})
+    _respond(
+        sd,
+        {
+            "list-units|--all|grid-down-*.service|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-term.service") + "\n",
+            },
+            "list-units|--all|grid-down-*.target|--no-legend|--plain": {
+                "rc": 0,
+                "out": _units_row("grid-down-wb.target") + "\n",
+            },
+        },
+    )
     _r, unit_check = _doctor_units_result(sd, monkeypatch)
     assert unit_check.status == "ok"
     assert "runtime clean" in unit_check.detail
-
-
-
-
-

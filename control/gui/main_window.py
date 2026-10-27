@@ -5,10 +5,10 @@
 M3a ships the Dashboard page; the Bundles/Catalog/Doctor/Profile nav entries
 are placeholders that land in M3b/M3c per the milestone plan (spec §7).
 """
+
 from __future__ import annotations
 
-from PySide6.QtWidgets import (QHBoxLayout, QListWidget, QMainWindow,
-                               QStackedWidget, QWidget)
+from PySide6.QtWidgets import QHBoxLayout, QListWidget, QMainWindow, QStackedWidget, QWidget
 
 from gui.services import Services
 from gui.views.bundles import BundlesView
@@ -32,11 +32,11 @@ class MainWindow(QMainWindow):
         self.doctor = DoctorView(services, self)
         self.profiles = ProfilesView(services, self)
         stack = QStackedWidget(self)
-        stack.addWidget(self.dashboard)     # Dashboard
-        stack.addWidget(self.bundles)       # Bundles (M3c)
-        stack.addWidget(self.catalog)       # Catalog (M3b)
-        stack.addWidget(self.doctor)        # Doctor (M3b)
-        stack.addWidget(self.profiles)      # Profile (M3c)
+        stack.addWidget(self.dashboard)  # Dashboard
+        stack.addWidget(self.bundles)  # Bundles (M3c)
+        stack.addWidget(self.catalog)  # Catalog (M3b)
+        stack.addWidget(self.doctor)  # Doctor (M3b)
+        stack.addWidget(self.profiles)  # Profile (M3c)
         self.bundles.changed.connect(self.dashboard.refresh)
 
         self.nav = QListWidget(self)

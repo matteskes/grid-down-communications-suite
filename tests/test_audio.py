@@ -4,6 +4,7 @@
 
 Hermetic: plan/resolve are pure; pactl interaction goes through fake runners.
 """
+
 from __future__ import annotations
 
 import sys
@@ -40,9 +41,13 @@ def test_resolve_preset_default_override_missing():
 def test_plan_shape_and_idempotent_states():
     steps = audio.plan({})
     assert [s["endpoint"] for s in steps] == [
-        "grid_down_hf_in", "grid_down_hf_out",
-        "grid_down_packet_in", "grid_down_packet_out",
-        "grid_down_voice_in", "grid_down_voice_out"]
+        "grid_down_hf_in",
+        "grid_down_hf_out",
+        "grid_down_packet_in",
+        "grid_down_packet_out",
+        "grid_down_voice_in",
+        "grid_down_voice_out",
+    ]
     assert all(s["state"] == "create" for s in steps)
     kinds = {s["endpoint"]: s["kind"] for s in steps}
     assert kinds["grid_down_hf_in"] == "sink" and kinds["grid_down_hf_out"] == "source"
@@ -73,23 +78,25 @@ def _fake_runner(listings: dict[str, str]):
 
 
 def test_up_creates_missing_and_skips_existing():
-    listings = {"sinks": "0\tgrid_down_hf_in\tstate=IDLE\n",
-                "sources": ""}
+    listings = {"sinks": "0\tgrid_down_hf_in\tstate=IDLE\n", "sources": ""}
     run = _fake_runner(listings)
     out = audio.up({}, runner=run)
     assert out["skipped"] == ["grid_down_hf_in"]
     created = [c["endpoint"] for c in out["created"]]
     assert "grid_down_hf_in" not in created and len(created) == 5
-    assert any("load-module" in c and "module-null-source" in c
-               for c in run.calls if len(c) > 2)
+    assert any("load-module" in c and "module-null-source" in c for c in run.calls if len(c) > 2)
 
 
 def test_down_unloads_only_owned_modules():
-    listings = {"modules": "\n".join([
-        "5\tmodule-null-sink\tsink_name=grid_down_hf_in node.name=grid_down_hf_in",
-        "6\tmodule-null-sink\tsink_name=user_desktop_audio",   # not ours
-        "7\tmodule-null-source\tsource_name=grid_down_hf_out",
-    ])}
+    listings = {
+        "modules": "\n".join(
+            [
+                "5\tmodule-null-sink\tsink_name=grid_down_hf_in node.name=grid_down_hf_in",
+                "6\tmodule-null-sink\tsink_name=user_desktop_audio",  # not ours
+                "7\tmodule-null-source\tsource_name=grid_down_hf_out",
+            ]
+        )
+    }
     run = _fake_runner(listings)
     out = audio.down({}, runner=run)
     assert sorted(out["unloaded"]) == ["5", "7"]
@@ -98,12 +105,18 @@ def test_down_unloads_only_owned_modules():
 
 
 def test_status_reports_present_missing():
-    listings = {"sinks": "0\tgrid_down_hf_in\tstate=IDLE\n",
-                "sources": "1\tgrid_down_hf_out\tstate=IDLE\n"}
+    listings = {
+        "sinks": "0\tgrid_down_hf_in\tstate=IDLE\n",
+        "sources": "1\tgrid_down_hf_out\tstate=IDLE\n",
+    }
     st = audio.status(runner=_fake_runner(listings))
     assert st["present"] == ["grid_down_hf_in", "grid_down_hf_out"]
-    assert st["missing"] == ["grid_down_packet_in", "grid_down_packet_out",
-                             "grid_down_voice_in", "grid_down_voice_out"]
+    assert st["missing"] == [
+        "grid_down_packet_in",
+        "grid_down_packet_out",
+        "grid_down_voice_in",
+        "grid_down_voice_out",
+    ]
 
 
 def test_runner_without_pactl_raises(monkeypatch):

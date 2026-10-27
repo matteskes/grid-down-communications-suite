@@ -4,6 +4,7 @@
 
 Run: python3 -m pytest tests/ -q   (skips if PyYAML is absent)
 """
+
 from __future__ import annotations
 
 import sys
@@ -21,8 +22,17 @@ from core import registry  # noqa: E402  (after sys.path insert)
 REG_DIR = ROOT / "control" / "registry" / "apps"
 REC_DIR = ROOT / "install" / "recipes"
 VALID_CATEGORIES = {
-    "core", "hf", "winlink", "packet", "aprs", "voice_sstv",
-    "map_weather", "reference", "monitor", "mesh", "av",
+    "core",
+    "hf",
+    "winlink",
+    "packet",
+    "aprs",
+    "voice_sstv",
+    "map_weather",
+    "reference",
+    "monitor",
+    "mesh",
+    "av",
 }
 
 
@@ -55,7 +65,11 @@ def test_categories_valid(apps):
 def test_launch_shape(apps):
     for a in apps:
         assert a["launch"]["via"] in {
-            "managed-service", "desktop-app", "local-service", "cli-tool", "wine-hub",
+            "managed-service",
+            "desktop-app",
+            "local-service",
+            "cli-tool",
+            "wine-hub",
         }, a["id"]
         assert isinstance(a["launch"]["cmd"], str) and a["launch"]["cmd"], a["id"]
 
@@ -75,9 +89,9 @@ def test_recipes_exist_and_match_strategy(apps):
         assert rpath.exists(), f"missing recipe for {a['id']}"
         r = yaml.safe_load(rpath.read_text())["recipe"]
         assert r["id"] == a["id"], rpath
-        assert r["strategy"] == a["install"]["strategy"], (
-            f"{a['id']}: recipe strategy {r['strategy']} != registry {a['install']['strategy']}"
-        )
+        assert (
+            r["strategy"] == a["install"]["strategy"]
+        ), f"{a['id']}: recipe strategy {r['strategy']} != registry {a['install']['strategy']}"
 
 
 def test_wine_recipes_never_embed_download_urls():
@@ -85,9 +99,9 @@ def test_wine_recipes_never_embed_download_urls():
         r = yaml.safe_load(rpath.read_text())["recipe"]
         if r["strategy"] == "wine":
             blob = rpath.read_text().lower()
-            assert "http://" not in blob and "https://" not in blob, (
-                f"{rpath.name}: wine recipes must not embed download URLs (G6)"
-            )
+            assert (
+                "http://" not in blob and "https://" not in blob
+            ), f"{rpath.name}: wine recipes must not embed download URLs (G6)"
 
 
 def test_dnf_recipes_declare_repo(apps):

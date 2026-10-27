@@ -4,6 +4,7 @@
 
 Schema: docs/SPECIFICATION.md §6.1. One YAML per app in control/registry/apps/.
 """
+
 from __future__ import annotations
 
 from pathlib import Path

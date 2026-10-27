@@ -6,6 +6,7 @@ Deliberately read-only for M3: core profile.py is load-only and the M3 plan
 defers form-driven editing. The view renders the raw profile document and
 names its path so the operator can open it in an editor.
 """
+
 from __future__ import annotations
 
 from PySide6.QtGui import QFontDatabase
@@ -29,6 +30,8 @@ class ProfilesView(QWidget):
 
     def set_snapshot(self, snap: dict) -> None:
         prof = snap.get("profile") or {}
-        self.path_label.setText(f"station profile: {prof.get('path', '?')}"
-                                f"  (station: {prof.get('id') or '(unset)'})")
+        self.path_label.setText(
+            f"station profile: {prof.get('path', '?')}"
+            f"  (station: {prof.get('id') or '(unset)'})"
+        )
         self.text.setPlainText(models.profile_text(snap))

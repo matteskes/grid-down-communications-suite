@@ -6,6 +6,7 @@ QT_QPA_PLATFORM=offscreen is forced before any Qt import so the suite runs
 headless; the production target is Fedora 45 x86_64 (GNOME/Wayland), where
 the same window code runs under the platform's Qt.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,64 +37,109 @@ from gui.workers import SnapshotWorker  # noqa: E402
 def _snap() -> dict:
     return {
         "version": "0.5.0-m4",
-        "profile": {"path": "/etc/grid-down/profiles/default.yaml", "id": "default",
-                    "callsign": "W1AW", "grid": "FN31pr"},
-        "rig": {"argv": ["rigctld", "-T", "127.0.0.1", "-t", "4532", "-v", "-m", "1"],
-                "notes": [], "endpoint": "127.0.0.1:4532",
-                "model": "3073", "path": "/dev/ttyUSB0", "baud": "38400"},
+        "profile": {
+            "path": "/etc/grid-down/profiles/default.yaml",
+            "id": "default",
+            "callsign": "W1AW",
+            "grid": "FN31pr",
+        },
+        "rig": {
+            "argv": ["rigctld", "-T", "127.0.0.1", "-t", "4532", "-v", "-m", "1"],
+            "notes": [],
+            "endpoint": "127.0.0.1:4532",
+            "model": "3073",
+            "path": "/dev/ttyUSB0",
+            "baud": "38400",
+        },
         "audio": {"present": ["grid_down_hf_out"], "missing": ["grid_down_hf_in"]},
-        "instances": {"apps": [{"id": "hamlib", "state": "running", "pid": 42}],
-                      "bundles": {"winlink": {"running": ["hamlib", "ardop"],
-                                              "total": 3},
-                                  "js8": {"running": [], "total": 2}}},
-        "bundles": {"js8": {"description": "JS8 weak-signal messaging",
-                            "members": ["hamlib", "js8call"]},
-                    "packet": {"description": "Packet radio terminal stack",
-                               "members": ["direwolf", "qttermtcp", "paracon"]},
-                    "winlink": {"description": "HF/VHF email via Winlink",
-                                "members": ["hamlib", "direwolf", "ardop", "pat"]}},
-        "profile_raw": {"profile": {"id": "default", "callsign": "W1AW",
-                                    "grid": "FN31pr"},
-                        "rig": {"model": "", "path": "", "baud": ""}},
-        "apps": {"ardop": {"name": "ARDOP TNC", "category": "winlink",
-                           "launch": {"via": "managed-service"},
-                           "ui": {"tagline": "ARDOP modem"}},
-                 "direwolf": {"name": "Direwolf", "category": "packet",
-                              "launch": {"via": "managed-service"}, "ui": {}},
-                 "js8call": {"name": "JS8Call", "category": "winlink", "ui": {}}},
-        "doctor": {"results": [], "counts": {"ok": 8, "warn": 5, "fail": 0, "skip": 4},
-                   "all_ok": True},
+        "instances": {
+            "apps": [{"id": "hamlib", "state": "running", "pid": 42}],
+            "bundles": {
+                "winlink": {"running": ["hamlib", "ardop"], "total": 3},
+                "js8": {"running": [], "total": 2},
+            },
+        },
+        "bundles": {
+            "js8": {"description": "JS8 weak-signal messaging", "members": ["hamlib", "js8call"]},
+            "packet": {
+                "description": "Packet radio terminal stack",
+                "members": ["direwolf", "qttermtcp", "paracon"],
+            },
+            "winlink": {
+                "description": "HF/VHF email via Winlink",
+                "members": ["hamlib", "direwolf", "ardop", "pat"],
+            },
+        },
+        "profile_raw": {
+            "profile": {"id": "default", "callsign": "W1AW", "grid": "FN31pr"},
+            "rig": {"model": "", "path": "", "baud": ""},
+        },
+        "apps": {
+            "ardop": {
+                "name": "ARDOP TNC",
+                "category": "winlink",
+                "launch": {"via": "managed-service"},
+                "ui": {"tagline": "ARDOP modem"},
+            },
+            "direwolf": {
+                "name": "Direwolf",
+                "category": "packet",
+                "launch": {"via": "managed-service"},
+                "ui": {},
+            },
+            "js8call": {"name": "JS8Call", "category": "winlink", "ui": {}},
+        },
+        "doctor": {
+            "results": [],
+            "counts": {"ok": 8, "warn": 5, "fail": 0, "skip": 4},
+            "all_ok": True,
+        },
         "errors": {},
     }
 
 
 def _fake_services() -> Services:
     snap = _snap()
-    return Services(version=lambda: snap["version"],
-                    profile=lambda: snap["profile"],
-                    profile_raw=lambda: snap["profile_raw"],
-                    rig=lambda: snap["rig"],
-                    audio=lambda: snap["audio"],
-                    instances=lambda: snap["instances"],
-                    apps=lambda: snap["apps"],
-                    bundles=lambda: snap["bundles"],
-                    doctor=lambda: snap["doctor"]["results"],
-                    bundle_start=lambda name: {"bundle": name,
-                                               "notes": [f"running: {name}"]},
-                    bundle_stop=lambda name: {"bundle": name,
-                                              "notes": [f"stopped: {name}"]},
-                    audio_up=lambda: {"created": [{"endpoint": "grid_down_hf_out",
-                                                   "module": 7}],
-                                      "skipped": ["grid_down_hf_in"]},
-                    audio_down=lambda: {"unloaded": ["grid_down_hf_out"]})
+    return Services(
+        version=lambda: snap["version"],
+        profile=lambda: snap["profile"],
+        profile_raw=lambda: snap["profile_raw"],
+        rig=lambda: snap["rig"],
+        audio=lambda: snap["audio"],
+        instances=lambda: snap["instances"],
+        apps=lambda: snap["apps"],
+        bundles=lambda: snap["bundles"],
+        doctor=lambda: snap["doctor"]["results"],
+        bundle_start=lambda name: {"bundle": name, "notes": [f"running: {name}"]},
+        bundle_stop=lambda name: {"bundle": name, "notes": [f"stopped: {name}"]},
+        audio_up=lambda: {
+            "created": [{"endpoint": "grid_down_hf_out", "module": 7}],
+            "skipped": ["grid_down_hf_in"],
+        },
+        audio_down=lambda: {"unloaded": ["grid_down_hf_out"]},
+    )
 
 
 def _spy_services(base: Services, **over) -> Services:
     """Copy a Services with selected callables replaced (test spy)."""
-    fields = {f: getattr(base, f) for f in
-              ("version", "profile", "profile_raw", "rig", "audio", "instances",
-               "apps", "bundles", "doctor", "bundle_start", "bundle_stop",
-               "audio_up", "audio_down")}
+    fields = {
+        f: getattr(base, f)
+        for f in (
+            "version",
+            "profile",
+            "profile_raw",
+            "rig",
+            "audio",
+            "instances",
+            "apps",
+            "bundles",
+            "doctor",
+            "bundle_start",
+            "bundle_stop",
+            "audio_up",
+            "audio_down",
+        )
+    }
     fields.update(over)
     return Services(**fields)
 
@@ -134,6 +180,7 @@ def test_worker_emits_done_with_result(qtbot):
 def test_worker_emits_failed_on_raise(qtbot):
     def boom():
         raise RuntimeError("no pactl")
+
     worker = SnapshotWorker(boom)
     with qtbot.waitSignal(worker.failed, timeout=5000) as blocker:
         worker.start()
@@ -165,8 +212,8 @@ def test_bundles_start_confirmed_runs_in_worker(qtbot):
     calls = []
     services = _spy_services(
         _fake_services(),
-        bundle_start=lambda n: (calls.append(n),
-                                {"bundle": n, "notes": [f"running: {n}"]})[1])
+        bundle_start=lambda n: (calls.append(n), {"bundle": n, "notes": [f"running: {n}"]})[1],
+    )
     view = BundlesView(services)
     qtbot.addWidget(view)
     view.set_snapshot(_snap())
@@ -179,11 +226,13 @@ def test_bundles_start_confirmed_runs_in_worker(qtbot):
 
 def test_dashboard_audio_up_runs_and_refreshes(qtbot):
     calls = []
-    services = _spy_services(_fake_services(),
-                             audio_up=lambda: (calls.append("up"),
-                                               {"created": [{"endpoint": "e",
-                                                             "module": 7}],
-                                                "skipped": []})[1])
+    services = _spy_services(
+        _fake_services(),
+        audio_up=lambda: (
+            calls.append("up"),
+            {"created": [{"endpoint": "e", "module": 7}], "skipped": []},
+        )[1],
+    )
     view = DashboardView(services)
     qtbot.addWidget(view)
     view.set_snapshot(_snap())
@@ -194,15 +243,15 @@ def test_dashboard_audio_up_runs_and_refreshes(qtbot):
 
 def test_dashboard_audio_down_requires_confirm(qtbot):
     calls = []
-    services = _spy_services(_fake_services(),
-                             audio_down=lambda: (calls.append("down"),
-                                                 {"unloaded": []})[1])
+    services = _spy_services(
+        _fake_services(), audio_down=lambda: (calls.append("down"), {"unloaded": []})[1]
+    )
     view = DashboardView(services)
     qtbot.addWidget(view)
     view.set_snapshot(_snap())
     view._confirm = lambda t, x: False
     view._audio_down()
-    assert calls == []          # refused — no worker, no core call
+    assert calls == []  # refused — no worker, no core call
     assert view._worker is None
 
 
@@ -222,9 +271,9 @@ def test_catalog_lists_and_filters(qtbot):
     assert view.model.rowCount() == 3
     assert view.proxy.rowCount() == 3
     assert view.count_label.text() == "3 apps"
-    view.filter_box.setText("ardop")      # id match
+    view.filter_box.setText("ardop")  # id match
     assert view.proxy.rowCount() == 1
-    view.filter_box.setText("packet")     # category match
+    view.filter_box.setText("packet")  # category match
     assert view.proxy.rowCount() == 1
     view.filter_box.setText("zzz-none")
     assert view.proxy.rowCount() == 0
@@ -237,7 +286,7 @@ def test_catalog_columns_and_state(qtbot):
     view.set_snapshot(_snap())
     assert view.model.data(view.model.index(0, 0)) == "ardop"  # sorted by id
     assert view.model.data(view.model.index(0, 1)) == "ARDOP TNC"
-    assert view.model.data(view.model.index(0, 4)) == "-"      # not running
+    assert view.model.data(view.model.index(0, 4)) == "-"  # not running
     assert view.model.data(view.model.index(0, 0), 3) == "ARDOP modem"  # tooltip
     assert view.model.data(view.model.index(2, 0), 3) is None  # js8call: none
 
@@ -248,8 +297,7 @@ def test_doctor_rows_colors_and_summary(qtbot):
     snap = _snap()
     snap["doctor"]["results"] = [
         {"id": "platform", "title": "platform", "status": "ok", "detail": "linux"},
-        {"id": "ports", "title": "port conflicts", "status": "fail",
-         "detail": "4532 busy"},
+        {"id": "ports", "title": "port conflicts", "status": "fail", "detail": "4532 busy"},
         {"id": "deferred", "title": "deferred", "status": "skip", "detail": "n/a"},
     ]
     view.set_snapshot(snap)
@@ -264,8 +312,9 @@ def test_doctor_copy_json(qtbot):
     view = DoctorView(_fake_services())
     qtbot.addWidget(view)
     snap = _snap()
-    snap["doctor"]["results"] = [{"id": "ports", "title": "port conflicts",
-                                  "status": "fail", "detail": "4532 busy"}]
+    snap["doctor"]["results"] = [
+        {"id": "ports", "title": "port conflicts", "status": "fail", "detail": "4532 busy"}
+    ]
     view.set_snapshot(snap)
     checks = json.loads(view.copy_json())["checks"]
     assert checks[0]["id"] == "ports" and checks[0]["status"] == "fail"

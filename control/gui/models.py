@@ -6,6 +6,7 @@ No Qt here, so these run in plain pytest. Every function tolerates missing
 keys and per-section error payloads from gui.services.snapshot() — the
 dashboard must degrade, never KeyError.
 """
+
 from __future__ import annotations
 
 import shlex
@@ -20,11 +21,13 @@ def _err(snap: dict, section: str) -> str | None:
 
 def header_rows(snap: dict) -> list[tuple[str, str]]:
     prof = snap.get("profile") or {}
-    return [("Version", str(snap.get("version", "?"))),
-            ("Profile", str(prof.get("path", "?"))),
-            ("Station", str(prof.get("id", "") or "(unset)")),
-            ("Callsign", str(prof.get("callsign", "") or "(unset)")),
-            ("Grid", str(prof.get("grid", "") or "(unset)"))]
+    return [
+        ("Version", str(snap.get("version", "?"))),
+        ("Profile", str(prof.get("path", "?"))),
+        ("Station", str(prof.get("id", "") or "(unset)")),
+        ("Callsign", str(prof.get("callsign", "") or "(unset)")),
+        ("Grid", str(prof.get("grid", "") or "(unset)")),
+    ]
 
 
 def rig_lines(snap: dict) -> list[str]:
@@ -35,9 +38,11 @@ def rig_lines(snap: dict) -> list[str]:
     argv = [str(a) for a in (rig.get("argv") or [])]
     lines = [f"$ {shlex.join(argv)}"] if argv else ["$ (no rig command resolved)"]
     lines.append(f"endpoint: {rig.get('endpoint', '?')} — suite-owned singleton (G4)")
-    lines.append(f"model: {rig.get('model') or '(unset → hamlib Dummy)'}"
-                 f"  path: {rig.get('path') or '(unset)'}"
-                 f"  baud: {rig.get('baud') or '(unset)'}")
+    lines.append(
+        f"model: {rig.get('model') or '(unset → hamlib Dummy)'}"
+        f"  path: {rig.get('path') or '(unset)'}"
+        f"  baud: {rig.get('baud') or '(unset)'}"
+    )
     lines += [f"note: {n}" for n in rig.get("notes", [])]
     return lines
 
@@ -57,8 +62,11 @@ def instance_rows(snap: dict) -> list[tuple[str, str]]:
     if err:
         return [("instances", err)]
     rows = (snap.get("instances") or {}).get("apps", []) or []
-    active = [(str(r.get("id", "?")), str(r.get("state", "?")))
-              for r in rows if r.get("state") in ("running", "stale")]
+    active = [
+        (str(r.get("id", "?")), str(r.get("state", "?")))
+        for r in rows
+        if r.get("state") in ("running", "stale")
+    ]
     return active or [("instances", "nothing running")]
 
 
@@ -81,19 +89,22 @@ def catalog_rows(snap: dict) -> list[dict]:
     """One row per registry app: id/name/category/via + live supervisor state."""
     if _err(snap, "apps"):
         return []
-    state_by_id = {str(r.get("id")): str(r.get("state"))
-                   for r in (snap.get("instances") or {}).get("apps", [])}
+    state_by_id = {
+        str(r.get("id")): str(r.get("state")) for r in (snap.get("instances") or {}).get("apps", [])
+    }
     rows = []
     for app_id, app in sorted((snap.get("apps") or {}).items()):
         app = app or {}
-        rows.append({
-            "app": str(app_id),
-            "name": str(app.get("name") or app_id),
-            "category": str(app.get("category") or "-"),
-            "via": str((app.get("launch") or {}).get("via") or "-"),
-            "tagline": str((app.get("ui") or {}).get("tagline") or ""),
-            "state": state_by_id.get(str(app_id), "-"),
-        })
+        rows.append(
+            {
+                "app": str(app_id),
+                "name": str(app.get("name") or app_id),
+                "category": str(app.get("category") or "-"),
+                "via": str((app.get("launch") or {}).get("via") or "-"),
+                "tagline": str((app.get("ui") or {}).get("tagline") or ""),
+                "state": state_by_id.get(str(app_id), "-"),
+            }
+        )
     return rows
 
 
@@ -125,11 +136,15 @@ def bundle_rows(snap: dict) -> list[dict]:
         m = meta[name] or {}
         st = state.get(name) or {}
         members = [str(x) for x in (m.get("members") or [])]
-        rows.append({"name": str(name),
-                     "description": str(m.get("description") or ""),
-                     "members": members,
-                     "running": len(st.get("running") or []),
-                     "total": int(st.get("total", len(members)))})
+        rows.append(
+            {
+                "name": str(name),
+                "description": str(m.get("description") or ""),
+                "members": members,
+                "running": len(st.get("running") or []),
+                "total": int(st.get("total", len(members))),
+            }
+        )
     return rows
 
 
@@ -141,8 +156,9 @@ def profile_text(snap: dict) -> str:
     data = snap.get("profile_raw") or {}
     try:
         import yaml
+
         return yaml.safe_dump(data, sort_keys=False, default_flow_style=False)
     except Exception as exc:  # noqa: BLE001 — PyYAML missing must not kill the GUI
         import json
-        return (f"# rendered as JSON (yaml unavailable: {exc})\n"
-                + json.dumps(data, indent=2))
+
+        return f"# rendered as JSON (yaml unavailable: {exc})\n" + json.dumps(data, indent=2)

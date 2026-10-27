@@ -5,6 +5,7 @@
 Widgets stay responsive while doctor checks probe ports or the supervisor
 spawns processes; results come back as Qt signals (queued to the UI thread).
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable

@@ -5,6 +5,7 @@
 Hermetic: a fake in-memory registry, a tmp state dir, and python sleeper
 processes — no real radio apps, no /opt, no network.
 """
+
 from __future__ import annotations
 
 import os
@@ -44,14 +45,23 @@ def _apps(rig_cmd: str = "rigctld") -> list[dict]:
         {"id": "term", "launch": {"via": "desktop-app", "cmd": _sleeper()}},
         {"id": "dep", "launch": {"via": "desktop-app", "cmd": _sleeper()}},
         {"id": "dep2", "launch": {"via": "desktop-app", "cmd": _sleeper()}},
-        {"id": "bad", "launch": {"via": "managed-service",
-                                 "cmd": "ardopc 8515 <capture> <playback>"}},
+        {
+            "id": "bad",
+            "launch": {"via": "managed-service", "cmd": "ardopc 8515 <capture> <playback>"},
+        },
         {"id": "vara", "launch": {"via": "wine-hub", "cmd": "VARA.exe (via gd winehub)"}},
         {"id": "tool", "launch": {"via": "cli-tool", "cmd": "meshtastic"}},
-        {"id": "commstatone", "launch": {"via": "local-service",
-                                         "cmd": "python3 -m http.server 8090 (served by suite)"}},
-        {"id": "js8spotter", "launch": {"via": "local-service",
-                                        "cmd": "php -S 127.0.0.1:8091 (served by suite)"}},
+        {
+            "id": "commstatone",
+            "launch": {
+                "via": "local-service",
+                "cmd": "python3 -m http.server 8090 (served by suite)",
+            },
+        },
+        {
+            "id": "js8spotter",
+            "launch": {"via": "local-service", "cmd": "php -S 127.0.0.1:8091 (served by suite)"},
+        },
     ]
 
 
@@ -64,8 +74,12 @@ BUNDLES = {
 
 @pytest.fixture()
 def sup(tmp_path):
-    s = Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES, state_dir=tmp_path / "state",
-                   app_root=tmp_path / "opt")
+    s = Supervisor(
+        _apps(_rig_stub(tmp_path)),
+        bundles=BUNDLES,
+        state_dir=tmp_path / "state",
+        app_root=tmp_path / "opt",
+    )
     yield s
     for entry in list(s.state["instances"].values()):
         try:
@@ -171,11 +185,19 @@ def test_stale_detection_and_clear(sup):
 
 
 def test_state_persists_across_instances(tmp_path):
-    s1 = Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES, state_dir=tmp_path / "state",
-                    app_root=tmp_path / "opt")
+    s1 = Supervisor(
+        _apps(_rig_stub(tmp_path)),
+        bundles=BUNDLES,
+        state_dir=tmp_path / "state",
+        app_root=tmp_path / "opt",
+    )
     s1.launch("term")
-    s2 = Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES, state_dir=tmp_path / "state",
-                    app_root=tmp_path / "opt")
+    s2 = Supervisor(
+        _apps(_rig_stub(tmp_path)),
+        bundles=BUNDLES,
+        state_dir=tmp_path / "state",
+        app_root=tmp_path / "opt",
+    )
     assert s2.is_running("term")  # second process sees the same state file
     s2.stop("term")
     assert not s1.is_running("term")
@@ -208,9 +230,13 @@ def test_js8spotter_needs_php_or_errors(sup, tmp_path):
 
 # ------------------------------------------------------- M2: rig from profile
 def _sup_with_profile(tmp_path, prof):
-    return Supervisor(_apps(_rig_stub(tmp_path)), bundles=BUNDLES,
-                      state_dir=tmp_path / "state",
-                      app_root=tmp_path / "opt", profile=prof)
+    return Supervisor(
+        _apps(_rig_stub(tmp_path)),
+        bundles=BUNDLES,
+        state_dir=tmp_path / "state",
+        app_root=tmp_path / "opt",
+        profile=prof,
+    )
 
 
 def _kill_all(s):
@@ -258,16 +284,19 @@ def test_hamlib_launch_uses_profile_rig(tmp_path):
 
 # -------------------------------------------------- M2: audio preset binding
 def test_placeholder_resolved_via_default_preset(sup):
-    app = {"id": "ardop", "launch": {"via": "managed-service",
-                                     "cmd": f"{sys.executable} -c pass 8515 "
-                                            f"<capture> <playback>"}}
+    app = {
+        "id": "ardop",
+        "launch": {
+            "via": "managed-service",
+            "cmd": f"{sys.executable} -c pass 8515 " f"<capture> <playback>",
+        },
+    }
     argv, _ = sup._resolve_cmd(app)
     assert argv[-2:] == ["grid_down_hf_out", "grid_down_hf_in"]
 
 
 def test_placeholder_partial_profile_override(sup):
     sup.profile["audio"] = {"presets": {"bad2": {"capture": "hw:CARD=rig"}}}
-    app = {"id": "bad2", "launch": {"via": "managed-service",
-                                    "cmd": "x <capture> <playback>"}}
+    app = {"id": "bad2", "launch": {"via": "managed-service", "cmd": "x <capture> <playback>"}}
     with pytest.raises(SupervisorError, match=r"presets\.bad2\.playback"):
         sup._resolve_cmd(app)  # capture resolved; playback still missing

@@ -1,0 +1,21 @@
+# Tool configuration only — grid-down is not a packaged distribution.
+# Dev tooling on Python 3.15 (.venv): ruff (lint) / black (format) / isort (imports).
+# Ownership split so the tools never fight: isort owns import order,
+# black owns formatting, ruff lints only (no "I" rules, no `ruff format`).
+# Pins: requirements-dev.txt
+
+[tool.black]
+line-length = 100
+target-version = ["py315"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["core", "gui"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py315"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

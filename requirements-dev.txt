@@ -1,0 +1,5 @@
+# Dev/quality tooling — installed into .venv (Python 3.15). Not runtime deps.
+# Pins for reproducible lint/format runs; config lives in pyproject.toml.
+ruff==0.17.3
+black==26.10.1
+isort==9.0.2

@@ -8,12 +8,21 @@ answer. After an action the view emits `changed`; the main window refreshes
 the other views from it. rigctld handling (singleton, shared-dependency
 rules) stays in core/supervisor — the GUI only asks.
 """
+
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QGridLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QMessageBox, QPlainTextEdit, QPushButton,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui import models
 from gui.services import Services
@@ -93,8 +102,7 @@ class BundlesView(QWidget):
         self._busy = True
         self.notes.appendPlainText(f"{verb.lower()}ing {name}…")
         svc = self.services
-        fn = (lambda: svc.bundle_start(name)) if start else \
-             (lambda: svc.bundle_stop(name))
+        fn = (lambda: svc.bundle_start(name)) if start else (lambda: svc.bundle_stop(name))
         worker = SnapshotWorker(fn, parent=self)
         worker.done.connect(self._done)
         worker.failed.connect(self._failed)

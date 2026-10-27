@@ -6,14 +6,23 @@ supervisor instances, doctor summary. Read-only; refresh via worker thread.
 Display logic lives in gui.models (pure); this widget only wires snapshots to
 labels, so offscreen tests call set_snapshot() directly with fake payloads.
 """
+
 from __future__ import annotations
 
 import time
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFontDatabase
-from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QMessageBox, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui import models
 from gui.services import Services, snapshot
@@ -63,8 +72,7 @@ class DashboardView(QWidget):
         layout.addWidget(audio_box)
 
         self.instances_label = self._wrap_label()
-        layout.addWidget(self._box("Instances — supervisor state",
-                                   self.instances_label))
+        layout.addWidget(self._box("Instances — supervisor state", self.instances_label))
 
         self.doctor_label = self._wrap_label()
         layout.addWidget(self._box("Doctor — preflight summary", self.doctor_label))
@@ -87,6 +95,7 @@ class DashboardView(QWidget):
         self._timer = QTimer(self)
         self._timer.setInterval(10_000)
         self._timer.timeout.connect(self.refresh)
+
     # ------------------------------------------------------------ plumbing
     def start_autorefresh(self, secs: int = 10) -> None:
         self._timer.setInterval(secs * 1000)
@@ -112,7 +121,7 @@ class DashboardView(QWidget):
             for sig in (worker.done, worker.failed):
                 try:
                     sig.disconnect()
-                except (RuntimeError, TypeError):
+                except RuntimeError, TypeError:
                     pass
 
     def _on_done(self, snap: dict) -> None:
@@ -132,8 +141,7 @@ class DashboardView(QWidget):
         self._run_audio(down=False)
 
     def _audio_down(self) -> None:
-        if not self._confirm("Audio down?",
-                             "Unload the grid_down_* loopback endpoints now?"):
+        if not self._confirm("Audio down?", "Unload the grid_down_* loopback endpoints now?"):
             return
         self._run_audio(down=True)
 
@@ -155,7 +163,8 @@ class DashboardView(QWidget):
         unloaded = list(out.get("unloaded") or [])
         if unloaded:
             self.status_label.setText(
-                f"audio down — unloaded: {', '.join(map(str, unloaded)) or 'none'}")
+                f"audio down — unloaded: {', '.join(map(str, unloaded)) or 'none'}"
+            )
         else:
             created = len(out.get("created") or [])
             self.status_label.setText(f"audio up — created {created} endpoint(s)")
@@ -169,10 +178,12 @@ class DashboardView(QWidget):
         for title, label in self.header_labels.items():
             label.setText(values.get(title, "—"))
         self.rig_label.setText("\n".join(models.rig_lines(snap)) or "—")
-        self.audio_label.setText("\n".join(
-            f"{name} — {state}" for name, state in models.audio_rows(snap)) or "—")
-        self.instances_label.setText("\n".join(
-            f"{name} — {state}" for name, state in models.instance_rows(snap)) or "—")
+        self.audio_label.setText(
+            "\n".join(f"{name} — {state}" for name, state in models.audio_rows(snap)) or "—"
+        )
+        self.instances_label.setText(
+            "\n".join(f"{name} — {state}" for name, state in models.instance_rows(snap)) or "—"
+        )
         self.doctor_label.setText("\n".join(models.doctor_lines(snap)) or "—")
         errs = models.error_lines(snap)
         self.errors_label.setText("\n".join(errs))

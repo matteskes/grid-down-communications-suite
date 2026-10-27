@@ -14,6 +14,7 @@ vs a fresh render, and — with a user bus reachable — services outliving
 every bound target. Deferred: kit manifest verification, deep PipeWire graph
 audit, Meshtastic VID:PID probe, per-app phone-home scan.
 """
+
 from __future__ import annotations
 
 import glob
@@ -26,7 +27,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 try:  # package import (gd CLI, pytest)
-    from . import audio, registry, supervisor as sup, systemd
+    from . import audio, registry
+    from . import supervisor as sup
+    from . import systemd
 except ImportError:  # pragma: no cover - sibling import inside control/
     import audio
     import registry
@@ -36,8 +39,11 @@ except ImportError:  # pragma: no cover - sibling import inside control/
 PORTS = sup.PORTS
 
 USB_SERIAL_GLOBS = (
-    "/dev/ttyUSB*", "/dev/ttyACM*",
-    "/dev/tty.usbserial*", "/dev/cu.usbserial*", "/dev/cu.usbmodem*",
+    "/dev/ttyUSB*",
+    "/dev/ttyACM*",
+    "/dev/tty.usbserial*",
+    "/dev/cu.usbserial*",
+    "/dev/cu.usbmodem*",
 )
 WINE_PREFIX = Path("/opt/grid-down/wine-prefix")
 
@@ -68,18 +74,23 @@ def _load_state_instances(state_dir: Path | None) -> dict:
     path = (Path(state_dir) if state_dir else sup.default_state_dir()) / "supervisor.json"
     try:
         data = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         return {}
     return data.get("instances", {})
 
 
 def _check_platform() -> CheckResult:
     if sys.platform.startswith("linux"):
-        return CheckResult("platform", "host platform", "ok",
-                           f"linux ({os.uname().machine}) — supported target")
-    return CheckResult("platform", "host platform", "warn",
-                       f"{sys.platform} — not the deployment target (Fedora 45); "
-                       "checks are best-effort on a dev host")
+        return CheckResult(
+            "platform", "host platform", "ok", f"linux ({os.uname().machine}) — supported target"
+        )
+    return CheckResult(
+        "platform",
+        "host platform",
+        "warn",
+        f"{sys.platform} — not the deployment target (Fedora 45); "
+        "checks are best-effort on a dev host",
+    )
 
 
 def _check_dialout() -> CheckResult:
@@ -87,6 +98,7 @@ def _check_dialout() -> CheckResult:
         return CheckResult("dialout", "serial device group", "skip", "non-Linux host")
     import getpass
     import grp
+
     user = getpass.getuser()
     groups = set()
     try:
@@ -98,9 +110,13 @@ def _check_dialout() -> CheckResult:
         pass
     if "dialout" in groups:
         return CheckResult("dialout", "serial device group", "ok", f"{user} is in dialout")
-    return CheckResult("dialout", "serial device group", "warn",
-                       f"{user} is not in the dialout group — serial rigs/TNCs will be "
-                       f"unreadable (fix: sudo usermod -aG dialout {user}, then re-login)")
+    return CheckResult(
+        "dialout",
+        "serial device group",
+        "warn",
+        f"{user} is not in the dialout group — serial rigs/TNCs will be "
+        f"unreadable (fix: sudo usermod -aG dialout {user}, then re-login)",
+    )
 
 
 def _check_serial() -> CheckResult:
@@ -109,47 +125,76 @@ def _check_serial() -> CheckResult:
     if usb:
         return CheckResult("serial", "serial devices", "ok", "USB serial: " + ", ".join(usb))
     if legacy:
-        return CheckResult("serial", "serial devices", "warn",
-                           "no USB serial devices found (builtin only: "
-                           + ", ".join(legacy[:4]) + ")")
-    return CheckResult("serial", "serial devices", "warn",
-                       "no serial devices found — attach the rig/TNC, or ignore on a bench host")
+        return CheckResult(
+            "serial",
+            "serial devices",
+            "warn",
+            "no USB serial devices found (builtin only: " + ", ".join(legacy[:4]) + ")",
+        )
+    return CheckResult(
+        "serial",
+        "serial devices",
+        "warn",
+        "no serial devices found — attach the rig/TNC, or ignore on a bench host",
+    )
 
 
 def _check_audio() -> CheckResult:
     if not sys.platform.startswith("linux"):
-        return CheckResult("audio", "PipeWire audio", "skip",
-                           "non-Linux host — owned endpoints (`gd audio up`) need PipeWire")
+        return CheckResult(
+            "audio",
+            "PipeWire audio",
+            "skip",
+            "non-Linux host — owned endpoints (`gd audio up`) need PipeWire",
+        )
     if not shutil.which("pactl"):
-        return CheckResult("audio", "PipeWire audio", "warn",
-                           "pactl not found (pipewire-pulse) — the suite cannot own its "
-                           "audio endpoints (dnf install pipewire-pulse)")
+        return CheckResult(
+            "audio",
+            "PipeWire audio",
+            "warn",
+            "pactl not found (pipewire-pulse) — the suite cannot own its "
+            "audio endpoints (dnf install pipewire-pulse)",
+        )
     try:
         st = audio.status()
     except audio.AudioError as exc:
-        return CheckResult("audio", "PipeWire audio", "warn",
-                           f"no live PipeWire session ({exc})")
+        return CheckResult("audio", "PipeWire audio", "warn", f"no live PipeWire session ({exc})")
     if st["missing"]:
-        return CheckResult("audio", "PipeWire audio", "warn",
-                           "owned endpoints missing: " + ", ".join(st["missing"])
-                           + " — create with: gd audio up")
-    return CheckResult("audio", "PipeWire audio", "ok",
-                       "owned endpoints present: " + ", ".join(st["present"]))
+        return CheckResult(
+            "audio",
+            "PipeWire audio",
+            "warn",
+            "owned endpoints missing: " + ", ".join(st["missing"]) + " — create with: gd audio up",
+        )
+    return CheckResult(
+        "audio", "PipeWire audio", "ok", "owned endpoints present: " + ", ".join(st["present"])
+    )
 
 
 def _check_rig_model(profile_data: dict | None) -> CheckResult:
     rig = (profile_data or {}).get("rig", {}) or {}
     model = str(rig.get("model") or "").strip()
     if not model:
-        return CheckResult("rig-model", "rig model (hamlib)", "warn",
-                           "rig.model unset — rigctld starts on the Dummy backend "
-                           "(safe loopback, no radio); set the numeric id from `rigctl -l`")
+        return CheckResult(
+            "rig-model",
+            "rig model (hamlib)",
+            "warn",
+            "rig.model unset — rigctld starts on the Dummy backend "
+            "(safe loopback, no radio); set the numeric id from `rigctl -l`",
+        )
     if not model.isdigit():
-        return CheckResult("rig-model", "rig model (hamlib)", "warn",
-                           f"rig.model {model!r} is not numeric — rigctld needs the "
-                           "id column of `rigctl -l`")
-    return CheckResult("rig-model", "rig model (hamlib)", "ok",
-                       f"model {model} → rigctld -m {model} at 127.0.0.1:{PORTS['hamlib']}")
+        return CheckResult(
+            "rig-model",
+            "rig model (hamlib)",
+            "warn",
+            f"rig.model {model!r} is not numeric — rigctld needs the " "id column of `rigctl -l`",
+        )
+    return CheckResult(
+        "rig-model",
+        "rig model (hamlib)",
+        "ok",
+        f"model {model} → rigctld -m {model} at 127.0.0.1:{PORTS['hamlib']}",
+    )
 
 
 def _check_ports(ports: dict[str, int], instances: dict) -> list[CheckResult]:
@@ -157,15 +202,28 @@ def _check_ports(ports: dict[str, int], instances: dict) -> list[CheckResult]:
     for app_id in sorted(ports):
         port = ports[app_id]
         if not _port_open(port):
-            results.append(CheckResult(f"port-{port}", f"loopback port {port} ({app_id})",
-                                       "ok", "free"))
+            results.append(
+                CheckResult(f"port-{port}", f"loopback port {port} ({app_id})", "ok", "free")
+            )
         elif app_id in instances:
-            results.append(CheckResult(f"port-{port}", f"loopback port {port} ({app_id})",
-                                       "ok", f"in use by suite instance {app_id}"))
+            results.append(
+                CheckResult(
+                    f"port-{port}",
+                    f"loopback port {port} ({app_id})",
+                    "ok",
+                    f"in use by suite instance {app_id}",
+                )
+            )
         else:
-            results.append(CheckResult(f"port-{port}", f"loopback port {port} ({app_id})",
-                                       "warn", "occupied by an unknown listener — the suite "
-                                               f"{app_id} may fail to bind (spec §6.6)"))
+            results.append(
+                CheckResult(
+                    f"port-{port}",
+                    f"loopback port {port} ({app_id})",
+                    "warn",
+                    "occupied by an unknown listener — the suite "
+                    f"{app_id} may fail to bind (spec §6.6)",
+                )
+            )
     return results
 
 
@@ -175,11 +233,13 @@ def _check_state(state_dir: Path | None) -> CheckResult:
         return CheckResult("state", "supervisor state", "ok", "no instances recorded")
     stale = sorted(a for a, e in instances.items() if not sup.pid_alive(e.get("pid", -1)))
     if stale:
-        return CheckResult("state", "supervisor state", "warn",
-                           "stale entries (process gone): " + ", ".join(stale)
-                           + " — clean with: gd stop <id>")
-    return CheckResult("state", "supervisor state", "ok",
-                       f"{len(instances)} instance(s) alive")
+        return CheckResult(
+            "state",
+            "supervisor state",
+            "warn",
+            "stale entries (process gone): " + ", ".join(stale) + " — clean with: gd stop <id>",
+        )
+    return CheckResult("state", "supervisor state", "ok", f"{len(instances)} instance(s) alive")
 
 
 def _check_profile(profile_data: dict | None) -> list[CheckResult]:
@@ -189,45 +249,77 @@ def _check_profile(profile_data: dict | None) -> list[CheckResult]:
     p = profile_data.get("profile", {})
     missing = [k for k in ("callsign", "grid") if not p.get(k)]
     if missing:
-        out.append(CheckResult("profile", "station profile", "warn",
-                               "empty fields: " + ", ".join(missing)
-                               + " — fill in ~/.config/grid-down/profiles/ or $GRID_DOWN_PROFILE"))
+        out.append(
+            CheckResult(
+                "profile",
+                "station profile",
+                "warn",
+                "empty fields: "
+                + ", ".join(missing)
+                + " — fill in ~/.config/grid-down/profiles/ or $GRID_DOWN_PROFILE",
+            )
+        )
     else:
-        out.append(CheckResult("profile", "station profile", "ok",
-                               f"id={p.get('id')} callsign={p.get('callsign')} grid={p.get('grid')}"))
+        out.append(
+            CheckResult(
+                "profile",
+                "station profile",
+                "ok",
+                f"id={p.get('id')} callsign={p.get('callsign')} grid={p.get('grid')}",
+            )
+        )
     path = str(profile_data.get("rig", {}).get("path") or "")
     if path and os.path.exists(path):
         out.append(CheckResult("rig-path", "rig serial path", "ok", path))
     else:
-        out.append(CheckResult("rig-path", "rig serial path", "warn",
-                               f"{path or '(unset)'} not present — rigctld will fail until "
-                               "the rig is attached"))
+        out.append(
+            CheckResult(
+                "rig-path",
+                "rig serial path",
+                "warn",
+                f"{path or '(unset)'} not present — rigctld will fail until " "the rig is attached",
+            )
+        )
     if profile_data.get("internet", {}).get("present") is False:
-        out.append(CheckResult("air-gap", "air-gap master switch", "ok",
-                               "internet.present=false — suite stays fully offline (G2); "
-                               "per-app phone-home scan lands with adapters"))
+        out.append(
+            CheckResult(
+                "air-gap",
+                "air-gap master switch",
+                "ok",
+                "internet.present=false — suite stays fully offline (G2); "
+                "per-app phone-home scan lands with adapters",
+            )
+        )
     else:
-        out.append(CheckResult("air-gap", "air-gap master switch", "warn",
-                               "internet.present is not false — set it for emergency operation"))
+        out.append(
+            CheckResult(
+                "air-gap",
+                "air-gap master switch",
+                "warn",
+                "internet.present is not false — set it for emergency operation",
+            )
+        )
     return out
 
 
 def _check_wine() -> CheckResult:
     if WINE_PREFIX.is_dir():
         return CheckResult("wine", "VARA wine prefix", "ok", str(WINE_PREFIX))
-    return CheckResult("wine", "VARA wine prefix", "skip",
-                       f"{WINE_PREFIX} not installed yet (Phase 3 wine hub)")
+    return CheckResult(
+        "wine", "VARA wine prefix", "skip", f"{WINE_PREFIX} not installed yet (Phase 3 wine hub)"
+    )
 
 
 def _check_deferred() -> CheckResult:
-    return CheckResult("deferred", "checks deferred to later phases", "skip",
-                       "; ".join(DEFERRED))
+    return CheckResult("deferred", "checks deferred to later phases", "skip", "; ".join(DEFERRED))
 
 
 def _load_registry() -> tuple[list[dict], dict]:
     root = Path(__file__).resolve().parents[1]
-    return (registry.load_registry(root / "registry" / "apps"),
-            registry.load_bundles(root / "registry" / "bundles.yaml"))
+    return (
+        registry.load_registry(root / "registry" / "apps"),
+        registry.load_bundles(root / "registry" / "bundles.yaml"),
+    )
 
 
 def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
@@ -238,20 +330,28 @@ def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
     try:
         installed = systemd.installed_unit_paths()
         if not installed:
-            return CheckResult(cid, title, "skip",
-                               "no grid-down units installed (direct backend in "
-                               "use — optional: `gd units install`)")
+            return CheckResult(
+                cid,
+                title,
+                "skip",
+                "no grid-down units installed (direct backend in "
+                "use — optional: `gd units install`)",
+            )
         apps, bundles = _load_registry()
         n_svc = sum(1 for p in installed if p.name.endswith(".service"))
         n_tgt = len(installed) - n_svc
         if systemd.units_current(sup.Supervisor(apps, bundles, state_dir=state_dir)):
             status = "ok"
-            detail = (f"{len(installed)} units installed, current with "
-                      f"registry/profile ({n_svc} services, {n_tgt} targets)")
+            detail = (
+                f"{len(installed)} units installed, current with "
+                f"registry/profile ({n_svc} services, {n_tgt} targets)"
+            )
         else:
             status = "warn"
-            detail = (f"{len(installed)} units installed but drifted from "
-                      f"registry/profile — re-run: `gd units install`")
+            detail = (
+                f"{len(installed)} units installed but drifted from "
+                f"registry/profile — re-run: `gd units install`"
+            )
         ok_bus, why = systemd.backend_available()
         if not ok_bus:  # no user session: runtime unit state not observable
             if status == "ok":
@@ -269,10 +369,13 @@ def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
                 offenders.append(unit)
         if offenders:
             return CheckResult(
-                cid, title, "fail",
+                cid,
+                title,
+                "fail",
                 "service(s) running but outliving every bound target — stop them "
                 "(`gd stop <app> --backend systemd`) or restart their bundle: "
-                + ", ".join(offenders))
+                + ", ".join(offenders),
+            )
         if status == "ok":
             detail += "; runtime clean (no service outliving its targets)"
         return CheckResult(cid, title, status, detail)
@@ -280,8 +383,11 @@ def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
         return CheckResult(cid, title, "warn", f"could not check units: {exc}")
 
 
-def run_checks(state_dir: Path | None = None, profile_data: dict | None = None,
-               ports: dict[str, int] | None = None) -> list[CheckResult]:
+def run_checks(
+    state_dir: Path | None = None,
+    profile_data: dict | None = None,
+    ports: dict[str, int] | None = None,
+) -> list[CheckResult]:
     """Run every check; returns results in stable order. Never raises."""
     ports = PORTS if ports is None else ports
     instances = _load_state_instances(state_dir)

@@ -7,6 +7,7 @@ Resolution order:
   2. newest ~/.config/grid-down/profiles/*.yaml
   3. <repo>/profiles/default.yaml
 """
+
 from __future__ import annotations
 
 import os
