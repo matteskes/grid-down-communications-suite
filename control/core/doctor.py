@@ -9,7 +9,9 @@ data, so both the CLI and (later) the GUI can render them.
 M1 implements: platform sanity, dialout group, serial device presence,
 PipeWire tooling, §6.6 loopback port occupancy, supervisor state hygiene
 (stale instances, §6.5), profile sanity, wine-prefix presence, air-gap
-switch report. Deferred: kit manifest verification, deep PipeWire graph
+switch report. M4 adds the systemd user-unit check (§6.5): unit-set drift
+vs a fresh render, and — with a user bus reachable — services outliving
+every bound target. Deferred: kit manifest verification, deep PipeWire graph
 audit, Meshtastic VID:PID probe, per-app phone-home scan.
 """
 from __future__ import annotations
@@ -24,10 +26,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 try:  # package import (gd CLI, pytest)
-    from . import audio, supervisor as sup
+    from . import audio, registry, supervisor as sup, systemd
 except ImportError:  # pragma: no cover - sibling import inside control/
     import audio
+    import registry
     import supervisor as sup  # type: ignore
+    import systemd  # type: ignore
 
 PORTS = sup.PORTS
 
@@ -220,14 +224,71 @@ def _check_deferred() -> CheckResult:
                        "; ".join(DEFERRED))
 
 
+def _load_registry() -> tuple[list[dict], dict]:
+    root = Path(__file__).resolve().parents[1]
+    return (registry.load_registry(root / "registry" / "apps"),
+            registry.load_bundles(root / "registry" / "bundles.yaml"))
+
+
+def _check_systemd_units(state_dir: Path | None = None) -> CheckResult:
+    """M4 (§6.5): one result covering the optional systemd backend —
+    skip when no units are installed; WARN on drift vs a fresh render;
+    FAIL when a running service would outlive every target bound to it."""
+    cid, title = "systemd", "systemd user units (§6.5)"
+    try:
+        installed = systemd.installed_unit_paths()
+        if not installed:
+            return CheckResult(cid, title, "skip",
+                               "no grid-down units installed (direct backend in "
+                               "use — optional: `gd units install`)")
+        apps, bundles = _load_registry()
+        n_svc = sum(1 for p in installed if p.name.endswith(".service"))
+        n_tgt = len(installed) - n_svc
+        if systemd.units_current(sup.Supervisor(apps, bundles, state_dir=state_dir)):
+            status = "ok"
+            detail = (f"{len(installed)} units installed, current with "
+                      f"registry/profile ({n_svc} services, {n_tgt} targets)")
+        else:
+            status = "warn"
+            detail = (f"{len(installed)} units installed but drifted from "
+                      f"registry/profile — re-run: `gd units install`")
+        ok_bus, why = systemd.backend_available()
+        if not ok_bus:  # no user session: runtime unit state not observable
+            if status == "ok":
+                detail += f"; runtime state not checked ({why})"
+            return CheckResult(cid, title, status, detail)
+        svc = systemd.query_unit_states(f"{systemd.UNIT_PREFIX}*.service")
+        tgt = systemd.query_target_states()
+        offenders = []
+        for app in apps:
+            unit = systemd.service_name(app["id"])
+            if svc.get(unit) != "running":
+                continue
+            bound = systemd.service_bound_targets(app["id"], bundles)
+            if bound and all(tgt.get(t) != "running" for t in bound):
+                offenders.append(unit)
+        if offenders:
+            return CheckResult(
+                cid, title, "fail",
+                "service(s) running but outliving every bound target — stop them "
+                "(`gd stop <app> --backend systemd`) or restart their bundle: "
+                + ", ".join(offenders))
+        if status == "ok":
+            detail += "; runtime clean (no service outliving its targets)"
+        return CheckResult(cid, title, status, detail)
+    except Exception as exc:  # doctor contract: failures are data, never raises
+        return CheckResult(cid, title, "warn", f"could not check units: {exc}")
+
+
 def run_checks(state_dir: Path | None = None, profile_data: dict | None = None,
                ports: dict[str, int] | None = None) -> list[CheckResult]:
-    """Run every M1 check; returns results in stable order. Never raises."""
+    """Run every check; returns results in stable order. Never raises."""
     ports = PORTS if ports is None else ports
     instances = _load_state_instances(state_dir)
     results = [_check_platform(), _check_dialout(), _check_serial(), _check_audio()]
     results += _check_ports(ports, instances)
     results.append(_check_state(state_dir))
+    results.append(_check_systemd_units(state_dir))
     results += _check_profile(profile_data)
     results.append(_check_rig_model(profile_data))
     results.append(_check_wine())

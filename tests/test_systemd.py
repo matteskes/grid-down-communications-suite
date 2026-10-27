@@ -120,8 +120,9 @@ def test_service_text_binds_all_bundles(sd):
     text = service_unit_text(app, sup.bundles, sup.state_dir, argv)
     assert text.count("BindsTo=grid-down-wb.target") == 1
     assert text.count("BindsTo=grid-down-mixed.target") == 1
-    assert "After=grid-down-wb.target" in text
-    assert "After=grid-down-mixed.target" in text
+    # one-directional ordering: the target is After= its members, so the
+    # service must NOT be After= its target (ordering cycle, verify-rejected)
+    assert "After=" not in text
     assert "Type=simple" in text
     assert "Restart=no" in text
     assert f"StandardOutput=append:{sup.state_dir}/logs/term.log" in text
@@ -443,6 +444,59 @@ def test_cli_status_backend_flag_with_shim(sd, capsys, monkeypatch):
     uninstall_units()
     assert gd.main(["status", "--backend", "systemd"]) == 1
     assert "gd units install" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------- doctor
+def _doctor_units_result(sd, monkeypatch):
+    from core import doctor
+    monkeypatch.setattr(doctor.registry, "load_registry",
+                        lambda *_a, **_k: _apps())
+    monkeypatch.setattr(doctor.registry, "load_bundles",
+                        lambda *_a, **_k: dict(BUNDLES))
+    results = doctor.run_checks(state_dir=sd.tmp / "state", profile_data={})
+    return results, next(r for r in results if r.id == "systemd")
+
+
+def test_doctor_units_check_skip_and_count(sd, monkeypatch):
+    results, unit_check = _doctor_units_result(sd, monkeypatch)
+    assert len(results) == 18  # 17 checks before M4b
+    assert unit_check.status == "skip"
+    assert "gd units install" in unit_check.detail
+
+
+def test_doctor_units_ok_then_drift_warn(sd, monkeypatch):
+    install_units(_sup(sd))
+    _r, unit_check = _doctor_units_result(sd, monkeypatch)
+    assert unit_check.status == "ok"
+    assert "current with registry/profile" in unit_check.detail
+    unit = sd.unit_dir / service_name("term")
+    unit.write_text(unit.read_text().replace("Restart=no", "Restart=on-failure"))
+    _r, unit_check = _doctor_units_result(sd, monkeypatch)
+    assert unit_check.status == "warn"
+    assert "drifted" in unit_check.detail
+
+
+def test_doctor_units_outliving_target_fails(sd, monkeypatch):
+    install_units(_sup(sd))
+    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
+                  {"rc": 0, "out": _units_row("grid-down-term.service") + "\n"},
+                  "list-units|--all|grid-down-*.target|--no-legend|--plain":
+                  {"rc": 0, "out": ""}})  # every target inactive
+    _r, unit_check = _doctor_units_result(sd, monkeypatch)
+    assert unit_check.status == "fail"
+    assert "grid-down-term.service" in unit_check.detail
+    assert "outliving" in unit_check.detail
+
+
+def test_doctor_units_bound_target_running_is_clean(sd, monkeypatch):
+    install_units(_sup(sd))
+    _respond(sd, {"list-units|--all|grid-down-*.service|--no-legend|--plain":
+                  {"rc": 0, "out": _units_row("grid-down-term.service") + "\n"},
+                  "list-units|--all|grid-down-*.target|--no-legend|--plain":
+                  {"rc": 0, "out": _units_row("grid-down-wb.target") + "\n"}})
+    _r, unit_check = _doctor_units_result(sd, monkeypatch)
+    assert unit_check.status == "ok"
+    assert "runtime clean" in unit_check.detail
 
 
 

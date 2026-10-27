@@ -35,7 +35,7 @@ from gui.workers import SnapshotWorker  # noqa: E402
 
 def _snap() -> dict:
     return {
-        "version": "0.5.0-m4a",
+        "version": "0.5.0-m4",
         "profile": {"path": "/etc/grid-down/profiles/default.yaml", "id": "default",
                     "callsign": "W1AW", "grid": "FN31pr"},
         "rig": {"argv": ["rigctld", "-T", "127.0.0.1", "-t", "4532", "-v", "-m", "1"],
@@ -146,7 +146,7 @@ def test_main_window_builds_with_placeholders(qtbot):
     assert win.windowTitle().startswith("Grid Down")
     assert win.nav.count() == 5
     win.dashboard.set_snapshot(_snap())
-    assert win.dashboard.header_labels["Version"].text() == "0.5.0-m4a"
+    assert win.dashboard.header_labels["Version"].text() == "0.5.0-m4"
 
 
 def test_bundles_tiles_counts_and_cancel(qtbot):

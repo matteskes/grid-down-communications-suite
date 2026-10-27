@@ -8,13 +8,15 @@ bundles (docs/SPECIFICATION.md §6.3/§6.5):
     <user_unit_dir>/grid-down-<app>.service     one per supervisable app
     <user_unit_dir>/grid-down-<bundle>.target   one per bundle
 
-Semantics are spec-literal: every service carries ``BindsTo=`` + ``After=``
-on each bundle target that contains it, so stopping a target stops (ordered)
-its members. Apps in several bundles are bound to all of them — stopping any
-one target stops the shared app, which matches the direct backend's
-stop_bundle behavior. ``hamlib`` (rigctld) is the suite-owned singleton
-(§6.4): it is bound to *no* target and stays reference-counted by the shared
-Supervisor logic. ``gd units install`` renders the whole set; Systemd is the
+Semantics are spec-literal: every service carries ``BindsTo=`` on each bundle
+target that contains it, so stopping a target stops its members (ordered).
+Ordering is deliberately one-directional — the target is ``After=`` its
+members (Wants+After); the service must NOT be ``After=`` its target or the
+pair forms an ordering cycle (`systemd-analyze verify` rejects it). Apps in
+several bundles are bound to all of them — stopping any one target stops the
+shared app, which matches the direct backend's stop_bundle behavior.
+``hamlib`` (rigctld) is the suite-owned singleton (§6.4): it is bound to
+*no* target and stays reference-counted by the shared Supervisor logic. ``gd units install`` renders the whole set; Systemd is the
 source of truth at runtime — this backend writes no supervisor.json entries.
 
 wine-hub apps (Phase 3) and cli-tool apps get no units, exactly as the direct
@@ -87,6 +89,14 @@ def target_members(members: list, apps: dict) -> list[str]:
             if apps.get(m, {}).get("launch", {}).get("via") not in SKIP_VIAS]
 
 
+def service_bound_targets(app_id: str, bundles: dict) -> list[str]:
+    """Target units a service is bound to (hamlib: none — singleton, §6.4).
+    Single source of truth for rendering and Doctor's outliving check."""
+    if app_id == RIG_ID:
+        return []
+    return [target_name(name) for name in bundles_for(app_id, bundles)]
+
+
 # --------------------------------------------------------- unit rendering
 def service_unit_text(app: dict, bundles: dict, state_dir: Path, argv: list) -> str:
     """Render one app service. `argv` is the resolved launch command (the
@@ -96,9 +106,11 @@ def service_unit_text(app: dict, bundles: dict, state_dir: Path, argv: list) -> 
     log = Path(state_dir) / "logs" / f"{app_id}.log"
     lines = ["[Unit]",
              f"Description=Grid Down — {app.get('name') or app_id}"]
-    if app_id != RIG_ID:  # hamlib: unbound singleton (§6.4) — reference-counted
-        for name in bundles_for(app_id, bundles):
-            lines += [f"BindsTo={target_name(name)}", f"After={target_name(name)}"]
+    # BindsTo only: stop propagation from each containing target. No After= on
+    # this side — the target is already After= its members; the reverse edge
+    # would be an ordering cycle (systemd-analyze verify rejects those).
+    for bound in service_bound_targets(app_id, bundles):
+        lines.append(f"BindsTo={bound}")
     lines += ["",
               "[Service]",
               "Type=simple",
@@ -292,6 +304,34 @@ def resolve_backend(profile: dict | None = None, flag: str | None = None) -> str
     return "systemd" if (ok and installed_unit_paths()) else "direct"
 
 
+# ------------------------------------------------------- runtime queries
+def query_unit_states(unit_glob: str) -> dict[str, str]:
+    """unit name -> running | failed | - (one `list-units --all` call).
+    Works for any grid-down glob: services or targets."""
+    try:
+        res = _run("list-units", "--all", unit_glob, "--no-legend", "--plain")
+    except SystemdError as exc:
+        raise SupervisorError(str(exc)) from None
+    states: dict[str, str] = {}
+    for line in res.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        active = parts[2]
+        if active in ("active", "activating", "reloading"):
+            states[parts[0]] = "running"
+        elif active == "failed":
+            states[parts[0]] = "failed"
+        else:
+            states[parts[0]] = "-"
+    return states
+
+
+def query_target_states() -> dict[str, str]:
+    """bundle target name -> running | failed | - ."""
+    return query_unit_states(f"{UNIT_PREFIX}*.target")
+
+
 class SystemdSupervisor(Supervisor):
     """systemd user-unit backend behind the unchanged Supervisor API (§6.5).
 
@@ -310,26 +350,12 @@ class SystemdSupervisor(Supervisor):
     # -- queries ---------------------------------------------------------
     def _unit_states(self) -> dict[str, str]:
         """app_id -> running | failed | - (one list-units call)."""
-        try:
-            res = _run("list-units", "--all", f"{UNIT_PREFIX}*.service",
-                       "--no-legend", "--plain")
-        except SystemdError as exc:
-            raise SupervisorError(str(exc)) from None
+        raw = query_unit_states(f"{UNIT_PREFIX}*.service")
         states: dict[str, str] = {}
-        for line in res.stdout.splitlines():
-            parts = line.split()
-            if len(parts) < 4:
-                continue
-            app_id = app_id_from_unit(parts[0])
-            if app_id is None:
-                continue
-            active = parts[2]
-            if active in ("active", "activating", "reloading"):
-                states[app_id] = "running"
-            elif active == "failed":
-                states[app_id] = "failed"
-            else:
-                states[app_id] = "-"
+        for unit, s in raw.items():
+            app_id = app_id_from_unit(unit)
+            if app_id:
+                states[app_id] = s
         return states
 
     def _state_of(self, app_id: str) -> str:

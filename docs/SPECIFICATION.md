@@ -181,8 +181,29 @@ refused with operator guidance. **M2 (2026-10-26):** rigctld flags are built fro
 note when `rig.model` is empty; non-numeric ids refused); launch-cmd `<placeholders>` resolve
 through `audio.presets` (§6.4 M2 note) and are refused naming the exact profile key when
 unresolved. The systemd user-unit backend above (bundle targets + `BindsTo`)
-remains the Phase 2 completion target for the GUI; `Supervisor` is the backend-neutral API both
+is now landed; `Supervisor` remains the backend-neutral API both
 frontends share.
+>
+> **M4 note (2026-10-27):** the backend landed as `control/core/systemd.py`
+> (`SystemdSupervisor(Supervisor)`, 0.5.0-m4) — this section's Phase 2
+> completion target. `gd units install` renders the whole set:
+> `grid-down-<app>.service` per supervisable app and `grid-down-<bundle>.target`
+> per bundle. Services carry `BindsTo=` on each containing target (stop
+> propagation; apps in several bundles are bound to all of them, preserving
+> today's `stop_bundle` semantics). Ordering is one-directional — the target
+> is `Wants=`+`After=` its members; the reverse edge would be an ordering
+> cycle (`systemd-analyze verify` rejects those — found and fixed during the
+> container proof). `hamlib` renders unbound (suite-owned singleton, §6.4);
+> wine-hub and cli-tool apps get no units, matching the direct backend's
+> refusals. systemd is instance truth in that mode — no supervisor.json
+> instance writes. `--backend {auto,direct,systemd}` on `gd launch/stop/status`
+> and the `supervisor.backend` profile key (§4) select the backend; `auto` =
+> systemd only when a user bus is reachable and units are installed. Doctor
+> (§6.7) grew the unit check: WARN on drift vs a fresh render, FAIL on a
+> service outliving every bound target. Container proof:
+> `tools/systemd-analyze-verify.sh` (fedora:45, systemd 262, rc=0 — see
+> `docs/audit/f45-package-audit.md`). Real `systemctl --user` acceptance is
+> the P2 Fedora GUI-VM pass (§10).
 
 ### 6.6 Local services & ports
 

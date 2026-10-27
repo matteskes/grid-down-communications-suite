@@ -16,4 +16,4 @@ read VERSION even when PySide6 is missing, to render a helpful error.
 
 # Keep in sync with VERSION in control/cli/gd.py until a shared version
 # module lands (deliberate duplication; both bump together per milestone).
-VERSION = "0.5.0-m4a"
+VERSION = "0.5.0-m4"

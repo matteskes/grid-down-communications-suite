@@ -156,3 +156,26 @@ gd 0.4.0-m3
   package. Same-family note: flwrap remains genuinely absent (no Provides found) — build stands.
   Details: `docs/audit/third-party-licenses.md` (Flags #4).
 - Full license inventory for every catalog app: `docs/audit/third-party-licenses.md`.
+
+## M4 systemd unit verify (2026-10-27)
+
+`tools/systemd-analyze-verify.sh` renders the current registry with
+`gd units install` (on the dev box: 2 services + 9 targets; 29 unresolved
+apps get no unit by design, 10 wine-hub/cli-tool skipped) and runs
+`systemd-analyze verify` inside fedora:45 — systemd **262.1-1.fc45**:
+
+```
+verify platform: linux/arm64
+stubbed /usr/bin/rigctld (for verify)
+stubbed /usr/bin/java (for verify)
+systemd-analyze verify rc=0
+```
+
+Environment notes (both are tool concerns, not unit defects):
+- Under amd64-on-Rosetta, verify's ExecStart probe returns EINVAL for every
+  command, including stock `/usr/bin/true` (fexecve quirk). The tool picks
+  the native arch (`uname -m`); the systemd version is identical either way.
+- The first verify run caught a real unit-design bug: a service `After=` its
+  target while the target `After=` its members is an unfixable ordering
+  cycle. The renderer now emits `BindsTo=` only on the service side —
+  ordering stays one-directional (target `Wants=`+`After=` members).
