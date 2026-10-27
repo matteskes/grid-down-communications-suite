@@ -196,6 +196,19 @@ def test_main_window_builds_with_placeholders(qtbot):
     assert win.dashboard.header_labels["Version"].text() == "0.5.0-m4"
 
 
+def test_main_window_snapshot_fans_out_to_all_pages(qtbot):
+    """P2 VM-pass regression: the live window only ever fed the Dashboard,
+    leaving Bundles/Catalog/Doctor/Profile empty outside --selfcheck. The
+    window's set_snapshot must reach every page."""
+    win = MainWindow(_fake_services(), autostart=False)
+    qtbot.addWidget(win)
+    win.set_snapshot(_snap())
+    assert set(win.bundles._tiles) == {"js8", "packet", "winlink"}
+    assert win.catalog.model.rowCount() > 0
+    assert win.doctor.summary_label.text() != "no snapshot yet"
+    assert win.profiles.text.toPlainText()
+
+
 def test_bundles_tiles_counts_and_cancel(qtbot):
     view = BundlesView(_fake_services())
     qtbot.addWidget(view)
