@@ -43,6 +43,7 @@ class MainWindow(QMainWindow):
         stack.addWidget(self.doctor)  # Doctor (M3b)
         stack.addWidget(self.profiles)  # Profile (M3c)
         self.bundles.changed.connect(self.refresh)
+        self.profiles.changed.connect(self.refresh)
 
         self.nav = QListWidget(self)
         for name in PAGES:

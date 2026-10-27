@@ -45,6 +45,7 @@ class Services:
     bundle_stop: Callable[[str], dict]
     audio_up: Callable[[], dict]
     audio_down: Callable[[], dict]
+    rig_save: Callable[[str, str, str], dict]
 
 
 def default_services(root: Path | None = None) -> Services:
@@ -115,6 +116,7 @@ def default_services(root: Path | None = None) -> Services:
         bundle_stop=_bundle_stop,
         audio_up=_audio_up,
         audio_down=_audio_down,
+        rig_save=profile.save_rig,
     )
 
 

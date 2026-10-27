@@ -117,6 +117,11 @@ def _fake_services() -> Services:
             "skipped": ["grid_down_hf_in"],
         },
         audio_down=lambda: {"unloaded": ["grid_down_hf_out"]},
+        rig_save=lambda m, p, b: {
+            "path": "/home/u/.config/grid-down/profiles/default.yaml",
+            "created": True,
+            "rig": {"model": m, "path": p, "baud": b or ""},
+        },
     )
 
 
@@ -138,6 +143,7 @@ def _spy_services(base: Services, **over) -> Services:
             "bundle_stop",
             "audio_up",
             "audio_down",
+            "rig_save",
         )
     }
     fields.update(over)
@@ -341,3 +347,47 @@ def test_doctor_copy_json(qtbot):
     view.set_snapshot(snap)
     checks = json.loads(view.copy_json())["checks"]
     assert checks[0]["id"] == "ports" and checks[0]["status"] == "fail"
+
+
+def test_profiles_form_prefills_and_saves(qtbot):
+    calls = []
+    services = _spy_services(
+        _fake_services(),
+        rig_save=lambda m, p, b: (
+            calls.append((m, p, b)),
+            {
+                "path": "/home/u/.config/grid-down/profiles/default.yaml",
+                "created": False,
+                "rig": {},
+            },
+        )[1],
+    )
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    assert view.model_edit.text() == "3073"
+    assert view.path_edit.text() == "/dev/ttyUSB0"
+    assert view.baud_edit.text() == "38400"
+    qtbot.keyClicks(view.path_edit, "1")  # user edit -> dirty -> survives prefill
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.save_btn.click()
+    assert calls == [("3073", "/dev/ttyUSB01", "38400")]
+    assert "rig updated:" in view.save_status.text()
+    snap = _snap()
+    snap["rig"]["path"] = "/dev/ttyUSB9"
+    view.set_snapshot(snap)
+    assert view.path_edit.text() == "/dev/ttyUSB01"  # dirty field untouched
+
+
+def test_profiles_save_failure_surfaces(qtbot):
+    def boom(m, p, b):
+        raise RuntimeError("bad rig model")
+
+    services = _spy_services(_fake_services(), rig_save=boom)
+    view = ProfilesView(services)
+    qtbot.addWidget(view)
+    view.set_snapshot(_snap())
+    with qtbot.waitSignal(view.changed, timeout=5000):
+        view.save_btn.click()
+    assert "FAILED" in view.save_status.text()
+    assert "bad rig model" in view.save_status.text()
