@@ -8,7 +8,7 @@ designed to be **built online, installed offline, and run fully offline**.
 
 - Full design and scope: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) (v0.3)
 - Fedora 45 package audit: [`docs/audit/f45-package-audit.md`](docs/audit/f45-package-audit.md)
-- Status: **Phase 2, M4 v1 (0.5.0-m4) — systemd user-unit backend landed (CLI + Doctor unit check); P2 code-complete, GUI-VM acceptance pending**
+- Status: **Phase 2 accepted — v0.5.0-m4 on a real Fedora 45 aarch64 VM (GNOME/Wayland): doctor fail=0, systemd `BindsTo=` stop propagation, Control Center bundle start/stop** — evidence: `docs/audit/phase2-vm-acceptance.md`
 
 ## Why
 

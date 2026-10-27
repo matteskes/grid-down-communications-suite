@@ -100,7 +100,9 @@ class BundlesView(QWidget):
             self.notes.appendPlainText(f"cancelled: {verb.lower()} {name}")
             return
         self._busy = True
-        self.notes.appendPlainText(f"{verb.lower()}ing {name}…")
+        self.notes.appendPlainText(
+            f"stopping {name}…" if verb == "Stop" else f"{verb.lower()}ing {name}…"
+        )
         svc = self.services
         fn = (lambda: svc.bundle_start(name)) if start else (lambda: svc.bundle_stop(name))
         worker = SnapshotWorker(fn, parent=self)

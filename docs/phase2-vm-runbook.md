@@ -30,7 +30,9 @@ Three facts shape the steps below:
 3. Runtime Python deps come from the distro while still online:
    `python3-pyside6` (GUI, audited available — `docs/audit/f45-package-audit.md`
    § *GUI dependency check*), `python3-pyyaml` (registry/profile loading), and
-   `pipewire-pulse` (provides `pactl`, which `core/audio.py` drives).
+   `pipewire-pulseaudio` (provides `pactl`, which `core/audio.py` drives; the
+   dnf package name is `pipewire-pulseaudio` — `pipewire-pulse` alone does not
+   resolve on F45).
 
 ## 1. Build the kit (on the Mac, network on)
 
@@ -65,7 +67,7 @@ distro GUI/audio lane — dnf cannot install these after the NIC goes down:
 
 ```sh
 sudo dnf -y update && sudo reboot                        # while online
-sudo dnf install -y python3-pyside6 python3-pyyaml pipewire-pulse
+sudo dnf install -y python3-pyside6 python3-pyyaml pipewire-pulseaudio
 python3 -c 'import PySide6, yaml; print("gui lane ok")'  # sanity
 sudo nmcli networking off                                # or detach the NIC
 ```
@@ -97,7 +99,10 @@ gd launch fldigi --backend direct            # "running: fldigi (pid …) — lo
 gd status            # "1 running, 0 stale (backend: direct)"
 gd stop fldigi --backend direct
 gd launch packet     # partial start BY DESIGN: hamlib + direwolf up;
-                     # qttermtcp/paracon/chattervox skipped with notes (not in kit)
+                     # the first missing member (qttermtcp) errors the launch
+                     # ("executable not found") and later members are not
+                     # attempted — the systemd lane (§6) reports per-member
+                     # skips/unresolved instead
 ```
 
 Doctor expectations: **fail=0 is the gate.** Warns are VM-hardware dependent
@@ -112,7 +117,11 @@ the evidence doc.
 gd units install
 ```
 
-Expected (5 kit apps resolve; targets always render for all 9 bundles):
+Expected (every app whose launcher resolves gets a service; targets always
+render for all 9 bundles). On the reference aarch64 VM that was **8 services
++ 9 targets**: the 5 kit apps plus `flarq` (rides the fldigi RPM),
+`snapshot` (ships with Fedora Workstation) and `yaac` (its `java` launcher
+resolves — starting its unit fails until the jar exists, so leave it alone):
 
 ```text
 unit dir:   /home/<user>/.config/systemd/user

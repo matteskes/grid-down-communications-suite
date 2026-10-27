@@ -76,7 +76,7 @@ audio:
   backend: pipewire
   rig_capture: ""           # physical rig capture source name (loopback wiring: Phase 3)
   presets:                  # per-app launch-cmd placeholders, see §6.6/§6.4 M2 note
-    ardop: { capture: grid_down_hf_out, playback: grid_down_hf_in }
+    ardop: { capture: grid_down_hf_out.monitor, playback: grid_down_hf_in }
 supervisor: { backend: auto }   # direct | systemd | auto (§6.5; systemd first: `gd units install`)
 internet: { present: false }   # air-gap master switch
 winlink:

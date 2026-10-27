@@ -19,7 +19,7 @@ audio:
   rig_capture: ""     # physical rig capture source name; loopback wiring = Phase 3 adapters
   presets:            # per-app <placeholder> launch args; override defaults in control/core/audio.py
     ardop:
-      capture: grid_down_hf_out
+      capture: grid_down_hf_out.monitor   # live monitor of the owned 'out' endpoint
       playback: grid_down_hf_in
 
 supervisor:
