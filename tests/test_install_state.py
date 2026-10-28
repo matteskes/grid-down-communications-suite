@@ -107,14 +107,19 @@ def test_static_docroot_probe(tmp_path):
     }
 
 
-def test_wine_probe_follows_prefix_presence(tmp_path, monkeypatch):
+def test_wine_probe_follows_prefix_then_per_app_exe(tmp_path, monkeypatch):
     monkeypatch.setattr(winehub, "WINE_PREFIX", tmp_path / "prefix")
     out = install_state.app_states(APPS)
     assert out["vara-hf"]["state"] == "missing"
     (tmp_path / "prefix").mkdir()
     out = install_state.app_states(APPS)
     assert out["vara-hf"]["state"] == "prefix"
-    assert "Phase 3" in out["vara-hf"]["detail"]
+    assert "gd winehub install vara-hf" in out["vara-hf"]["detail"]
+    exe = tmp_path / "prefix" / "drive_c" / "VARA" / "VARA.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_bytes(b"MZ")
+    out = install_state.app_states(APPS)
+    assert out["vara-hf"] == {"state": "installed", "detail": str(exe)}
 
 
 def test_unknown_strategy_and_prose_cmds(tmp_path):

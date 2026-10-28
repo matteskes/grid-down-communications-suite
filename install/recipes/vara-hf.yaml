@@ -5,6 +5,7 @@ recipe:
   strategy: wine
   wine:
     prefix: /opt/grid-down/wine-prefix
-    installer: kit-import/PIN-ME.exe   # user-supplied, never redistributed (G6)
-    license: user-supplied
+    installer_glob: "VARA HF*"   # user-supplied .zip/.exe staged in install/kit-import/ (G6)
+    exes: [VARA.exe]   # candidate basenames probed under <prefix>/drive_c
+    license: user-supplied   # applied in-app by the operator; unregistered works (trial delay)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

@@ -68,7 +68,8 @@ python3 control/cli/gd.py gui                # Control Center GUI (§7, M3+M5: t
 python3 control/cli/gd.py status             # supervisor instances
 python3 control/cli/gd.py launch <app|bundle>   # e.g. launch winlink (rigctld auto-starts)
 python3 control/cli/gd.py stop <app|bundle|all> # reverse order; rigctld stopped last
-python3 control/cli/gd.py winehub status     # VARA wine hub (§6.4 M5)
+python3 control/cli/gd.py winehub status     # VARA wine hub (§6.4): install probes + COM map
+python3 control/cli/gd.py winehub install vara-hf # silent-install a kit-import/ .exe/.zip (G6; + init)
 python3 control/cli/gd.py winehub start vara-hf # + stop / map <n> <device> / unmap <n>
 sh tools/install-launcher.sh                 # user-local GUI launcher + icon (M5)
 

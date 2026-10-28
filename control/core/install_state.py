@@ -11,8 +11,10 @@ signals (no root, no network):
   pip-vendored       installed (detail = resolved path) | missing
 - static             <app_root>/<id> docroot present (supervisor
                      convention, §6.6) | missing
-- wine               shared prefix present → ``prefix`` (per-app exe
-                     probes are Phase 3); prefix absent → missing
+- wine               shared prefix + candidate-exe probe (recipe
+                     ``wine.exes`` first, launch.cmd's token last):
+                     installed | prefix (prefix present, app not
+                     installed yet) | missing (no prefix)
 - anything else      ``unknown`` (prose cmds, no recognizable signal)
 
 ``rpm`` missing or too slow ⇒ ``unknown`` with the reason — this module
@@ -171,12 +173,21 @@ def _probe(
         }
     if strategy == "wine":
         if winehub.WINE_PREFIX.is_dir():
+            try:
+                names = winehub.candidate_exes(app)
+            except winehub.WinehubError:  # no .exe in launch.cmd and no recipe
+                names = []
+            for name in names:
+                hits = winehub.find_exe(winehub.WINE_PREFIX, name)
+                if hits:
+                    return {"state": "installed", "detail": str(hits[0])}
+            want = ", ".join(names) if names else "any .exe"
             return {
                 "state": "prefix",
-                "detail": f"shared prefix {winehub.WINE_PREFIX} (per-app probes: Phase 3)",
+                "detail": f"prefix present, not installed yet ({want}) — gd winehub install {app_id}",
             }
         return {
             "state": "missing",
-            "detail": f"prefix {winehub.WINE_PREFIX} absent (kit postinst creates it)",
+            "detail": f"prefix {winehub.WINE_PREFIX} absent (gd winehub init, or kit postinst)",
         }
     return {"state": "unknown", "detail": f"strategy {strategy!r} has no local probe"}

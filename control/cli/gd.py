@@ -13,8 +13,10 @@ core/doctor with this CLI in-process. M4a adds the systemd user-unit backend
 `gd units` manages the unit set; the Supervisor API stays backend-neutral.
 M5 adds the wine hub (`gd winehub`, core/winehub.py: status/start/stop/COM
 map over the shared VARA prefix) and install-state probes
-(`gd apps list --state`, core/install_state.py). Later phases add the
-remaining config apply (adapters) and per-app install recipes.
+(`gd apps list --state`, core/install_state.py). P3 extends the wine hub
+with `init` (wineboot prefix, dev path) and `install` (silent install of
+the user-supplied kit-import/ artifact + per-app install probes). Later
+phases add the remaining config apply (adapters).
 """
 
 from __future__ import annotations
@@ -377,7 +379,33 @@ def cmd_winehub(args) -> int:
             print("apps:   (no wine-hub apps registered)")
         for a in st["apps"]:
             mark = f"running (pid {a['pid']})" if a["running"] else "stopped"
-            print(f"app:    {a['id']:<16} {mark}  [{a['exe'] or 'no .exe in launch.cmd'}]")
+            if not a["exe"]:
+                detail = "no .exe in launch.cmd"
+            elif a["installed"]:
+                detail = f"{a['exe']} installed: {a['exe_path']}"
+            else:
+                detail = f"{a['exe']} not installed (gd winehub install {a['id']})"
+            print(f"app:    {a['id']:<16} {mark}  [{detail}]")
+        return 0
+    if action == "init":
+        out = hub.init_prefix()
+        if args.json:
+            print(json.dumps(out, indent=2))
+            return 0
+        tail = f"  log: {out['log']}" if out.get("log") else ""
+        print(f"prefix: {out['state']} ({out['prefix']}){tail}")
+        return 0
+    if action == "install":
+        out = hub.install(args.app, args.installer)
+        if args.json:
+            print(json.dumps(out, indent=2))
+            return 0
+        line = f"install: {out['id']}  {out['state']}"
+        if out.get("exe_path"):
+            line += f"  exe: {out['exe_path']}"
+        if out.get("log"):
+            line += f"  log: {out['log']}"
+        print(line)
         return 0
     if action == "map":
         out = hub.map_serial(f"com{args.com}", args.device)
@@ -480,6 +508,26 @@ def main(argv: list[str] | None = None) -> int:
     p_wh_s = p_wh_sub.add_parser("status", help="prefix, wine binary, COM map, running apps")
     p_wh_s.add_argument("--json", action="store_true", help="machine-readable report")
     p_wh_s.set_defaults(func=cmd_winehub)
+    p_wh_i = p_wh_sub.add_parser(
+        "init",
+        help="create the shared prefix (wineboot -i; dev path — the kit postinst unpacks the tarball)",
+    )
+    p_wh_i.add_argument("--json", action="store_true")
+    p_wh_i.set_defaults(func=cmd_winehub)
+    p_wh_n = p_wh_sub.add_parser(
+        "install",
+        help="silent-install a user-supplied VARA installer into the prefix (kit-import/ or explicit path)",
+    )
+    p_wh_n.add_argument(
+        "app", help="wine-hub app id (vara-hf, vara-fm, vara-sat, vara-chat, vara-term, varac)"
+    )
+    p_wh_n.add_argument(
+        "installer",
+        nargs="?",
+        help=".exe/.zip path; default: the single kit-import/ match of the recipe's installer_glob",
+    )
+    p_wh_n.add_argument("--json", action="store_true")
+    p_wh_n.set_defaults(func=cmd_winehub)
     p_wh_x = p_wh_sub.add_parser("start", help="start a wine-hub app (VARA family)")
     p_wh_x.add_argument("app", help="wine-hub app id (see: gd apps list)")
     p_wh_x.set_defaults(func=cmd_winehub)

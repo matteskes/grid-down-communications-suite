@@ -166,8 +166,15 @@ Phase 3 adapter work; `gd audio plan` prints the intended graph either way.
   status = prefix + wine binary + `dosdevices/comN` map + running pids (`<state>/winehub.json`);
   start/stop = detached `wine <exe>` with `WINEPREFIX` set, SIGTERM→SIGKILL teardown and
   stale-pid cleanup; COM mapping = validated com1–com32 symlinks. Every verb refuses cleanly
-  when the prefix or wine is missing. Phase 3 adds VARA end-to-end: per-app install probes,
-  licenses, and a real on-air session (§10).
+  when the prefix or wine is missing. **P3 adds install:** `gd winehub init` (`wineboot -i`,
+  the dev path — the kit postinst still unpacks the cached tarball) and `gd winehub install
+  <app>`: the user-supplied `install/kit-import/` artifact (.exe, or the .zip wrapping it)
+  runs in place with Inno `/VERYSILENT` switches, then the per-app probe decides success
+  (recipe `wine.exes` candidates walked under `<prefix>/drive_c`; `status` and the install
+  state columns report `installed`/`prefix`/`missing`). Licenses stay operator-applied
+  in-app (G6): registration is per program, and unregistered installs are fully functional
+  with VARA's trial delay — enough for the P3 acceptance path. Remaining P3: VARA.ini/
+  native-path config adapters, audio loopback wiring, and the on-air end-to-end (§10).
 
 ### 6.5 Supervisor & services
 

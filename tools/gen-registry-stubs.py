@@ -179,6 +179,18 @@ DNF_REPO = {
     "ffmpeg": "rpmfusion-free",  # RPM Fusion build; enablement via pinned release RPMs
 }
 
+# Wine apps: installer_glob matched case-insensitively against install/kit-import/;
+# exes are the candidate basenames probed under <prefix>/drive_c after install
+# (upstream names drift across VARA versions, so candidates are listed in order).
+WINE_META = {
+    "vara-hf": ("VARA HF*", ["VARA.exe"]),
+    "vara-fm": ("VARA FM*", ["FM.exe", "VARAFM.exe"]),
+    "vara-sat": ("VARA SAT*", ["SAT.exe", "VARASAT.exe"]),
+    "vara-chat": ("VARA Chat*", ["Chat.exe", "VARACHAT.exe"]),
+    "vara-term": ("VARA Terminal*", ["Terminal.exe", "VARATERM.exe"]),
+    "varac": ("VarAC*", ["VarAC.exe"]),
+}
+
 
 def registry_yaml(app) -> str:
     (id_, name, cat, strat, pkgs, adapter, (via, cmd), tagline) = app
@@ -234,11 +246,13 @@ def recipe_yaml(app) -> str:
             "    build_container: fedora:45",
         ]
     elif strat == "wine":
+        glob_, exes = WINE_META.get(id_, ("PIN-ME*", ["PIN-ME.exe"]))
         lines += [
             "  wine:",
             "    prefix: /opt/grid-down/wine-prefix",
-            "    installer: kit-import/PIN-ME.exe   # user-supplied, never redistributed (G6)",
-            "    license: user-supplied",
+            f'    installer_glob: "{glob_}"   # user-supplied .zip/.exe staged in install/kit-import/ (G6)',
+            f"    exes: [{', '.join(exes)}]   # candidate basenames probed under <prefix>/drive_c",
+            "    license: user-supplied   # applied in-app by the operator; unregistered works (trial delay)",
         ]
     elif strat == "pip-vendored":
         lines += [

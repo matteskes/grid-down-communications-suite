@@ -12,6 +12,11 @@ install/bundle-builder/builds/out/
 *.tar.zst
 *.iso
 
+# User-supplied installers/licenses staged for the kit (G6) — local only, never committed.
+# The directory ships with its README alone; everything else lands here by hand.
+install/kit-import/*
+!install/kit-import/README.md
+
 # Local state
 *.state.json
 *.log
