@@ -11,6 +11,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "control"))
@@ -341,3 +342,110 @@ def test_install_refuses_non_wine_apps(hub, tmp_path, monkeypatch):
     _bind_path(tmp_path, monkeypatch, {"wine": 'exec "$@"'})
     with pytest.raises(WinehubError, match="not a wine-hub app"):
         hub.install("hamlib")
+
+
+# ------------------------------------------------- P3: portable installs (VarAC)
+
+# The real VarAC zip (v16.1.8, staged in kit-import/) is a portable bundle:
+# VarAC.exe + reference INIs + License.txt — no installer to run at all.
+_PORTABLE_RECIPE = {
+    "recipe": {
+        "id": "varac",
+        "strategy": "wine",
+        "wine": {
+            "prefix": "/opt/grid-down/wine-prefix",
+            "installer_glob": "VarAC*",
+            "exes": ["VarAC.exe"],
+            "installer": "portable",
+            "install_dir": "C:\\VarAC",
+        },
+    }
+}
+
+
+def _portable_hub(tmp_path: Path, wine_block: dict | None = None) -> WineHub:
+    recipes = tmp_path / "recipes"
+    recipes.mkdir(exist_ok=True)
+    recipe = json.loads(json.dumps(_PORTABLE_RECIPE))  # deep copy
+    if wine_block is not None:
+        recipe["recipe"]["wine"] = wine_block
+    (recipes / "varac.yaml").write_text(yaml.safe_dump(recipe))
+    return WineHub(
+        APPS, state_dir=tmp_path / "state", prefix=tmp_path / "prefix", recipes_dir=recipes
+    )
+
+
+def _portable_zip(tmp_path: Path) -> Path:
+    zp = tmp_path / "VarAC v16.1.8.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        zf.writestr("VarAC.exe", b"MZ")
+        zf.writestr("VarAC_cat_commands.ini", "[cat]\n")
+        zf.writestr("License.txt", "freeware")
+    return zp
+
+
+def test_install_portable_unpacks_without_wine(tmp_path):
+    hub = _portable_hub(tmp_path)
+    hub.prefix.mkdir()  # prefix exists, but wine is NOT on PATH (never bound)
+    out = hub.install("varac", _portable_zip(tmp_path))
+    assert out["state"] == "installed" and out["mode"] == "portable"
+    target = hub.prefix / "drive_c" / "VarAC"
+    assert (target / "VarAC.exe").is_file()
+    assert (target / "VarAC_cat_commands.ini").is_file()
+    assert (target / "License.txt").is_file()
+    assert out["exe_path"] == str(target / "VarAC.exe")
+    assert "portable unpack" in Path(out["log"]).read_text()
+    # idempotent: second run reports already-installed, no re-unpack
+    again = hub.install("varac", _portable_zip(tmp_path))
+    assert again["state"] == "already-installed"
+
+
+def test_install_portable_refuses_missing_prefix_and_install_dir(tmp_path):
+    hub = _portable_hub(tmp_path)
+    zp = _portable_zip(tmp_path)
+    with pytest.raises(WinehubError, match="not installed yet"):
+        hub.install("varac", zp)  # no prefix yet
+    block = dict(_PORTABLE_RECIPE["recipe"]["wine"])
+    block.pop("install_dir")
+    hub2 = _portable_hub(tmp_path, wine_block=block)
+    hub2.prefix.mkdir()
+    with pytest.raises(WinehubError, match="wine.install_dir"):
+        hub2.install("varac", zp)
+
+
+def test_install_portable_refuses_bad_install_dirs_and_bare_exes(tmp_path):
+    zp = _portable_zip(tmp_path)
+    bare = tmp_path / "VarAC.exe"
+    bare.write_bytes(b"MZ")
+
+    for install_dir, why in (
+        ("C:\\..\\evil", "escape drive_c"),
+        ("D:\\VarAC", "not a C:"),
+    ):
+        block = dict(_PORTABLE_RECIPE["recipe"]["wine"], install_dir=install_dir)
+        hub = _portable_hub(tmp_path, wine_block=block)
+        hub.prefix.mkdir(exist_ok=True)
+        with pytest.raises(WinehubError, match=why):
+            hub.install("varac", zp)
+    hub = _portable_hub(tmp_path)  # correct recipe, but a bare .exe has no zip to unpack
+    hub.prefix.mkdir(exist_ok=True)
+    with pytest.raises(WinehubError, match="needs the .zip"):
+        hub.install("varac", bare)
+
+
+def test_install_portable_zip_without_exe_is_refused(tmp_path):
+    hub = _portable_hub(tmp_path)
+    hub.prefix.mkdir()
+    zp = tmp_path / "VarAC v16.1.8.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        zf.writestr("readme.txt", "no exe here")
+    with pytest.raises(WinehubError, match="holds no .exe"):
+        hub.install("varac", zp)
+
+
+def test_install_refuses_unknown_recipe_installer_mode(tmp_path):
+    block = dict(_PORTABLE_RECIPE["recipe"]["wine"], installer="nonsense")
+    hub = _portable_hub(tmp_path, wine_block=block)
+    hub.prefix.mkdir()
+    with pytest.raises(WinehubError, match="not setup\\|portable"):
+        hub.install("varac", _portable_zip(tmp_path))

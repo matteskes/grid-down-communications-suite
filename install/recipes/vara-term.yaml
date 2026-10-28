@@ -7,5 +7,6 @@ recipe:
     prefix: /opt/grid-down/wine-prefix
     installer_glob: "VARA Terminal*"   # user-supplied .zip/.exe staged in install/kit-import/ (G6)
     exes: [Terminal.exe, VARATERM.exe]   # candidate basenames probed under <prefix>/drive_c
+    ini_set: []           # config keys the vara-ini adapter may write (§6.2); pinned at live E2E
     license: user-supplied   # applied in-app by the operator; unregistered works (trial delay)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

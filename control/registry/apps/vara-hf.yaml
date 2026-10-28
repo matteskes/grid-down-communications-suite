@@ -14,5 +14,5 @@ launch:
   cmd: "VARA.exe (via gd winehub)"
 config:
   adapter: vara-ini
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
+  native_path: INI beside the installed exe   # resolved by the vara-ini adapter via core/winehub (Phase 3)
 state: stub

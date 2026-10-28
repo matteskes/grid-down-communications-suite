@@ -173,8 +173,21 @@ Phase 3 adapter work; `gd audio plan` prints the intended graph either way.
   (recipe `wine.exes` candidates walked under `<prefix>/drive_c`; `status` and the install
   state columns report `installed`/`prefix`/`missing`). Licenses stay operator-applied
   in-app (G6): registration is per program, and unregistered installs are fully functional
-  with VARA's trial delay — enough for the P3 acceptance path. Remaining P3: VARA.ini/
-  native-path config adapters, audio loopback wiring, and the on-air end-to-end (§10).
+  with VARA's trial delay — enough for the P3 acceptance path. **P3 progress:**
+  the real installers are staged (`kit-import/` carries VARA HF v4.9.0, FM v4.4.0
+  and the portable VarAC v16.1.8 zip from their official sources, sha256s in its
+  README; SAT/Chat/Term stay operator-supplied) — which surfaced that VarAC ships
+  no installer at all, so recipes now declare `wine.installer: setup|portable`
+  (portable = unpacked into `wine.install_dir`, never run). And the first config
+  adapters landed (`core/adapters`, §6.2): `gd config show|apply <app>` reads and
+  applies the VARA family's exe-adjacent INIs inside the prefix — the path comes
+  from the install probe (no pinned path to drift), registration-shaped values
+  are masked in reads (G6), and writes are limited to the keys the recipe
+  declares (`wine.ini_set:`), with the mandatory timestamped backup, atomic
+  write and printed diff; the exact VARA.ini key names get pinned into those
+  recipes at the live E2E, same discipline as the `exes` candidates.
+  **Remaining P3:** audio loopback wiring (`audio.rig_capture`) and the on-air
+  end-to-end (§10).
 
 ### 6.5 Supervisor & services
 

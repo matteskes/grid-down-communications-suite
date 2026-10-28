@@ -23,143 +23,439 @@ REG_DIR = ROOT / "control" / "registry" / "apps"
 REC_DIR = ROOT / "install" / "recipes"
 
 CATEGORIES = {
-    "core", "hf", "winlink", "packet", "aprs", "voice_sstv",
-    "map_weather", "reference", "monitor", "mesh", "av",
+    "core",
+    "hf",
+    "winlink",
+    "packet",
+    "aprs",
+    "voice_sstv",
+    "map_weather",
+    "reference",
+    "monitor",
+    "mesh",
+    "av",
 }
 
 # id, name, category, strategy, packages/notes, adapter, launch (via, cmd), tagline
 APPS = [
     # --- core ---
-    ("hamlib", "Hamlib (rigctld)", "core", "dnf", ["hamlib", "python3-hamlib"],
-     "none", ("managed-service", "rigctld -T 127.0.0.1 -p 4532 -v"),
-     "Rig control daemon owned by the suite (localhost:4532)"),
+    (
+        "hamlib",
+        "Hamlib (rigctld)",
+        "core",
+        "dnf",
+        ["hamlib", "python3-hamlib"],
+        "none",
+        ("managed-service", "rigctld -T 127.0.0.1 -p 4532 -v"),
+        "Rig control daemon owned by the suite (localhost:4532)",
+    ),
     # --- winlink ---
-    ("direwolf", "Dire Wolf", "packet", "dnf", ["direwolf"],
-     "direwolf-conf", ("managed-service", "direwolf -c /etc/direwolf.conf -l /var/log/direwolf"),
-     "Softmodem TNC / APRS digipeater / KISS TCP 8001"),
-    ("ardop", "ARDOP TNC", "winlink", "build", [],
-     "ardop-cfg", ("managed-service", "ardopc 8515 <capture> <playback>"),
-     "ARDOP modem for Winlink HF sessions (pflarue/ardop)"),
-    ("pat", "Pat (Winlink client)", "winlink", "tarball", [],
-     "pat-conf", ("desktop-app", "pat"),
-     "Winlink webmail client; talks to VARA over the Wine hub"),
-    ("vara-hf", "VARA HF", "winlink", "wine", [],
-     "vara-ini", ("wine-hub", "VARA.exe (via gd winehub)"),
-     "VARA HF modem (user-supplied installer + license)"),
-    ("vara-fm", "VARA FM", "winlink", "wine", [],
-     "vara-ini", ("wine-hub", "VARA FM.exe (via gd winehub)"),
-     "VARA FM modem (user-supplied installer + license)"),
-    ("vara-sat", "VARA SAT", "winlink", "wine", [],
-     "vara-ini", ("wine-hub", "VARA SAT.exe (via gd winehub)"),
-     "VARA SAT modem (user-supplied installer + license)"),
-    ("vara-chat", "VARA Chat", "winlink", "wine", [],
-     "vara-ini", ("wine-hub", "VARA Chat.exe (via gd winehub)"),
-     "VARA Chat client (user-supplied installer + license)"),
-    ("varac", "VarAC", "winlink", "wine", [],
-     "varac-ini", ("wine-hub", "VarAC.exe (via gd winehub)"),
-     "VARA-based chat/QSO platform (user-supplied installer)"),
-    ("vara-term", "VARA Terminal", "winlink", "wine", [],
-     "vara-ini", ("wine-hub", "VARA Terminal.exe (via gd winehub)"),
-     "VARA terminal (user-supplied installer)"),
+    (
+        "direwolf",
+        "Dire Wolf",
+        "packet",
+        "dnf",
+        ["direwolf"],
+        "direwolf-conf",
+        ("managed-service", "direwolf -c /etc/direwolf.conf -l /var/log/direwolf"),
+        "Softmodem TNC / APRS digipeater / KISS TCP 8001",
+    ),
+    (
+        "ardop",
+        "ARDOP TNC",
+        "winlink",
+        "build",
+        [],
+        "ardop-cfg",
+        ("managed-service", "ardopc 8515 <capture> <playback>"),
+        "ARDOP modem for Winlink HF sessions (pflarue/ardop)",
+    ),
+    (
+        "pat",
+        "Pat (Winlink client)",
+        "winlink",
+        "tarball",
+        [],
+        "pat-conf",
+        ("desktop-app", "pat"),
+        "Winlink webmail client; talks to VARA over the Wine hub",
+    ),
+    (
+        "vara-hf",
+        "VARA HF",
+        "winlink",
+        "wine",
+        [],
+        "vara-ini",
+        ("wine-hub", "VARA.exe (via gd winehub)"),
+        "VARA HF modem (user-supplied installer + license)",
+    ),
+    (
+        "vara-fm",
+        "VARA FM",
+        "winlink",
+        "wine",
+        [],
+        "vara-ini",
+        ("wine-hub", "VARA FM.exe (via gd winehub)"),
+        "VARA FM modem (user-supplied installer + license)",
+    ),
+    (
+        "vara-sat",
+        "VARA SAT",
+        "winlink",
+        "wine",
+        [],
+        "vara-ini",
+        ("wine-hub", "VARA SAT.exe (via gd winehub)"),
+        "VARA SAT modem (user-supplied installer + license)",
+    ),
+    (
+        "vara-chat",
+        "VARA Chat",
+        "winlink",
+        "wine",
+        [],
+        "vara-ini",
+        ("wine-hub", "VARA Chat.exe (via gd winehub)"),
+        "VARA Chat client (user-supplied installer + license)",
+    ),
+    (
+        "varac",
+        "VarAC",
+        "winlink",
+        "wine",
+        [],
+        "varac-ini",
+        ("wine-hub", "VarAC.exe (via gd winehub)"),
+        "VARA-based chat/QSO platform (user-supplied installer)",
+    ),
+    (
+        "vara-term",
+        "VARA Terminal",
+        "winlink",
+        "wine",
+        [],
+        "vara-ini",
+        ("wine-hub", "VARA Terminal.exe (via gd winehub)"),
+        "VARA terminal (user-supplied installer)",
+    ),
     # --- hf ---
-    ("js8call", "JS8Call", "hf", "dnf", ["js8call"],
-     "js8call-ini", ("desktop-app", "js8call"),
-     "JS8 weak-signal messaging"),
-    ("fldigi", "fldigi", "hf", "dnf", ["fldigi"],
-     "fldigi-xmlrpc", ("desktop-app", "fldigi"),
-     "Digital modem suite (Olivia, PSK, RTTY, NBEMS)"),
-    ("flarq", "flarq", "hf", "dnf", ["fldigi"],
-     "flarq-xmlrpc", ("desktop-app", "flarq"),
-     "ARQ data modem companion to fldigi (shipped by the fldigi RPM — Provides: flarq)"),
-    ("flamp", "flamp", "hf", "dnf", ["flamp"],
-     "flamp-xmlrpc", ("desktop-app", "flamp"),
-     "Amateur Multicast Protocol — file broadcast for EMCOMM"),
-    ("flmsg", "flmsg", "hf", "dnf", ["flmsg"],
-     "flmsg-forms", ("desktop-app", "flmsg"),
-     "IARC/NBEMS standardized message forms"),
-    ("flwrap", "flwrap", "hf", "build", [],
-     "none", ("desktop-app", "/opt/grid-down/flwrap/bin/flwrap"),
-     "File encapsulator for fldigi transfers (no F45 package; pinned source build)"),
-    ("fllog", "fllog", "hf", "dnf", ["fllog"],
-     "fllog-xmlrpc", ("desktop-app", "fllog"),
-     "ADIF logging with fldigi integration"),
-    ("wsjtx", "WSJT-X", "hf", "dnf", ["wsjtx"],
-     "wsjtx-ini", ("desktop-app", "wsjtx"),
-     "FT8/JT65/WSPR modem suite"),
-    ("wsjtx-improved", "WSJT-X Improved (JTDX fork)", "hf", "build", [],
-     "wsjtx-ini", ("desktop-app", "/opt/grid-down/wsjtx-improved/bin/wsjtx"),
-     "Community-enhanced WSJT-X build, isolated prefix"),
-    ("qsstv", "QSSTV", "voice_sstv", "dnf", ["qsstv"],
-     "qsstv-conf", ("desktop-app", "qsstv"),
-     "SSTV send/receive"),
+    (
+        "js8call",
+        "JS8Call",
+        "hf",
+        "dnf",
+        ["js8call"],
+        "js8call-ini",
+        ("desktop-app", "js8call"),
+        "JS8 weak-signal messaging",
+    ),
+    (
+        "fldigi",
+        "fldigi",
+        "hf",
+        "dnf",
+        ["fldigi"],
+        "fldigi-xmlrpc",
+        ("desktop-app", "fldigi"),
+        "Digital modem suite (Olivia, PSK, RTTY, NBEMS)",
+    ),
+    (
+        "flarq",
+        "flarq",
+        "hf",
+        "dnf",
+        ["fldigi"],
+        "flarq-xmlrpc",
+        ("desktop-app", "flarq"),
+        "ARQ data modem companion to fldigi (shipped by the fldigi RPM — Provides: flarq)",
+    ),
+    (
+        "flamp",
+        "flamp",
+        "hf",
+        "dnf",
+        ["flamp"],
+        "flamp-xmlrpc",
+        ("desktop-app", "flamp"),
+        "Amateur Multicast Protocol — file broadcast for EMCOMM",
+    ),
+    (
+        "flmsg",
+        "flmsg",
+        "hf",
+        "dnf",
+        ["flmsg"],
+        "flmsg-forms",
+        ("desktop-app", "flmsg"),
+        "IARC/NBEMS standardized message forms",
+    ),
+    (
+        "flwrap",
+        "flwrap",
+        "hf",
+        "build",
+        [],
+        "none",
+        ("desktop-app", "/opt/grid-down/flwrap/bin/flwrap"),
+        "File encapsulator for fldigi transfers (no F45 package; pinned source build)",
+    ),
+    (
+        "fllog",
+        "fllog",
+        "hf",
+        "dnf",
+        ["fllog"],
+        "fllog-xmlrpc",
+        ("desktop-app", "fllog"),
+        "ADIF logging with fldigi integration",
+    ),
+    (
+        "wsjtx",
+        "WSJT-X",
+        "hf",
+        "dnf",
+        ["wsjtx"],
+        "wsjtx-ini",
+        ("desktop-app", "wsjtx"),
+        "FT8/JT65/WSPR modem suite",
+    ),
+    (
+        "wsjtx-improved",
+        "WSJT-X Improved (JTDX fork)",
+        "hf",
+        "build",
+        [],
+        "wsjtx-ini",
+        ("desktop-app", "/opt/grid-down/wsjtx-improved/bin/wsjtx"),
+        "Community-enhanced WSJT-X build, isolated prefix",
+    ),
+    (
+        "qsstv",
+        "QSSTV",
+        "voice_sstv",
+        "dnf",
+        ["qsstv"],
+        "qsstv-conf",
+        ("desktop-app", "qsstv"),
+        "SSTV send/receive",
+    ),
     # --- packet/aprs ---
-    ("qttermtcp", "QtTermTCP", "packet", "build", [],
-     "qttermtcp-cfg", ("desktop-app", "/opt/grid-down/qttermtcp/QtTermTCP"),
-     "Packet terminal for BPQ/AGW/KISS hosts (g8bpq)"),
-    ("paracon", "Paracon", "packet", "build", [],
-     "paracon-cfg", ("desktop-app", "/opt/grid-down/paracon/paracon"),
-     "Packet TNC terminal with file transfer (mfncooper)"),
-    ("chattervox", "ChatterVox", "packet", "tarball", [],
-     "chattervox-json", ("cli-tool", "chattervox"),
-     "100 baud ASTRO packet encryption/compression (brannondorsey)"),
-    ("yaac", "YAAC", "aprs", "tarball", [],
-     "yaac-prefs", ("desktop-app", "java -jar /opt/grid-down/yaac/YAAC.jar"),
-     "Yet Another APRS Client (Java)"),
+    (
+        "qttermtcp",
+        "QtTermTCP",
+        "packet",
+        "build",
+        [],
+        "qttermtcp-cfg",
+        ("desktop-app", "/opt/grid-down/qttermtcp/QtTermTCP"),
+        "Packet terminal for BPQ/AGW/KISS hosts (g8bpq)",
+    ),
+    (
+        "paracon",
+        "Paracon",
+        "packet",
+        "build",
+        [],
+        "paracon-cfg",
+        ("desktop-app", "/opt/grid-down/paracon/paracon"),
+        "Packet TNC terminal with file transfer (mfncooper)",
+    ),
+    (
+        "chattervox",
+        "ChatterVox",
+        "packet",
+        "tarball",
+        [],
+        "chattervox-json",
+        ("cli-tool", "chattervox"),
+        "100 baud ASTRO packet encryption/compression (brannondorsey)",
+    ),
+    (
+        "yaac",
+        "YAAC",
+        "aprs",
+        "tarball",
+        [],
+        "yaac-prefs",
+        ("desktop-app", "java -jar /opt/grid-down/yaac/YAAC.jar"),
+        "Yet Another APRS Client (Java)",
+    ),
     # --- monitor ---
-    ("js8spotter", "JS8Spotter", "monitor", "tarball", [],
-     "none", ("local-service", "php -S 127.0.0.1:8091 (served by suite)"),
-     "JS8 call-activity dashboard, served on localhost (DanDawson)"),
-    ("commstatone", "CommStat One", "monitor", "static", [],
-     "none", ("local-service", "python3 -m http.server 8090 (served by suite)"),
-     "EMCOMM station status web dashboard (W5DMH)"),
-    ("artemis", "Artemis", "monitor", "tarball", [],
-     "artemis-paths", ("desktop-app", "artemis"),
-     "RF signal ID: 580+ signal library, parametric filter (AresValley, GPL-3.0, v4.2)"),
-    ("gridtracker", "GridTracker", "monitor", "tarball", [],
-     "gridtracker-conf", ("desktop-app", "GridTracker"),
-     "WSJT-X traffic mapper / messaging grid"),
-    ("sdrpp", "SDR++", "monitor", "build", [],
-     "sdrpp-conf", ("desktop-app", "sdrpp"),
-     "SDR receiver (Airspy/HackRF/RTL — built from source, AlexandreRouma)"),
-    ("dump1090", "dump1090", "monitor", "build", ["rtl-sdr"],
-     "none", ("managed-service", "dump1090 --net --device-index 0"),
-     "ADS-B receiver via RTL-SDR"),
+    (
+        "js8spotter",
+        "JS8Spotter",
+        "monitor",
+        "tarball",
+        [],
+        "none",
+        ("local-service", "php -S 127.0.0.1:8091 (served by suite)"),
+        "JS8 call-activity dashboard, served on localhost (DanDawson)",
+    ),
+    (
+        "commstatone",
+        "CommStat One",
+        "monitor",
+        "static",
+        [],
+        "none",
+        ("local-service", "python3 -m http.server 8090 (served by suite)"),
+        "EMCOMM station status web dashboard (W5DMH)",
+    ),
+    (
+        "artemis",
+        "Artemis",
+        "monitor",
+        "tarball",
+        [],
+        "artemis-paths",
+        ("desktop-app", "artemis"),
+        "RF signal ID: 580+ signal library, parametric filter (AresValley, GPL-3.0, v4.2)",
+    ),
+    (
+        "gridtracker",
+        "GridTracker",
+        "monitor",
+        "tarball",
+        [],
+        "gridtracker-conf",
+        ("desktop-app", "GridTracker"),
+        "WSJT-X traffic mapper / messaging grid",
+    ),
+    (
+        "sdrpp",
+        "SDR++",
+        "monitor",
+        "build",
+        [],
+        "sdrpp-conf",
+        ("desktop-app", "sdrpp"),
+        "SDR receiver (Airspy/HackRF/RTL — built from source, AlexandreRouma)",
+    ),
+    (
+        "dump1090",
+        "dump1090",
+        "monitor",
+        "build",
+        ["rtl-sdr"],
+        "none",
+        ("managed-service", "dump1090 --net --device-index 0"),
+        "ADS-B receiver via RTL-SDR",
+    ),
     # --- reference / map / weather ---
-    ("kiwix", "Kiwix", "reference", "dnf", ["kiwix-desktop"],
-     "kiwix-library", ("desktop-app", "kiwix-desktop"),
-     "Offline ZIM library (Wikipedia med, ARRL docs, wikis)"),
-    ("osm-navit", "OSM offline navigation (Navit)", "map_weather", "build", [],
-     "navit-xml", ("desktop-app", "/opt/grid-down/navit/navit"),
-     "Offline OSM navigation (no F45 package; pinned source build)"),
-    ("xygrib", "XYGrib", "map_weather", "build", [],
-     "xygrib-conf", ("desktop-app", "/opt/grid-down/xygrib/xyGrib"),
-     "GRIB weather viewer (no F45 package; pinned source build, staged GRIBs)"),
+    (
+        "kiwix",
+        "Kiwix",
+        "reference",
+        "dnf",
+        ["kiwix-desktop"],
+        "kiwix-library",
+        ("desktop-app", "kiwix-desktop"),
+        "Offline ZIM library (Wikipedia med, ARRL docs, wikis)",
+    ),
+    (
+        "osm-navit",
+        "OSM offline navigation (Navit)",
+        "map_weather",
+        "build",
+        [],
+        "navit-xml",
+        ("desktop-app", "/opt/grid-down/navit/navit"),
+        "Offline OSM navigation (no F45 package; pinned source build)",
+    ),
+    (
+        "xygrib",
+        "XYGrib",
+        "map_weather",
+        "build",
+        [],
+        "xygrib-conf",
+        ("desktop-app", "/opt/grid-down/xygrib/xyGrib"),
+        "GRIB weather viewer (no F45 package; pinned source build, staged GRIBs)",
+    ),
     # --- mesh (§6.11) ---
-    ("meshtastic", "Meshtastic CLI", "mesh", "pip-vendored", [],
-     "meshtastic-cli", ("cli-tool", "meshtastic"),
-     "LoRa mesh device management (USB/BLE/TCP), vendored wheels"),
-    ("meshtasticd", "Meshtastic daemon", "mesh", "tarball", [],
-     "meshtasticd-yaml", ("managed-service", "meshtasticd"),
-     "Linux-native LoRa HAT daemon (upstream RPM, pinned)"),
-    ("meshtastic-web", "Meshtastic Web", "mesh", "static", [],
-     "none", ("local-service", "served on 127.0.0.1:8092 by suite"),
-     "Official web client served air-gap-side with Web Serial"),
+    (
+        "meshtastic",
+        "Meshtastic CLI",
+        "mesh",
+        "pip-vendored",
+        [],
+        "meshtastic-cli",
+        ("cli-tool", "meshtastic"),
+        "LoRa mesh device management (USB/BLE/TCP), vendored wheels",
+    ),
+    (
+        "meshtasticd",
+        "Meshtastic daemon",
+        "mesh",
+        "tarball",
+        [],
+        "meshtasticd-yaml",
+        ("managed-service", "meshtasticd"),
+        "Linux-native LoRa HAT daemon (upstream RPM, pinned)",
+    ),
+    (
+        "meshtastic-web",
+        "Meshtastic Web",
+        "mesh",
+        "static",
+        [],
+        "none",
+        ("local-service", "served on 127.0.0.1:8092 by suite"),
+        "Official web client served air-gap-side with Web Serial",
+    ),
     # --- av / utilities ---
-    ("audacity", "Audacity", "av", "dnf", ["audacity"],
-     "none", ("desktop-app", "audacity"),
-     "Audio editor for SSTV/sample prep"),
-    ("ffmpeg", "ffmpeg", "av", "dnf", ["ffmpeg"],
-     "none", ("cli-tool", "ffmpeg"),
-     "A/V conversion (RPM Fusion build)"),
-    ("sox", "SoX", "av", "dnf", ["sox"],
-     "none", ("cli-tool", "sox"),
-     "Sound processing for modem audio prep"),
-    ("snapshot", "GNOME Snapshot", "av", "dnf", ["snapshot"],
-     "none", ("desktop-app", "snapshot"),
-     "Webcam capture (Cheese successor; cheese retired from Fedora 45)"),
-    ("conky", "Conky", "av", "dnf", ["conky"],
-     "conky-conf", ("managed-service", "conky -c ~/.config/grid-down/conky.conf"),
-     "Heads-up system/wx overlay on the desktop"),
+    (
+        "audacity",
+        "Audacity",
+        "av",
+        "dnf",
+        ["audacity"],
+        "none",
+        ("desktop-app", "audacity"),
+        "Audio editor for SSTV/sample prep",
+    ),
+    (
+        "ffmpeg",
+        "ffmpeg",
+        "av",
+        "dnf",
+        ["ffmpeg"],
+        "none",
+        ("cli-tool", "ffmpeg"),
+        "A/V conversion (RPM Fusion build)",
+    ),
+    (
+        "sox",
+        "SoX",
+        "av",
+        "dnf",
+        ["sox"],
+        "none",
+        ("cli-tool", "sox"),
+        "Sound processing for modem audio prep",
+    ),
+    (
+        "snapshot",
+        "GNOME Snapshot",
+        "av",
+        "dnf",
+        ["snapshot"],
+        "none",
+        ("desktop-app", "snapshot"),
+        "Webcam capture (Cheese successor; cheese retired from Fedora 45)",
+    ),
+    (
+        "conky",
+        "Conky",
+        "av",
+        "dnf",
+        ["conky"],
+        "conky-conf",
+        ("managed-service", "conky -c ~/.config/grid-down/conky.conf"),
+        "Heads-up system/wx overlay on the desktop",
+    ),
 ]
 
 STRATEGY_NOTE = {
@@ -182,20 +478,23 @@ DNF_REPO = {
 # Wine apps: installer_glob matched case-insensitively against install/kit-import/;
 # exes are the candidate basenames probed under <prefix>/drive_c after install
 # (upstream names drift across VARA versions, so candidates are listed in order).
+# installer picks the install mode (core/winehub): "setup" = Inno exe run with
+# /VERYSILENT switches; "portable" = plain zip unpacked into install_dir (VarAC
+# ships no installer — running its exe would launch the app, not install it).
 WINE_META = {
-    "vara-hf": ("VARA HF*", ["VARA.exe"]),
-    "vara-fm": ("VARA FM*", ["FM.exe", "VARAFM.exe"]),
-    "vara-sat": ("VARA SAT*", ["SAT.exe", "VARASAT.exe"]),
-    "vara-chat": ("VARA Chat*", ["Chat.exe", "VARACHAT.exe"]),
-    "vara-term": ("VARA Terminal*", ["Terminal.exe", "VARATERM.exe"]),
-    "varac": ("VarAC*", ["VarAC.exe"]),
+    "vara-hf": ("VARA HF*", ["VARA.exe"], "setup", None),
+    "vara-fm": ("VARA FM*", ["FM.exe", "VARAFM.exe"], "setup", None),
+    "vara-sat": ("VARA SAT*", ["SAT.exe", "VARASAT.exe"], "setup", None),
+    "vara-chat": ("VARA Chat*", ["Chat.exe", "VARACHAT.exe"], "setup", None),
+    "vara-term": ("VARA Terminal*", ["Terminal.exe", "VARATERM.exe"], "setup", None),
+    "varac": ("VarAC*", ["VarAC.exe"], "portable", "C:\\VarAC"),
 }
 
 
 def registry_yaml(app) -> str:
-    (id_, name, cat, strat, pkgs, adapter, (via, cmd), tagline) = app
+    id_, name, cat, strat, pkgs, adapter, (via, cmd), tagline = app
     pkgs_s = "[" + ", ".join(pkgs) + "]" if pkgs else "[]"
-    return (
+    text = (
         "# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)\n"
         f"id: {id_}\n"
         f"name: {name}\n"
@@ -212,13 +511,23 @@ def registry_yaml(app) -> str:
         f'  cmd: "{cmd}"\n'
         "config:\n"
         f"  adapter: {adapter}\n"
-        "  native_path: TBD   # pin exact native config path per station (Phase 3/4)\n"
-        "state: stub\n"
     )
+    if strat == "wine":
+        # Windows INIs live beside their program exe inside the prefix; the
+        # adapter resolves the real path via the wine hub's install probe
+        # (exe names drift across VARA versions, so no concrete name here).
+        text += (
+            "  native_path: INI beside the installed exe"
+            f"   # resolved by the {adapter} adapter via core/winehub (Phase 3)\n"
+        )
+    else:
+        text += "  native_path: TBD   # pin exact native config path per station (Phase 3/4)\n"
+    text += "state: stub\n"
+    return text
 
 
 def recipe_yaml(app) -> str:
-    (id_, name, cat, strat, pkgs, adapter, (via, cmd), tagline) = app
+    id_, name, cat, strat, pkgs, adapter, (via, cmd), tagline = app
     lines = [
         f"# Install recipe for {id_} (Phase 0 skeleton)",
         f"# strategy: {strat} — {STRATEGY_NOTE[strat]}",
@@ -246,12 +555,22 @@ def recipe_yaml(app) -> str:
             "    build_container: fedora:45",
         ]
     elif strat == "wine":
-        glob_, exes = WINE_META.get(id_, ("PIN-ME*", ["PIN-ME.exe"]))
+        glob_, exes, installer, install_dir = WINE_META.get(
+            id_, ("PIN-ME*", ["PIN-ME.exe"], "setup", None)
+        )
         lines += [
             "  wine:",
             "    prefix: /opt/grid-down/wine-prefix",
             f'    installer_glob: "{glob_}"   # user-supplied .zip/.exe staged in install/kit-import/ (G6)',
             f"    exes: [{', '.join(exes)}]   # candidate basenames probed under <prefix>/drive_c",
+        ]
+        if installer == "portable":
+            lines += [
+                "    installer: portable   # plain zip (no Inno setup): unpacked into install_dir, never run",
+                f"    install_dir: '{install_dir}'   # target dir under the prefix's drive_c",
+            ]
+        lines += [
+            f"    ini_set: []           # config keys the {adapter} adapter may write (§6.2); pinned at live E2E",
             "    license: user-supplied   # applied in-app by the operator; unregistered works (trial delay)",
         ]
     elif strat == "pip-vendored":
@@ -272,8 +591,9 @@ def recipe_yaml(app) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--check", action="store_true",
-                    help="fail if on-disk files differ from generated output")
+    ap.add_argument(
+        "--check", action="store_true", help="fail if on-disk files differ from generated output"
+    )
     args = ap.parse_args()
 
     ids = [a[0] for a in APPS]
@@ -309,5 +629,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-

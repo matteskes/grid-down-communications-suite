@@ -16,7 +16,11 @@ apps (spec §6.5); this module owns their lifecycle instead:
                            builds the prefix from the cached tarball, §5)
 - ``install(app_id)``      silent install of the user-supplied VARA installer
                            (.exe, or the .zip wrapping it) from
-                           ``install/kit-import/`` + install probe
+                           ``install/kit-import/`` + install probe; recipe
+                           ``wine.installer:`` picks the mode — ``setup``
+                           (Inno ``/VERYSILENT``, the VARA family) or
+                           ``portable`` (a plain zip unpacked into
+                           ``wine.install_dir`` — VarAC ships no installer)
 
 The prefix itself is created by the kit postinst (§5) from the cached prefix
 tarball — or by ``init_prefix()`` on a dev box; without it every verb that
@@ -535,11 +539,15 @@ class WineHub:
     def install(self, app_id: str, installer: str | Path | None = None) -> dict:
         """Silent install of one user-supplied VARA artifact into the prefix.
 
-        Runs ``wine <setup.exe> /VERYSILENT /SUPPRESSMSGBOXES /NORESTART``
-        (Inno Setup switches — the VARA family ships Inno installers) with
-        WINEPREFIX set, creating the prefix first if needed. The probe after
-        the run decides success: an installer that exits 0 without producing
-        a candidate exe failed silently (it likely needed the GUI).
+        ``setup`` mode (the VARA family's Inno installers) runs
+        ``wine <setup.exe> /VERYSILENT /SUPPRESSMSGBOXES /NORESTART`` with
+        WINEPREFIX set, creating the prefix first if needed. ``portable``
+        mode (``wine.installer: portable`` — VarAC ships a plain zip, not an
+        installer) never runs wine: it unpacks into the recipe's
+        ``wine.install_dir`` under ``drive_c``. Either way the probe after
+        the step decides success: an installer that exits 0 without
+        producing a candidate exe failed silently (it likely needed the
+        GUI), and a portable zip without one is refused.
         """
         app = self.app(app_id)
         if not self._is_wine(app):
@@ -547,13 +555,19 @@ class WineHub:
                 f"{app_id}: not a wine-hub app — install is the VARA family's own; the "
                 "supervisor owns the rest (§6.4)"
             )
-        wine = self._require_wine()
         before = self.probe(app_id)
         if before["installed"]:
             return {"id": app_id, "state": "already-installed", "exe_path": before["exe_path"]}
+        recipe = load_wine_recipe(app_id, self.recipes_dir)
+        mode = str(recipe.get("installer") or "setup").strip().lower()
+        if mode not in ("setup", "portable"):
+            raise WinehubError(f"{app_id}: recipe wine.installer {mode!r} is not setup|portable")
+        wine = None if mode == "portable" else self._require_wine()
         artifact = self.resolve_installer(app_id, installer)
         setup, temp_dir = self._unpack_zip(artifact)
         try:
+            if mode == "portable":
+                return self._install_portable(app_id, recipe, temp_dir)
             if not (self.prefix / "drive_c").is_dir():
                 self.init_prefix()
             log_dir = self.state_dir / "logs" / "winehub"
@@ -598,3 +612,61 @@ class WineHub:
         finally:
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def _install_portable(self, app_id: str, recipe: dict, temp_dir: Path | None) -> dict:
+        """``wine.installer: portable`` — unpack a plain-zip app (VarAC).
+
+        No wine run: the zip's files land under the recipe's
+        ``wine.install_dir`` inside ``drive_c`` and the probe decides
+        success. The prefix must already exist (kit postinst tarball or
+        ``gd winehub init``) — placing files into a half-made prefix would
+        hide that from the operator.
+        """
+        install_dir = str(recipe.get("install_dir") or "").strip()
+        if not install_dir:
+            raise WinehubError(
+                f"{app_id}: portable install needs wine.install_dir in the recipe — "
+                f'the Windows dir the zip unpacks to under drive_c (e.g. "C:\\VarAC")'
+            )
+        m = re.fullmatch(r"[Cc]:(\\.*)", install_dir)
+        if not m:
+            raise WinehubError(
+                f"{app_id}: recipe wine.install_dir {install_dir!r} is not a C:\\… "
+                f'Windows path (e.g. "C:\\VarAC")'
+            )
+        parts = [p for p in m.group(1).split("\\") if p]
+        if any(p in ("..", ".") for p in parts):
+            raise WinehubError(
+                f"{app_id}: recipe wine.install_dir {install_dir!r} would escape drive_c"
+            )
+        if temp_dir is None:
+            raise WinehubError(
+                f"{app_id}: portable install needs the .zip (a bare .exe has nothing "
+                "to unpack — set the recipe's wine.installer to setup instead)"
+            )
+        self._require_prefix()
+        target = self.prefix / "drive_c"
+        for part in parts:
+            target = target / part
+        target.mkdir(parents=True, exist_ok=True)
+        log_dir = self.state_dir / "logs" / "winehub"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"install-{app_id}.log"
+        with open(log_path, "ab") as log:
+            log.write(f"--- install {app_id}: portable unpack -> {target} {_now()} ---\n".encode())
+        shutil.copytree(temp_dir, target, dirs_exist_ok=True)
+        after = self.probe(app_id)
+        if not after["installed"]:
+            raise WinehubError(
+                f"{app_id}: unpacked into {target} but no candidate exe appeared "
+                f"({', '.join(after['candidates'])}) — the zip's layout may have "
+                f"changed; check it by hand (log: {log_path})"
+            )
+        return {
+            "id": app_id,
+            "state": "installed",
+            "mode": "portable",
+            "dir": str(target),
+            "exe_path": after["exe_path"],
+            "log": str(log_path),
+        }

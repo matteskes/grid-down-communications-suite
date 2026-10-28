@@ -15,8 +15,12 @@ M5 adds the wine hub (`gd winehub`, core/winehub.py: status/start/stop/COM
 map over the shared VARA prefix) and install-state probes
 (`gd apps list --state`, core/install_state.py). P3 extends the wine hub
 with `init` (wineboot prefix, dev path) and `install` (silent install of
-the user-supplied kit-import/ artifact + per-app install probes). Later
-phases add the remaining config apply (adapters).
+the user-supplied kit-import/ artifact + per-app install probes), and adds
+the first config adapters (core/adapters): `gd config show|apply <app>`
+reads/applies the VARA family's exe-adjacent INIs inside the wine prefix —
+writes limited to recipe-declared keys (wine.ini_set), with mandatory
+backup + atomic writes + printed diff (spec §6.2). Later phases add the
+remaining adapters (native apps).
 """
 
 from __future__ import annotations
@@ -29,7 +33,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import audio, doctor, install_state, profile, registry, systemd, winehub  # noqa: E402
+from core import (  # noqa: E402
+    adapters,
+    audio,
+    doctor,
+    install_state,
+    profile,
+    registry,
+    systemd,
+    winehub,
+)
 from core.supervisor import PORTS, Supervisor, SupervisorError  # noqa: E402
 
 VERSION = "0.6.0-m5"
@@ -403,6 +416,10 @@ def cmd_winehub(args) -> int:
         line = f"install: {out['id']}  {out['state']}"
         if out.get("exe_path"):
             line += f"  exe: {out['exe_path']}"
+        if out.get("mode"):
+            line += f"  mode: {out['mode']}"
+        if out.get("dir"):
+            line += f"  dir: {out['dir']}"
         if out.get("log"):
             line += f"  log: {out['log']}"
         print(line)
@@ -422,6 +439,51 @@ def cmd_winehub(args) -> int:
     if out.get("log"):
         line += f" — log: {out['log']}"
     print(line)
+    return 0
+
+
+def cmd_config(args) -> int:
+    """`gd config show|apply <app>` — the §6.2 adapter contract from the CLI.
+
+    show = adapter.read() (registration-shaped values masked); apply =
+    adapter.apply(profile) — unified diff printed, timestamped backup +
+    atomic write, --dry-run writes nothing. Writes are limited to the keys
+    the app's recipe declares (wine.ini_set); refusals name the exact fix.
+    """
+    apps = registry.load_registry(ROOT / "control" / "registry" / "apps")
+    app = next((a for a in apps if a.get("id") == args.app), None)
+    if app is None:
+        raise registry.RegistryError(f"unknown app id: {args.app} (see: gd apps list)")
+    adapter = adapters.get_adapter(app)
+    if args.config_cmd == "show":
+        info = adapter.read()
+        if args.json:
+            print(json.dumps(info, indent=2))
+            return 0
+        tail = "" if info["exists"] else "  (not created yet)"
+        print(f"{info['app']}: {info['path']}{tail}")
+        for sec, keys in info["sections"].items():
+            print(f"[{sec}]")
+            for k, v in keys.items():
+                print(f"{k}={v}")
+        print(f"registration: {info['registration']}")
+        return 0
+    out = adapter.apply(profile.load_profile(), dry_run=args.dry_run)
+    if args.json:
+        print(json.dumps(out, indent=2))
+        return 0
+    if out.get("diff"):
+        print(out["diff"], end="" if out["diff"].endswith("\n") else "\n")
+    if out.get("changed"):
+        if out.get("dry_run"):
+            print("gd: dry run — nothing written (drop --dry-run to apply)")
+        elif out.get("wrote"):
+            tail = f" (backup: {out['backup']})" if out.get("backup") else ""
+            print(f"gd: wrote {out['path']}{tail}")
+    elif out.get("note"):
+        print(f"gd: {out['note']}")
+    else:
+        print("gd: already in sync — nothing to write")
     return 0
 
 
@@ -544,6 +606,26 @@ def main(argv: list[str] | None = None) -> int:
     p_wh_u.add_argument("com", type=int, help="COM port number, 1-32")
     p_wh_u.set_defaults(func=cmd_winehub)
 
+    p_cfg = sub.add_parser(
+        "config", help="read/apply app-native config via adapters (spec §6.2, P3)"
+    )
+    p_cfg_sub = p_cfg.add_subparsers(dest="config_cmd", required=True)
+    p_cfg_s = p_cfg_sub.add_parser(
+        "show", help="dump an app's config file (adapter read; registration values masked)"
+    )
+    p_cfg_s.add_argument("app", help="app id with a config adapter (e.g. vara-hf, varac)")
+    p_cfg_s.add_argument("--json", action="store_true", help="machine-readable report")
+    p_cfg_s.set_defaults(func=cmd_config)
+    p_cfg_a = p_cfg_sub.add_parser(
+        "apply", help="apply the station profile to an app's config (adapter apply)"
+    )
+    p_cfg_a.add_argument("app", help="app id with a config adapter (e.g. vara-hf, varac)")
+    p_cfg_a.add_argument(
+        "--dry-run", action="store_true", help="print the unified diff, write nothing"
+    )
+    p_cfg_a.add_argument("--json", action="store_true", help="machine-readable report")
+    p_cfg_a.set_defaults(func=cmd_config)
+
     p_rig = sub.add_parser("rig", help="show profile-resolved rigctld command (spec §6.4)")
     p_rig.add_argument("--json", action="store_true", help="machine-readable report")
     p_rig.set_defaults(func=cmd_rig)
@@ -571,6 +653,7 @@ def main(argv: list[str] | None = None) -> int:
     except (
         SupervisorError,
         winehub.WinehubError,
+        adapters.ConfigError,
         registry.RegistryError,
         profile.ProfileError,
         audio.AudioError,
