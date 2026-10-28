@@ -92,3 +92,54 @@ click-through.
   A backend flag for the GUI is M5 scope, not a P2 gate.
 - Minor: `gd status` prints the backend annotation only when instances
   exist; the empty-state line omits it.
+
+## M5 VM smoke — Fedora 45 Workstation, aarch64 (2026-10-27)
+
+Status: **ACCEPTED** — `tools/vm-smoke-m5.sh`: 7/7 gates green, then a visual
+click-through of the M5 GUI surfaces on the same VM. This closes the last P2
+backlog item: the §10 GUI-VM pass now covers M1–M5, and P2 is done.
+
+Environment: same VM and air-gap as the 12-gate pass above (`network off`;
+`vmpal exec` rides the guest-tools channel). Suite: `git archive` of HEAD
+**247300c** (130,011 bytes, sha256 `b99c1f714cb3e98d0999e28d989a2d2b6ff488d58d2911add0802345e2c38408`,
+identical host-side and guest-side) extracted to `/var/tmp/grid-down`. The
+P2 kit install is untouched — the 8 installed apps are what the real `rpm`
+probe sees. GNOME session signed in for the unattended pass via GDM
+auto-login (`AutomaticLoginEnable=True` / `AutomaticLogin=matt`, now
+persisted in `/etc/gdm/custom.conf`); PipeWire + pipewire-pulse active under
+the session.
+
+### Scripted gates — `sh tools/vm-smoke-m5.sh`, exit 0, `M5-SMOKE: PASS`
+
+| # | Gate | Observed |
+|---|---|---|
+| 1 | `gd apps list --state` (real rpm) | `install state: 8 installed, 33 missing` |
+| 2 | `--json` carries `install_state` in the vocabulary | 41 apps, states ⊆ vocabulary (observed: `installed`, `missing`) |
+| 3 | `gd winehub status` with no prefix — clean report, no crash | `prefix: ABSENT (/opt/grid-down/wine-prefix)` · `wine: not on PATH` · `com: none mapped` · all 6 VARA apps `stopped` |
+| 4 | `gd winehub start vara-hf` without a prefix | refuses cleanly (`… not installed yet`) |
+| 5 | `gd winehub map 5 /dev/null` without a prefix | refuses cleanly |
+| 6 | `gd doctor` wine-hub line present (skip while prefix absent) | `[skip] VARA wine hub: /opt/grid-down/wine-prefix not installed yet (kit postinst creates it; 'gd winehub status' for detail)` |
+| 7 | Offscreen GUI selfcheck (install column + winehub section, `tray=no`) | `gui selfcheck ok — apps=41, bundles=9, doctor checks=18, tray=no, platform=offscreen` |
+
+### Visual pass on the Wayland desktop (VMPal screenshot + tree/OCR)
+
+- `python3 control/cli/gd.py gui` under the GNOME/Wayland session: the
+  "Grid Down — Control Center" window comes up focused with a clean log.
+- **Catalog install column**: state cells render per app against the real
+  rpm probe — yaac, js8call, fldigi, flarq, hamlib (rigctld), dire wolf,
+  snapshot → `installed`; the rest (including all six wine-hub apps) →
+  `missing`; count line `41 apps`.
+- **Wine hub panel**: group box "Wine hub (VARA family, spec §6.4)" with the
+  status line (`prefix ABSENT (/opt/grid-down/wine-prefix) · wine NOT on
+  PATH · COM: none`) and six per-app rows — vara-chat [Chat.exe],
+  vara-fm [FM.exe], vara-hf [VARA.exe], vara-sat [SAT.exe],
+  vara-term [Terminal.exe], varac [VarAC.exe] — each `stopped` with gated
+  Start/Stop buttons (disabled without prefix/wine, matching
+  `test_catalog_winehub_panel_disabled_without_prefix_or_wine`).
+- **Tray**: stock Fedora GNOME ships no AppIndicator extension, so the tray
+  is availability-gated and no-ops cleanly (selfcheck `tray=no`; no error in
+  the GUI log) — the designed behavior on stock/headless desktops.
+
+**P2 closed**: M1–M4 by the 12-gate pass (2026-10-26), M5 by this smoke
+(2026-10-27). Next: P3 — VARA/Wine Hub end-to-end with user-supplied
+installers, and the Winlink session bundle end-to-end.
