@@ -180,18 +180,22 @@ def save_station(callsign: str, grid: str) -> dict:
 _AUDIO_NAME_RE = re.compile(r"^[A-Za-z0-9._:/~+-]+$")
 
 
-def save_audio(backend: str, rig_capture: str, ardop_capture: str, ardop_playback: str) -> dict:
+def save_audio(
+    backend: str, rig_capture: str, ardop_capture: str, ardop_playback: str, rig_playback: str = ""
+) -> dict:
     """Validate + persist the audio section (spec §4) into the active profile.
 
     backend: only 'pipewire' is implemented (core/audio.py drives pactl from
     pipewire-pulse), so anything else is rejected; empty stores the template
-    default 'pipewire'. rig_capture names the physical rig capture source for
-    the Phase 3 loopback (empty = loopback pending — `gd audio plan` surfaces
-    it, Doctor does not key off it). The ardop capture/playback presets
-    override DEFAULT_PRESETS (core/audio.py); clearing a preset pops the key
-    so resolve_preset falls back to the default (its lookup is falsy-based).
-    Non-empty names must be PipeWire/Pulse endpoint names — no spaces, quotes
-    or shell metacharacters, since supervisor expands them into launch cmds.
+    default 'pipewire'. rig_capture names the physical rig capture source and
+    rig_playback the physical rig playback sink for the P3b loopback
+    (`gd audio wire` wires them into the owned endpoints; either may be empty
+    — the bench-safe pending state — and the GUI calls this with keywords).
+    The ardop capture/playback presets override DEFAULT_PRESETS (core/
+    audio.py); clearing a preset pops the key so resolve_preset falls back to
+    the default (its lookup is falsy-based). Non-empty names must be
+    PipeWire/Pulse endpoint names — no spaces, quotes or shell
+    metacharacters, since supervisor expands them into launch cmds.
     Raises ProfileError and writes nothing on bad input.
 
     Returns {"path": <written file>, "created": bool, "audio": <new audio dict>}.
@@ -203,12 +207,14 @@ def save_audio(backend: str, rig_capture: str, ardop_capture: str, ardop_playbac
             " (core/audio.py drives pactl from pipewire-pulse)"
         )
     rig_capture_s = str(rig_capture or "").strip()
+    rig_playback_s = str(rig_playback or "").strip()
     ardop = {
         "capture": str(ardop_capture or "").strip(),
         "playback": str(ardop_playback or "").strip(),
     }
     for key, value in (
         ("audio.rig_capture", rig_capture_s),
+        ("audio.rig_playback", rig_playback_s),
         ("audio.presets.ardop.capture", ardop["capture"]),
         ("audio.presets.ardop.playback", ardop["playback"]),
     ):
@@ -224,6 +230,7 @@ def save_audio(backend: str, rig_capture: str, ardop_capture: str, ardop_playbac
         a = data.setdefault("audio", {})
         a["backend"] = backend_s
         a["rig_capture"] = rig_capture_s
+        a["rig_playback"] = rig_playback_s
         ard = a.setdefault("presets", {}).setdefault("ardop", {})
         for short, value in ardop.items():
             if value:

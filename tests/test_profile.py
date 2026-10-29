@@ -187,6 +187,22 @@ def test_save_audio_rejects_bad_backend_and_names(isolated_home):
     assert repo_default.read_text() == original
 
 
+def test_save_audio_rig_playback_round_trip(isolated_home):
+    home, _ = isolated_home
+    out = profile.save_audio("pipewire", "alsa_input.rig", "", "", rig_playback="alsa_output.rig")
+    assert out["audio"]["rig_playback"] == "alsa_output.rig"
+    # GRID_DOWN_PROFILE resolves to the repo template in this fixture, so load
+    # the written user profile directly (same pattern as the preset tests)
+    data = profile.load_profile(_user_profile(home))
+    assert data["audio"]["rig_playback"] == "alsa_output.rig"
+    assert data["audio"]["rig_capture"] == "alsa_input.rig"  # sibling key intact
+    # a rig_playback with shell metacharacters refuses and writes nothing
+    with pytest.raises(profile.ProfileError, match="rig_playback"):
+        profile.save_audio("pipewire", "", "", "", rig_playback="bad name")
+    still = profile.load_profile(_user_profile(home))
+    assert still["audio"]["rig_playback"] == "alsa_output.rig"  # unchanged on refusal
+
+
 def test_save_audio_cleared_presets_fall_back_to_defaults(isolated_home):
     home, _ = isolated_home
     profile.save_audio("pipewire", "alsa_input.usb-codex", "", "")

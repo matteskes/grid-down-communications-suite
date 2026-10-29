@@ -25,7 +25,7 @@ pattern). What is new in this pass:
 | Install path | `build-kit.sh` at kit boot | `gd winehub init` + `gd winehub install` (silent Inno / portable zip) |
 | Config | n/a | `gd config show\|apply` — exe-adjacent INIs, declared-key writes |
 | Suite transfer | `scp` | `git archive` + **`vmpal cp`** (scp still works) |
-| Out of scope here | — | COM loopback mapping, Winlink handshake → next step after the live E2E |
+| Out of scope here | — | COM loopback mapping (→ delivered by P3b: `docs/phase3b-vm-runbook.md`), Winlink handshake → next step after the live E2E |
 
 Driver: `tools/vm-p3-wine-e2e.sh` — live mode (stages 0–7, §5) and
 `--rehearsal` mode (R1–R4, §4, any arch, no wine).
@@ -167,9 +167,9 @@ vmpal cp "Fedora 45 Workstation":/var/tmp/p3-e2e.log /tmp/        # live run onl
 Record: `rpm -q wine` NVR, the three kit sha256s, the INI inventory, the
 pinned `ini_set` rows with the apply diff, and the deferral note if the live
 half ran later than this pass. Flip the README status line when the live E2E
-closes P3 (spec §11). **Next step after P3:** COM loopback mapping
-(`gd winehub map` against a pty pair) and the Winlink handshake — explicitly
-out of scope here.
+closes P3 (spec §11). **The COM loopback half of that "next step" is
+delivered by P3b** (`gd winehub bridge` + `gd audio wire`,
+`docs/phase3b-vm-runbook.md`); the Winlink handshake stays with the live E2E.
 
 ## Appendix A — rehearsal transcript (aarch64 reference VM, 2026-10-28)
 

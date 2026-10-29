@@ -200,7 +200,12 @@ class WineHub:
         self.apps: dict[str, dict] = {a["id"]: a for a in apps}
         self.wine_apps = sorted(i for i, a in self.apps.items() if self._is_wine(a))
         self.state_dir = Path(state_dir) if state_dir else sup.default_state_dir()
-        self.prefix = Path(prefix) if prefix else WINE_PREFIX
+        # GRID_DOWN_WINE_PREFIX (P3b): rehearsals on a bench without wine point
+        # the default prefix at a fixture directory — map/unmap/status work
+        # unchanged there; an explicit prefix= still wins over the env.
+        self.prefix = (
+            Path(prefix) if prefix else Path(os.environ.get("GRID_DOWN_WINE_PREFIX") or WINE_PREFIX)
+        )
         self.recipes_dir = Path(recipes_dir) if recipes_dir else RECIPES_DIR
         self.kit_import = Path(kit_import) if kit_import else KIT_IMPORT
 

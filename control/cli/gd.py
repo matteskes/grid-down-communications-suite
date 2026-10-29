@@ -20,7 +20,11 @@ the first config adapters (core/adapters): `gd config show|apply <app>`
 reads/applies the VARA family's exe-adjacent INIs inside the wine prefix —
 writes limited to recipe-declared keys (wine.ini_set), with mandatory
 backup + atomic writes + printed diff (spec §6.2). Later phases add the
-remaining adapters (native apps).
+remaining adapters (native apps). P3b adds the arm-testable loopback
+harnesses: `gd audio wire|unwire` (PipeWire rig-audio wiring into the owned
+endpoints, core/audio.py) and `gd winehub bridge` (pty-pair COM harness,
+core/ptybridge.py — no wine, no socat; GRID_DOWN_WINE_PREFIX points a
+rehearsal at a fixture prefix).
 """
 
 from __future__ import annotations
@@ -28,7 +32,9 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+import signal
 import sys
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -39,6 +45,7 @@ from core import (  # noqa: E402
     doctor,
     install_state,
     profile,
+    ptybridge,
     registry,
     systemd,
     winehub,
@@ -176,22 +183,41 @@ def cmd_audio(args) -> int:
         print(f"{'ENDPOINT':<26} {'KIND':<7} STATE")
         for st in steps:
             print(f"{st['endpoint']:<26} {st['kind']:<7} {st['state']}")
-        rig_capture = (prof.get("audio", {}) or {}).get("rig_capture") or ""
-        pending = (
-            f"rig-interface loopback from '{rig_capture}'"
-            if rig_capture
-            else "rig-interface loopback (set audio.rig_capture)"
-        )
-        print(f"\npending (Phase 3 adapters): {pending}")
+        rows = audio.loopback_rows(prof)
+        print("\nrig loopback (P3b — `gd audio up` then `gd audio wire`):")
+        for row in rows:
+            source = row["source"] or "(unset)"
+            sink = row["sink"] or "(unset)"
+            print(f"  {row['role']}.{row['direction']:<3} {source:<34} -> {sink}  [{row['state']}]")
         defaults = ", ".join(
             f"{a}.{k}={v}" for a, pv in audio.DEFAULT_PRESETS.items() for k, v in pv.items()
         )
-        print(f"launch-arg presets (profile audio.presets overrides): {defaults}")
+        print(f"\nlaunch-arg presets (profile audio.presets overrides): {defaults}")
         return 0
     if action == "status":
         st = audio.status()
         print("present: " + (", ".join(st["present"]) or "(none)"))
         print("missing: " + (", ".join(st["missing"]) or "(none)"))
+        for args_line in st.get("loopback", ()):
+            print(f"loopback: {args_line}")
+        if not st.get("loopback"):
+            print("loopback: (none wired — set audio.rig_capture/rig_playback, gd audio wire)")
+        return 0
+    if action == "wire":
+        out = audio.wire(prof)
+        for w in out["wired"]:
+            print(
+                f"wired: {w['role']}.{w['direction']} {w['source']} -> {w['sink']}"
+                f" (pactl module {w['module']})"
+            )
+        for s in out["skipped"]:
+            print(f"skipped: {s}")
+        if not out["wired"] and not out["skipped"]:
+            print("nothing to do")
+        return 0
+    if action == "unwire":
+        out = audio.unwire()
+        print("unloaded loopback modules: " + (", ".join(out["unloaded"]) or "(none)"))
         return 0
     if action == "up":
         out = audio.up(prof)
@@ -432,6 +458,8 @@ def cmd_winehub(args) -> int:
         out = hub.unmap(f"com{args.com}")
         print(f"{out['state']}: {out['com']} (was {out['device']})")
         return 0
+    if action == "bridge":
+        return _bridge_session(hub, args)
     out = hub.start(args.app) if action == "start" else hub.stop(args.app)
     line = f"{out['state']}: {out['id']}"
     if out.get("pid"):
@@ -439,6 +467,48 @@ def cmd_winehub(args) -> int:
     if out.get("log"):
         line += f" — log: {out['log']}"
     print(line)
+    return 0
+
+
+def _bridge_session(hub, args) -> int:
+    """`gd winehub bridge` — the foreground pty-pair COM harness (P3b, §6.4).
+
+    Maps COMn to one end of a pty pair via the wine hub's own map_serial and
+    relays every byte to a peer: a second pty (default — the fake-rig side a
+    script opens) or a TCP listener. Runs until SIGINT/SIGTERM, then unmaps
+    COMn and prints the byte tally, so a transcript doubles as evidence.
+    Pure stdlib, no wine: the whole harness is arm-testable on the aarch64 VM
+    (docs/phase3b-vm-runbook.md §B) with GRID_DOWN_WINE_PREFIX pointing at a
+    fixture prefix.
+    """
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    bridge = ptybridge.ComBridge(hub)
+    info = bridge.open(args.com, peer=args.peer, tcp_host=args.tcp_host, tcp_port=args.tcp_port)
+    if args.json:
+        print(json.dumps(info, indent=2), flush=True)
+    else:
+        print(
+            f"bridge up: {info['com']} ({info['wine_side']}) map: {info['map_state']}"
+            f"  wine-side pts: {info['com_pts']}"
+        )
+        print(f"peer ({info['peer_kind']}): {info['peer']}")
+        print("relay running — Ctrl-C tears the bridge down (unmap + ptys closed)")
+    try:
+        bridge.serve(stop)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        out = bridge.close()
+    if args.json:
+        print(json.dumps(out, indent=2))
+        return 0
+    tally = out.get("bytes") or {}
+    print(
+        f"bridge down: {out['com']} unmap: {out['unmap']} —"
+        f" bytes wine->peer {tally.get('wine_to_peer', 0)},"
+        f" peer->wine {tally.get('peer_to_wine', 0)}"
+    )
     return 0
 
 
@@ -605,6 +675,33 @@ def main(argv: list[str] | None = None) -> int:
     p_wh_u = p_wh_sub.add_parser("unmap", help="remove a COM mapping")
     p_wh_u.add_argument("com", type=int, help="COM port number, 1-32")
     p_wh_u.set_defaults(func=cmd_winehub)
+    p_wh_b = p_wh_sub.add_parser(
+        "bridge",
+        help=(
+            "pty-pair COM harness: map COMn to a pty and relay to a peer pty/TCP"
+            " (P3b loopback; no wine needed — Ctrl-C tears it down)"
+        ),
+    )
+    p_wh_b.add_argument("com", type=int, help="COM port number, 1-32 (e.g. 5 -> COM5)")
+    p_wh_b.add_argument(
+        "--peer",
+        choices=("pty", "tcp"),
+        default="pty",
+        help="relay target: a second pty (default) or a TCP listener",
+    )
+    p_wh_b.add_argument(
+        "--tcp-host", default=ptybridge.DEFAULT_TCP_HOST, help="TCP peer bind address"
+    )
+    p_wh_b.add_argument(
+        "--tcp-port",
+        type=int,
+        default=ptybridge.DEFAULT_TCP_PORT,
+        help="TCP peer listen port (default 8300 — VARA HF's command port)",
+    )
+    p_wh_b.add_argument(
+        "--json", action="store_true", help="machine-readable bridge info (at up and teardown)"
+    )
+    p_wh_b.set_defaults(func=cmd_winehub)
 
     p_cfg = sub.add_parser(
         "config", help="read/apply app-native config via adapters (spec §6.2, P3)"
@@ -633,10 +730,12 @@ def main(argv: list[str] | None = None) -> int:
     p_a = sub.add_parser("audio", help="suite-owned PipeWire endpoints (spec §6.6, G4)")
     p_a_sub = p_a.add_subparsers(dest="audio_cmd", required=True)
     for name, hlp in (
-        ("plan", "print the planned owned endpoint graph"),
+        ("plan", "print the planned owned endpoint graph + rig loopback rows"),
         ("up", "create missing grid_down_* endpoints (idempotent)"),
-        ("down", "unload grid_down_* modules (never others)"),
-        ("status", "list present/missing owned endpoints"),
+        ("down", "unload grid_down_* modules incl. rig loopbacks (never others)"),
+        ("status", "list present/missing owned endpoints + wired loopbacks"),
+        ("wire", "wire rig_capture/rig_playback loopbacks into the owned endpoints (P3b)"),
+        ("unwire", "unload the rig loopback modules (never others) (P3b)"),
     ):
         p = p_a_sub.add_parser(name, help=hlp)
         p.set_defaults(func=cmd_audio, audio_cmd=name)
@@ -653,6 +752,7 @@ def main(argv: list[str] | None = None) -> int:
     except (
         SupervisorError,
         winehub.WinehubError,
+        ptybridge.BridgeError,
         adapters.ConfigError,
         registry.RegistryError,
         profile.ProfileError,

@@ -16,7 +16,14 @@ audio:
   backend: pipewire
   # Suite-owned endpoints (M2, spec §6.6/G4): `gd audio up` creates
   #   grid_down_{hf,packet,voice}_{in,out}  — in = apps play to, out = apps capture.
-  rig_capture: ""     # physical rig capture source name; loopback wiring = Phase 3 adapters
+  # P3b rig loopback (`gd audio wire` after `gd audio up`): when rig_capture
+  #   and/or rig_playback name the physical rig card, module-loopback wires
+  #   rig_capture -> grid_down_hf_out (RX) and grid_down_hf_in.monitor ->
+  #   rig_playback (TX) for each role in loopback_roles. Empty keys stay the
+  #   documented bench-safe state (no rig card).
+  rig_capture: ""     # physical rig capture source, e.g. alsa_input.usb-codex
+  rig_playback: ""    # physical rig playback sink, e.g. alsa_output.usb-codex
+  loopback_roles: [hf]  # roles the rig loopback serves (hf | packet | voice)
   presets:            # per-app <placeholder> launch args; override defaults in control/core/audio.py
     ardop:
       capture: grid_down_hf_out.monitor   # live monitor of the owned 'out' endpoint

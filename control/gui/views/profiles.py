@@ -81,7 +81,11 @@ class ProfilesView(QWidget):
         self.backend_edit.setPlaceholderText("pipewire (only implemented backend)")
         self.rig_capture_edit = QLineEdit(self)
         self.rig_capture_edit.setPlaceholderText(
-            "physical rig source, e.g. alsa_input.usb-codex (empty = loopback pending)"
+            "physical rig source, e.g. alsa_input.usb-codex (empty = RX pending)"
+        )
+        self.rig_playback_edit = QLineEdit(self)
+        self.rig_playback_edit.setPlaceholderText(
+            "physical rig sink, e.g. alsa_output.usb-codex (empty = TX pending)"
         )
         self.ardop_capture_edit = QLineEdit(self)
         self.ardop_capture_edit.setPlaceholderText("empty = default grid_down_hf_out.monitor")
@@ -90,6 +94,7 @@ class ProfilesView(QWidget):
         audio_edits = (
             ("backend", self.backend_edit),
             ("rig_capture", self.rig_capture_edit),
+            ("rig_playback", self.rig_playback_edit),
             ("ardop_capture", self.ardop_capture_edit),
             ("ardop_playback", self.ardop_playback_edit),
         )
@@ -144,6 +149,7 @@ class ProfilesView(QWidget):
         audio_rows = (
             ("Backend:", self.backend_edit),
             ("Rig capture:", self.rig_capture_edit),
+            ("Rig playback:", self.rig_playback_edit),
             ("Ardop capture:", self.ardop_capture_edit),
             ("Ardop playback:", self.ardop_playback_edit),
         )
@@ -212,6 +218,7 @@ class ProfilesView(QWidget):
             str(head.get("grid") or ""),
             str(audio_sec.get("backend") or ""),
             str(audio_sec.get("rig_capture") or ""),
+            str(audio_sec.get("rig_playback") or ""),
             str(ardop.get("capture") or ""),
             str(ardop.get("playback") or ""),
             str(device.get("path") or ""),
@@ -308,13 +315,20 @@ class ProfilesView(QWidget):
             return
         backend = self.backend_edit.text().strip()
         rig_capture = self.rig_capture_edit.text().strip()
+        rig_playback = self.rig_playback_edit.text().strip()
         ardop_capture = self.ardop_capture_edit.text().strip()
         ardop_playback = self.ardop_playback_edit.text().strip()
         self._busy = True
         self.save_status.setText("saving audio…")
         svc = self.services
         worker = SnapshotWorker(
-            lambda: svc.audio_save(backend, rig_capture, ardop_capture, ardop_playback),
+            lambda: svc.audio_save(
+                backend=backend,
+                rig_capture=rig_capture,
+                rig_playback=rig_playback,
+                ardop_capture=ardop_capture,
+                ardop_playback=ardop_playback,
+            ),
             parent=self,
         )
         worker.done.connect(self._audio_save_done)
@@ -329,7 +343,7 @@ class ProfilesView(QWidget):
         verb = "created" if data.get("created") else "updated"
         self.save_status.setText(
             f"audio {verb}: {where} — presets apply on the next app (re)start;"
-            " `gd audio plan` reflects rig_capture."
+            " `gd audio up` + `gd audio wire` reflect rig_capture/rig_playback."
         )
         self.changed.emit()
 

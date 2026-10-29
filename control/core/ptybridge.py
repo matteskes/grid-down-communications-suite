@@ -1,0 +1,310 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 The Grid Down Authors — see LICENSE at the repository root.
+"""pty-pair COM loopback harness — `gd winehub bridge` (spec §6.4, P3b).
+
+Windows-side VARA talks to its modem over a DOS COM port, which the wine hub
+maps as a ``dosdevices/comN`` symlink onto a real serial device
+(:meth:`WineHub.map_serial`). On the arm benches there is no serial device
+and no wine — but the *mapping discipline* is exactly what a harness needs:
+this module holds a pty pair, maps one end onto ``comN`` through the wine
+hub's own ``map_serial`` (same validation, same ``dosdevices`` convention,
+same teardown via ``unmap``), and relays every byte to a peer — a second pty
+(what a fake-rig script opens) or a TCP listener (what a protocol-level fake
+speaks).
+
+Design constraints (P3b):
+
+- **Pure stdlib** (``pty.openpty``/``select``/``socket``): no socat, no new
+  air-gap dependency — the whole harness is arm-testable on the aarch64 VM
+  (docs/phase3b-vm-runbook.md, §B).
+- **No wine required to run**: ``map_serial`` only needs the prefix directory
+  to exist (``GRID_DOWN_WINE_PREFIX`` points rehearsals at a fixture prefix)
+  and the device node to exist — a pty slave does, for as long as the master
+  end is held open, which is precisely this module's job.
+- **Owned teardown**: SIGINT/SIGTERM stops the relay, unmaps ``comN`` and
+  closes both ptys, leaving the ``dosdevices`` map exactly as it was. The
+  byte tally is printed so a transcript doubles as evidence.
+- **The COM map is real**: while the bridge runs, ``gd winehub status``
+  reports ``comN`` like any physical mapping — configuring VARA against a
+  bridged port is byte-for-byte the same operation as against hardware.
+"""
+
+from __future__ import annotations
+
+import os
+import pty
+import select
+import socket
+import time
+
+try:  # package import (gd CLI, pytest)
+    from . import winehub
+except ImportError:  # pragma: no cover - sibling import inside control/
+    import winehub  # type: ignore
+
+READ_CHUNK = 4096
+SELECT_TIMEOUT_S = 0.25
+# A pty master whose slave end nobody holds open reports readable forever and
+# read() fails with EIO (Linux); cap the retry spin while waiting for the
+# Windows app (or the test client) to open its side.
+EIO_BACKOFF_S = 0.05
+DEFAULT_TCP_HOST = "127.0.0.1"
+DEFAULT_TCP_PORT = 8300  # VARA HF's command port — the peer a shim binds
+
+
+class BridgeError(RuntimeError):
+    """Refusal with operator-facing text (same contract as WinehubError)."""
+
+
+def open_pair() -> tuple[int, str]:
+    """Allocate a pty in raw mode; return ``(master_fd, slave_path)``.
+
+    The slave fd is closed immediately: the path stays valid (the kernel
+    keeps the pts while the master end is open) and the *only* openers of the
+    slave are the two sides being bridged — wine opening ``dosdevices/comN``,
+    and the peer-side script opening the printed path. Raw mode is asserted
+    here for Linux and again per write in :meth:`ComBridge._pump`, because
+    macOS resets the pty to the canonical default when the slave opens.
+    """
+    master, slave = pty.openpty()
+    try:
+        name = os.ttyname(slave)
+    finally:
+        os.close(slave)
+    _set_raw(master)
+    return master, name
+
+
+def _set_raw(fd: int) -> None:
+    """Raw mode on the pty (termios is shared by both ends).
+
+    A DOS COM port has no line discipline: no canonical buffering, no echo,
+    no CR/LF mapping. Without this, VARA frames that carry no newline sit in
+    the slave's ICANON queue forever (found on the dev box, macOS; the same
+    termios contract holds on the Linux guest).
+    """
+    try:
+        import termios
+    except ImportError:  # pragma: no cover - non-POSIX dev box only
+        return
+    attrs = termios.tcgetattr(fd)
+    attrs[0] &= ~(
+        termios.IGNBRK
+        | termios.BRKINT
+        | termios.PARMRK
+        | termios.ISTRIP
+        | termios.INLCR
+        | termios.IGNCR
+        | termios.ICRNL
+        | termios.IXON
+    )
+    attrs[1] &= ~termios.OPOST
+    attrs[3] &= ~(termios.ECHO | termios.ECHONL | termios.ICANON | termios.ISIG | termios.IEXTEN)
+    attrs[6][termios.VMIN] = 1
+    attrs[6][termios.VTIME] = 0
+    termios.tcsetattr(fd, termios.TCSANOW, attrs)
+
+
+class ComBridge:
+    """Hold one mapped COM pty and relay it to a peer pty or TCP listener.
+
+    The bridge is the whole lifecycle: :meth:`open` validates through the
+    wine hub (bad COM names, missing prefix, existing maps refuse exactly as
+    ``gd winehub map`` does), :meth:`serve` pumps bytes until the stop event
+    (or SIGINT), and :meth:`close` unmaps and tears the ptys down. Byte
+    counters name their direction from the wine side, so a transcript reads
+    "what VARA sent" / "what the fake rig answered".
+    """
+
+    def __init__(self, hub: winehub.WineHub):
+        self.hub = hub
+        self.com_fd: int | None = None
+        self.com_name: str | None = None
+        self.com_pts: str | None = None
+        self.com_dev: str | None = None
+        self.peer_fd: int | None = None  # pty peer: master end of the 2nd pair
+        self.peer_dev: str | None = None
+        self.peer_kind: str | None = None  # "pty" | "tcp"
+        self.listener: socket.socket | None = None
+        self.conn: socket.socket | None = None
+        self.bytes_wine_to_peer = 0
+        self.bytes_peer_to_wine = 0
+
+    # ---------------------------------------------------------------- setup
+    def open(
+        self,
+        com: int | str,
+        peer: str = "pty",
+        tcp_host: str = DEFAULT_TCP_HOST,
+        tcp_port: int = DEFAULT_TCP_PORT,
+    ) -> dict:
+        """Map ``comN`` onto a fresh pty slave and prepare the peer end.
+
+        Mapping goes through the wine hub, so every refusal is the hub's own
+        (``bad COM name``, ``prefix not installed yet``, ``already maps to``,
+        ``device does not exist`` — the last cannot fire for a held-open pty,
+        but the check stays single-source). Any failure after the pty is
+        allocated cleans the fd (and the map, once made) up before raising.
+        """
+        if self.com_fd is not None:
+            raise BridgeError("bridge already open — close it first (Ctrl-C tears it down)")
+        com_name = f"com{com}".lower()
+        self.com_fd, self.com_pts = open_pair()
+        try:
+            mapped = self.hub.map_serial(com_name, self.com_pts)
+        except Exception:
+            os.close(self.com_fd)
+            self.com_fd, self.com_pts = None, None
+            raise
+        self.com_name = com_name
+        self.com_dev = str(self.hub.prefix / "dosdevices" / com_name)
+        try:
+            if peer == "pty":
+                self.peer_fd, peer_pts = open_pair()
+                self.peer_dev = peer_pts
+                self.peer_kind = "pty"
+            elif peer == "tcp":
+                self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.listener.bind((tcp_host, tcp_port))
+                self.listener.listen(1)
+                port = self.listener.getsockname()[1]
+                self.peer_dev = f"tcp://{tcp_host}:{port}"
+                self.peer_kind = "tcp"
+            else:
+                raise BridgeError(f"unknown peer kind: {peer!r} (pty|tcp)")
+        except Exception:
+            self.close()
+            raise
+        info = self.info()
+        info["map_state"] = mapped["state"]
+        return info
+
+    def info(self) -> dict:
+        """The printed contract: wine side (symlink + pts) and the peer end."""
+        return {
+            "com": self.com_name,
+            "wine_side": self.com_dev,
+            "com_pts": self.com_pts,
+            "peer": self.peer_dev,
+            "peer_kind": self.peer_kind,
+        }
+
+    # ----------------------------------------------------------------- pump
+    def serve(self, stop) -> None:
+        """Relay until ``stop`` (a ``threading.Event``) is set; SIGINT raises.
+
+        TCP peers are re-accepted one at a time: a client that disconnects
+        hands the bridge back for the next one, so a fake-rig script can
+        reconnect without remapping COM. A read failure on the wine side
+        (EIO — nobody holds the pts yet, or VARA just closed its COM port)
+        is waited out, not fatal: Windows apps open and close COM freely.
+        """
+        while not stop.is_set():
+            watch = [self.com_fd]
+            conn_fd = self.conn.fileno() if self.conn is not None else None
+            if self.peer_kind == "pty":
+                watch.append(self.peer_fd)
+            elif conn_fd is None:
+                watch.append(self.listener.fileno())
+            else:
+                watch.append(conn_fd)
+            try:
+                ready, _, _ = select.select(watch, [], [], SELECT_TIMEOUT_S)
+            except OSError:
+                if stop.is_set():
+                    break  # close() raced the select: that is teardown, not a fault
+                raise
+            for fd in ready:
+                if self.peer_kind == "tcp" and conn_fd is None and fd == self.listener.fileno():
+                    self._accept()
+                    continue
+                if fd == self.com_fd:
+                    # wine side out: to the pty peer, or to the connected client
+                    other = self.peer_fd if self.peer_kind == "pty" else conn_fd
+                else:
+                    other = self.com_fd
+                if not self._pump(fd, other):
+                    self._hangup()  # tcp peer gone: wait for the next client
+                    break
+
+    def _accept(self) -> None:
+        conn, addr = self.listener.accept()
+        if self.conn is not None:  # one peer at a time: newest wins
+            self.conn.close()
+        self.conn = conn
+        self.peer_dev = f"tcp://{addr[0]}:{addr[1]} (connected)"
+
+    def _hangup(self) -> None:
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+
+    def _pump(self, fd: int, other: int | None) -> bool:
+        """One read→write hop. False: a tcp peer hung up (serve re-selects)."""
+        try:
+            data = os.read(fd, READ_CHUNK)
+        except OSError:
+            time.sleep(EIO_BACKOFF_S)  # EIO: the pty's other end is not open yet
+            return True
+        if not data:
+            if fd == self.com_fd:
+                time.sleep(EIO_BACKOFF_S)  # BSD-style master EOF: keep the bridge
+                return True
+            return False
+        if other is not None:
+            # Re-assert raw before the hop into a pty master (never a socket:
+            # tcgetattr fails with ENOTTY there): opening the slave resets the
+            # pty's termios to the canonical default on macOS (Linux keeps
+            # it), and a COM port has no line discipline — a canonical slave
+            # would sit on our write forever. Two ioctls per frame.
+            if other == self.com_fd or other == self.peer_fd:
+                try:
+                    _set_raw(other)
+                except OSError:
+                    return True  # the peer end vanished mid-flight; serve() re-selects
+            view = memoryview(data)
+            while view:  # full write: ptys/sockets may take less than one chunk
+                written = os.write(other, view)
+                view = view[written:]
+            if fd == self.com_fd:
+                self.bytes_wine_to_peer += len(data)
+            else:
+                self.bytes_peer_to_wine += len(data)
+        return True  # no peer connected yet: drop and keep serving
+
+    # ------------------------------------------------------------ teardown
+    def close(self) -> dict:
+        """Unmap ``comN`` (best effort), close the ptys/sockets, tally bytes.
+
+        Idempotent: a second close on a not-open bridge reports ``not-open``
+        instead of raising, so a CLI ``finally`` block is always safe.
+        """
+        if self.com_fd is None:
+            return {"state": "not-open", "com": self.com_name, "unmap": "n/a"}
+        com_name = self.com_name
+        try:
+            unmap = self.hub.unmap(com_name)["state"]
+        except winehub.WinehubError as exc:
+            unmap = f"failed ({exc})"
+        for attr in ("com_fd", "peer_fd"):
+            fd = getattr(self, attr)
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                setattr(self, attr, None)
+        if self.conn is not None:
+            self.conn.close()
+            self.conn = None
+        if self.listener is not None:
+            self.listener.close()
+            self.listener = None
+        tally = {
+            "wine_to_peer": self.bytes_wine_to_peer,
+            "peer_to_wine": self.bytes_peer_to_wine,
+        }
+        self.com_name, self.com_pts, self.com_dev = None, None, None
+        self.peer_dev, self.peer_kind = None, None
+        return {"state": "closed", "com": com_name, "unmap": unmap, "bytes": tally}

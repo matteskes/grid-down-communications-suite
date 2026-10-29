@@ -74,7 +74,9 @@ rig:
   baud: 38400
 audio:
   backend: pipewire
-  rig_capture: ""           # physical rig capture source name (loopback wiring: Phase 3)
+  rig_capture: ""           # physical rig capture source (P3b `gd audio wire` RX half)
+  rig_playback: ""          # physical rig playback sink (P3b `gd audio wire` TX half)
+  loopback_roles: [hf]      # roles the rig loopback serves (hf | packet | voice)
   presets:                  # per-app launch-cmd placeholders, see §6.6/§6.4 M2 note
     ardop: { capture: grid_down_hf_out.monitor, playback: grid_down_hf_in }
 supervisor: { backend: auto }   # direct | systemd | auto (§6.5; systemd first: `gd units install`)
@@ -157,8 +159,12 @@ audited by `gd audio status` + Doctor. Nothing outside the module may create or 
 `grid_down_*` nodes (G4). Apps bind to endpoints through registry launch-cmd placeholders
 (e.g. `ardopc 8515 <capture> <playback>`), resolved per-app from `audio.presets` (profile)
 over `DEFAULT_PRESETS`; unresolved placeholders are refused naming the exact profile key.
-Loopbacking the endpoints to the physical rig interface (`audio.rig_capture`) lands with the
-Phase 3 adapter work; `gd audio plan` prints the intended graph either way.
+**P3b (2026-10-28) wires the rig interface in:** `gd audio wire|unwire` load module-loopbacks
+from `audio.rig_capture` into the owned 'out' endpoints (RX) and from the owned 'in' monitors
+into `audio.rig_playback` (TX), per `audio.loopback_roles` (default hf). Teardown only ever
+matches loopbacks whose args name the `grid_down_` namespace — a user's own loopback or null
+sink is never touched (proved by tests and by the VM driver's stage A4). `gd audio plan`
+prints the endpoint graph and the loopback rows (planned or pending) either way.
 - **Wine hub:** one prefix at `/opt/grid-down/wine-prefix` for the VARA family + VarAC;
   `gd winehub` wraps start/stop and serial/COM mapping. Installers/licenses never leave
   `install/kit-import/` (G6). **M5 (0.6.0-m5) ships the plumbing:** `core/winehub.py`
@@ -186,8 +192,14 @@ Phase 3 adapter work; `gd audio plan` prints the intended graph either way.
   declares (`wine.ini_set:`), with the mandatory timestamped backup, atomic
   write and printed diff; the exact VARA.ini key names get pinned into those
   recipes at the live E2E, same discipline as the `exes` candidates.
-  **Remaining P3:** audio loopback wiring (`audio.rig_capture`) and the on-air
-  end-to-end (§10).
+  **P3b (2026-10-28) closes the arm-testable remainder:** `gd winehub bridge <n>`
+  maps COMn to one end of a pty pair through this module's own `map_serial`/`unmap`
+  and relays to a peer pty or TCP listener (core/ptybridge.py, pure stdlib — no
+  wine, no socat; the pty runs raw, since a COM port has no line discipline), and
+  `GRID_DOWN_WINE_PREFIX` points the default prefix at a fixture directory so the
+  COM map is rehearsal-able without wine. Both are validated on the aarch64 VM
+  (docs/phase3b-vm-runbook.md). **Remaining P3:** the on-air end-to-end (§10),
+  still gated on an x86_64 carrier.
 
 ### 6.5 Supervisor & services
 

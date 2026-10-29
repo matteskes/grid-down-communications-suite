@@ -78,6 +78,7 @@ def _snap() -> dict:
             "audio": {
                 "backend": "pipewire",
                 "rig_capture": "",
+                "rig_playback": "",
                 "presets": {
                     "ardop": {
                         "capture": "grid_down_hf_out.monitor",
@@ -515,15 +516,21 @@ def test_profiles_audio_form_prefills_and_saves(qtbot):
     calls = []
     services = _spy_services(
         _fake_services(),
-        audio_save=lambda be, rc, ac, ap: (
-            calls.append((be, rc, ac, ap)),
+        audio_save=lambda **kw: (
+            calls.append(kw),
             {
                 "path": "/home/u/.config/grid-down/profiles/default.yaml",
                 "created": False,
                 "audio": {
-                    "backend": be or "pipewire",
-                    "rig_capture": rc,
-                    "presets": {"ardop": {"capture": ac, "playback": ap}},
+                    "backend": kw["backend"] or "pipewire",
+                    "rig_capture": kw["rig_capture"],
+                    "rig_playback": kw["rig_playback"],
+                    "presets": {
+                        "ardop": {
+                            "capture": kw["ardop_capture"],
+                            "playback": kw["ardop_playback"],
+                        }
+                    },
                 },
             },
         )[1],
@@ -533,28 +540,33 @@ def test_profiles_audio_form_prefills_and_saves(qtbot):
     view.set_snapshot(_snap())
     assert view.backend_edit.text() == "pipewire"
     assert view.rig_capture_edit.text() == ""
+    assert view.rig_playback_edit.text() == ""
     assert view.ardop_capture_edit.text() == "grid_down_hf_out.monitor"
     assert view.ardop_playback_edit.text() == "grid_down_hf_in"
     qtbot.keyClicks(view.rig_capture_edit, "alsa_input.usb-codex")
+    qtbot.keyClicks(view.rig_playback_edit, "alsa_output.usb-codex")
     with qtbot.waitSignal(view.changed, timeout=5000):
         view.audio_save_btn.click()
     assert calls == [
-        (
-            "pipewire",
-            "alsa_input.usb-codex",
-            "grid_down_hf_out.monitor",
-            "grid_down_hf_in",
-        )
+        {
+            "backend": "pipewire",
+            "rig_capture": "alsa_input.usb-codex",
+            "rig_playback": "alsa_output.usb-codex",
+            "ardop_capture": "grid_down_hf_out.monitor",
+            "ardop_playback": "grid_down_hf_in",
+        }
     ]
     assert "audio updated:" in view.save_status.text()
     snap = _snap()
     snap["profile_raw"]["audio"]["rig_capture"] = "other_source"
+    snap["profile_raw"]["audio"]["rig_playback"] = "other_sink"
     view.set_snapshot(snap)
     assert view.rig_capture_edit.text() == "alsa_input.usb-codex"  # dirty field untouched
+    assert view.rig_playback_edit.text() == "alsa_output.usb-codex"  # ditto
 
 
 def test_profiles_audio_save_failure_surfaces(qtbot):
-    def boom(be, rc, ac, ap):
+    def boom(**kw):
         raise RuntimeError("bad audio backend")
 
     services = _spy_services(_fake_services(), audio_save=boom)

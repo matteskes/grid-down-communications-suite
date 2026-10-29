@@ -8,7 +8,7 @@ designed to be **built online, installed offline, and run fully offline**.
 
 - Full design and scope: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) (v0.3)
 - Fedora 45 package audit: [`docs/audit/f45-package-audit.md`](docs/audit/f45-package-audit.md)
-- Status: **Phase 2 closed — v0.6.0-m5: M1–M5 shipped (CLI v1, supervisor + systemd-unit backend, Control Center v1 + install-state columns + wine hub panel + tray/launcher, rigctld/audio ownership, `gd winehub`) and VM-accepted on air-gapped Fedora 45 aarch64 (M1–M4 12-gate pass 2026-10-26 + M5 smoke 2026-10-27)**; evidence: `docs/audit/phase2-vm-acceptance.md` — next: P3 (VARA/Wine Hub end-to-end, Winlink session bundle end-to-end)
+- Status: **Phase 2 closed — v0.6.0-m5: M1–M5 shipped (CLI v1, supervisor + systemd-unit backend, Control Center v1 + install-state columns + wine hub panel + tray/launcher, rigctld/audio ownership, `gd winehub`) and VM-accepted on air-gapped Fedora 45 aarch64 (M1–M4 12-gate pass 2026-10-26 + M5 smoke 2026-10-27)**; evidence: `docs/audit/phase2-vm-acceptance.md` — **P3b shipped 2026-10-28** (`gd audio wire|unwire` rig-audio loopbacks + `gd winehub bridge` pty-pair COM harness, arm-validated on the aarch64 VM: `docs/phase3b-vm-runbook.md`); remaining: P3's on-air Winlink E2E (x86_64 carrier: `docs/phase3-vm-runbook.md`)
 
 ## Why
 
@@ -71,6 +71,8 @@ python3 control/cli/gd.py stop <app|bundle|all> # reverse order; rigctld stopped
 python3 control/cli/gd.py winehub status     # VARA wine hub (§6.4): install probes + COM map
 python3 control/cli/gd.py winehub install vara-hf # silent-install a kit-import/ .exe/.zip (G6; + init)
 python3 control/cli/gd.py winehub start vara-hf # + stop / map <n> <device> / unmap <n>
+python3 control/cli/gd.py audio wire         # P3b: loop rig_capture/rig_playback into the endpoints (+ unwire)
+python3 control/cli/gd.py winehub bridge 5   # P3b: COM5 over a pty pair -> peer pty/TCP, no wine needed
 sh tools/install-launcher.sh                 # user-local GUI launcher + icon (M5)
 
 # Fedora 45 package audit (online machine, uses Docker)
@@ -91,7 +93,7 @@ Supervisor state lives in `$XDG_STATE_HOME/grid-down/supervisor.json`
 | P0 | Scaffold, spec v0.3, F45 package audit *(done)* |
 | P1 | Installer library + kit builder skeleton; first online↔air-gap round-trip (dnf-only subset) |
 | P2 | Control Center GUI + `gd` CLI v1; rigctld + PipeWire audio ownership *(M1–M5 shipped: M1 CLI v1 + supervisor + doctor; M2 rigctld-from-profile + audio endpoints; M3 GUI v1 (Dashboard/Catalog/Bundles/Doctor/Profiles); M4 systemd-unit launch backend; M5 install-state columns + `gd winehub` + GUI wine-hub panel + tray/launcher. §10 Fedora GUI-VM acceptance passed: M1–M4 12 gates (2026-10-26) + M5 smoke (2026-10-27) — P2 closed. Per-app install recipes and config adapters are P3/P4.)* *(done)* |
-| P3 | VARA/Wine Hub; Winlink session bundle end-to-end |
+| P3 | VARA/Wine Hub; Winlink session bundle end-to-end *(P3b shipped 2026-10-28: `gd audio wire\|unwire` PipeWire rig-audio wiring + `gd winehub bridge` pty-pair COM harness + `GRID_DOWN_WINE_PREFIX`, arm-validated on the aarch64 VM — `tools/vm-p3b-loopback.sh`, `docs/phase3b-vm-runbook.md`; the on-air Winlink E2E stays x86_64-gated)* |
 | P4 | Remaining apps + LoRa/Meshtastic recipes, adapters, localhost services |
 | P5 | Offline USB kit, bootstrap hardening, docs, drills |
 

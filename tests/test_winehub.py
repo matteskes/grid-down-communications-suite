@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "control"))
 
 from core import winehub  # noqa: E402
-from core.winehub import WineHub, WinehubError, exe_for  # noqa: E402
+from core.winehub import WINE_PREFIX, WineHub, WinehubError, exe_for  # noqa: E402
 
 APPS = [
     {
@@ -68,6 +68,18 @@ def test_status_reports_prefix_wine_com_and_apps(hub, tmp_path, monkeypatch):
     st = hub.status()
     assert st["prefix"] is True and st["wine"] is not None
     assert st["com"] == {"com5": "/dev/ttyUSB0"}
+
+
+def test_default_prefix_honours_env_override(tmp_path, monkeypatch):
+    """GRID_DOWN_WINE_PREFIX (P3b): rehearsals point the default at a fixture."""
+    fixture = tmp_path / "fixture-prefix"
+    monkeypatch.setenv("GRID_DOWN_WINE_PREFIX", str(fixture))
+    assert WineHub(APPS, state_dir=tmp_path / "s1").prefix == fixture
+    # an explicit prefix= still wins over the env (test fixtures rely on it)
+    explicit = tmp_path / "explicit"
+    assert WineHub(APPS, state_dir=tmp_path / "s2", prefix=explicit).prefix == explicit
+    monkeypatch.delenv("GRID_DOWN_WINE_PREFIX")
+    assert WineHub(APPS, state_dir=tmp_path / "s3").prefix == WINE_PREFIX
 
 
 def test_exe_for_drops_prose_and_refuses_non_exe():

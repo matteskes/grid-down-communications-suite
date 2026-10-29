@@ -127,3 +127,85 @@ def test_runner_without_pactl_raises(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda _: None)
     with pytest.raises(audio.AudioError, match="pactl not found"):
         audio.status()
+
+
+# ------------------------------------------------------- P3b: rig loopbacks
+
+
+def test_loopback_rows_default_is_pending_bench_state():
+    rows = audio.loopback_rows({})
+    assert [(r["role"], r["direction"]) for r in rows] == [("hf", "rx"), ("hf", "tx")]
+    assert all(r["state"].startswith("pending") for r in rows)
+    assert all(r["argv"] == [] for r in rows)  # nothing to run without the keys
+
+
+def test_loopback_rows_planned_argv_and_roles():
+    prof = {"audio": {"rig_capture": "alsa_input.rig", "rig_playback": "alsa_output.rig"}}
+    rows = audio.loopback_rows(prof)
+    rx = next(r for r in rows if r["direction"] == "rx")
+    tx = next(r for r in rows if r["direction"] == "tx")
+    assert rx["argv"] == [
+        "pactl",
+        "load-module",
+        "module-loopback",
+        "source=alsa_input.rig",
+        "sink=grid_down_hf_out",
+    ]
+    # TX taps the owned 'in' endpoint's monitor (the .monitor convention)
+    assert tx["argv"][3:] == ["source=grid_down_hf_in.monitor", "sink=alsa_output.rig"]
+    assert all(r["state"] == "planned" for r in rows)
+    both = {
+        "audio": {"rig_capture": "cap", "rig_playback": "out", "loopback_roles": ["hf", "packet"]}
+    }
+    assert [(r["role"], r["direction"]) for r in audio.loopback_rows(both)] == [
+        ("hf", "rx"),
+        ("hf", "tx"),
+        ("packet", "rx"),
+        ("packet", "tx"),
+    ]
+    with pytest.raises(audio.AudioError, match="loopback_roles"):
+        audio.loopback_rows({"audio": {"loopback_roles": ["wifi"]}})
+
+
+def test_wire_loads_planned_rows_and_skips_rest():
+    listings = {"modules": "9\tmodule-loopback\tsource=alsa_input.rig sink=grid_down_hf_out\n"}
+    prof = {"audio": {"rig_capture": "alsa_input.rig"}}  # RX only: TX half stays unplanned
+    out = audio.wire(prof, runner=_fake_runner(listings))
+    assert out["wired"] == []
+    assert out["skipped"] == ["hf.rx: already wired"]
+    run2 = _fake_runner({"modules": ""})
+    out2 = audio.wire(prof, runner=run2)
+    assert [w["direction"] for w in out2["wired"]] == ["rx"]
+    assert out2["wired"][0]["module"] == "42"
+    assert [c for c in run2.calls if c[:2] == ["pactl", "load-module"]] == [
+        [
+            "pactl",
+            "load-module",
+            "module-loopback",
+            "source=alsa_input.rig",
+            "sink=grid_down_hf_out",
+        ]
+    ]
+    # nothing configured: both halves report their pending profile key, no pactl runs
+    run3 = _fake_runner({})
+    assert audio.wire({}, runner=run3)["skipped"] == [
+        "hf.rx: pending (set audio.rig_capture)",
+        "hf.tx: pending (set audio.rig_playback)",
+    ]
+    assert run3.calls == []  # pending rows never reach pactl
+
+
+def test_unwire_and_down_never_touch_a_user_loopback():
+    owned_rx = "5\tmodule-loopback\tsource=alsa_input.rig sink=grid_down_hf_out"
+    owned_tx = "6\tmodule-loopback\tsource=grid_down_hf_in.monitor sink=alsa_output.rig"
+    user_lb = "7\tmodule-loopback\tsource=user_mic.monitor sink=user_speakers"
+    user_sink = "8\tmodule-null-sink\tsink_name=user_desktop_audio"
+    listings = {"modules": "\n".join([owned_rx, owned_tx, user_lb, user_sink])}
+    run = _fake_runner(listings)
+    assert sorted(audio.unwire(runner=run)["unloaded"]) == ["5", "6"]
+    # down() owns the loopback half too: same two modules, user gear untouched
+    assert sorted(audio.down({}, runner=_fake_runner(listings))["unloaded"]) == ["5", "6"]
+    # status surfaces the wired loopbacks by their module args
+    st = audio.status(runner=_fake_runner(listings))
+    assert len(st["loopback"]) == 2
+    assert all("grid_down_" in a for a in st["loopback"])
