@@ -116,6 +116,7 @@ echo "== stage B2: gd winehub bridge 5 (pty peer) — map, round-trip, live map"
 # bridge — the teardown kill would miss python entirely (found live on the VM).
 python3 "$here/control/cli/gd.py" winehub bridge 5 --json > "$ev/bridge-pty.json" 2>&1 &
 BR1_PID=$!
+export GD_P3B_BRIDGE_PID="$BR1_PID"
 i=0
 while [ $i -lt 20 ]; do
     grep -q '"peer"' "$ev/bridge-pty.json" 2>/dev/null && break
@@ -153,6 +154,23 @@ def poll_read(fd, count, timeout=10.0):
 
 
 got = poll_read(rig_fd, 14)
+if got != b"FA00007123450;":
+    # diagnostics: what the client can see on BOTH ends before giving up
+    import fcntl, termios
+
+    for name, fd in (("rig", rig_fd), ("com", com_fd)):
+        a = termios.tcgetattr(fd)
+        print(f"  diag {name}: ICANON={bool(a[3] & termios.ICANON)}", flush=True)
+        try:
+            print(f"  diag {name} drain: {os.read(fd, 100)!r}", flush=True)
+        except BlockingIOError:
+            print(f"  diag {name} drain: <empty>", flush=True)
+    bp = os.environ.get("GD_P3B_BRIDGE_PID", "")
+    if bp and os.path.exists(f"/proc/{bp}"):
+        with open(f"/proc/{bp}/stat") as f:
+            print(f"  diag bridge[{bp}] state:", f.read().split()[2], flush=True)
+        with open(f"/proc/{bp}/wchan") as f:
+            print("  diag bridge wchan:", f.read().strip(), flush=True)
 assert got == b"FA00007123450;", f"wine->peer got {got!r}"
 os.write(rig_fd, b"FA00007123450;OK")
 got = poll_read(com_fd, 16)
