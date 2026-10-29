@@ -201,6 +201,7 @@ class ComBridge:
         (EIO — nobody holds the pts yet, or VARA just closed its COM port)
         is waited out, not fatal: Windows apps open and close COM freely.
         """
+        debug = os.environ.get("GD_PTYBRIDGE_DEBUG") == "1"
         while not stop.is_set():
             watch = [self.com_fd]
             conn_fd = self.conn.fileno() if self.conn is not None else None
@@ -216,6 +217,8 @@ class ComBridge:
                 if stop.is_set():
                     break  # close() raced the select: that is teardown, not a fault
                 raise
+            if debug and ready:
+                print(f"gd-bridge: select ready {ready}", flush=True)
             for fd in ready:
                 if self.peer_kind == "tcp" and conn_fd is None and fd == self.listener.fileno():
                     self._accept()
@@ -245,9 +248,13 @@ class ComBridge:
         """One read→write hop. False: a tcp peer hung up (serve re-selects)."""
         try:
             data = os.read(fd, READ_CHUNK)
-        except OSError:
+        except OSError as exc:
+            if os.environ.get("GD_PTYBRIDGE_DEBUG") == "1":
+                print(f"gd-bridge: read fd {fd} OSError {exc}", flush=True)
             time.sleep(EIO_BACKOFF_S)  # EIO: the pty's other end is not open yet
             return True
+        if os.environ.get("GD_PTYBRIDGE_DEBUG") == "1":
+            print(f"gd-bridge: fd {fd} -> fd {other}: {data!r}", flush=True)
         if not data:
             if fd == self.com_fd:
                 time.sleep(EIO_BACKOFF_S)  # BSD-style master EOF: keep the bridge
