@@ -156,9 +156,8 @@ else:
     os.set_blocking(peer, False)
 
 
-def pread(count, timeout=8.0):
-    # polling nonblocking reads: delivery is proven by the bridge's byte
-    # tally; only the slave's select wakeup is flaky under the harness
+def read_peer(count, timeout=8.0):
+    # polling nonblocking reads on the rig/shim side (socket or pts)
     buf = b""
     deadline = time.monotonic() + timeout
     while len(buf) < count and time.monotonic() < deadline:
@@ -168,6 +167,19 @@ def pread(count, timeout=8.0):
             else:
                 buf += os.read(peer, 4096)
         except (BlockingIOError, socket.timeout):
+            pass
+        time.sleep(0.05)
+    return buf
+
+
+def read_com(count, timeout=8.0):
+    # polling nonblocking reads on the wine side (the COM pts)
+    buf = b""
+    deadline = time.monotonic() + timeout
+    while len(buf) < count and time.monotonic() < deadline:
+        try:
+            buf += os.read(com_fd, 4096)
+        except BlockingIOError:
             pass
         time.sleep(0.05)
     return buf
@@ -186,18 +198,18 @@ def peer_write(data):
 
 if kind == "tcp":
     peer_write(b"CQ P3B shim")
-    got = pread(11)
+    got = read_com(11)
     assert got == b"CQ P3B shim", f"client->wine got {got!r}"
     com_write(b"DE W1AW")
-    got = pread(7)
+    got = read_peer(7)
     assert got == b"DE W1AW", f"wine->client got {got!r}"
     print("  tcp round-trip ok: 11 bytes client->wine, 7 bytes wine->client")
 else:
     com_write(b"FA00007123450;")                             # VARA-side poll...
-    got = pread(14)
+    got = read_peer(14)
     assert got == b"FA00007123450;", f"wine->peer got {got!r}"
     peer_write(b"FA00007123450;OK")                          # ...fake rig answers
-    got = pread(16)
+    got = read_com(16)
     assert got == b"FA00007123450;OK", f"peer->wine got {got!r}"
     print("  pty round-trip ok: 14 bytes wine->peer, 16 bytes peer->wine")
 os.close(com_fd)
