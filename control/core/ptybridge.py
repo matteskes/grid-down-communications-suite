@@ -174,6 +174,11 @@ class ComBridge:
             _set_raw(self.com_hold)
             if self.peer_hold is not None:
                 _set_raw(self.peer_hold)
+            # nonblocking masters: serve() drains them every iteration, so a
+            # lost select wakeup can never wedge the relay
+            os.set_blocking(self.com_fd, False)
+            if self.peer_fd is not None:
+                os.set_blocking(self.peer_fd, False)
         except Exception:
             self.close()
             raise
@@ -197,9 +202,13 @@ class ComBridge:
 
         TCP peers are re-accepted one at a time: a client that disconnects
         hands the bridge back for the next one, so a fake-rig script can
-        reconnect without remapping COM. A read failure on the wine side
-        (EIO — nobody holds the pts yet, or VARA just closed its COM port)
-        is waited out, not fatal: Windows apps open and close COM freely.
+        reconnect without remapping COM. The masters are nonblocking and
+        drained unconditionally every iteration: select() remains as a sleep
+        + hint, but delivery never depends on a wakeup (a lost pty wakeup
+        was observed on a Fedora 45 aarch64 guest under automation harnesses
+        — polling makes the bridge immune by construction). A read failure
+        on the wine side (EIO — nobody holds the pts) is waited out, not
+        fatal: Windows apps open and close COM freely.
         """
         debug = os.environ.get("GD_PTYBRIDGE_DEBUG") == "1"
         while not stop.is_set():
@@ -219,9 +228,11 @@ class ComBridge:
                 raise
             if debug and ready:
                 print(f"gd-bridge: select ready {ready}", flush=True)
+            handled = set()
             for fd in ready:
                 if self.peer_kind == "tcp" and conn_fd is None and fd == self.listener.fileno():
                     self._accept()
+                    handled.add(fd)
                     continue
                 if fd == self.com_fd:
                     # wine side out: to the pty peer, or to the connected client
@@ -230,6 +241,18 @@ class ComBridge:
                     other = self.com_fd
                 if not self._pump(fd, other):
                     self._hangup()  # tcp peer gone: wait for the next client
+                    handled.update(watch)
+                    break
+            # drain anything select's wakeup may have missed (nonblocking)
+            for fd in watch:
+                if fd in handled or stop.is_set():
+                    continue
+                if fd == self.com_fd:
+                    other = self.peer_fd if self.peer_kind == "pty" else conn_fd
+                else:
+                    other = self.com_fd
+                if not self._pump(fd, other):
+                    self._hangup()
                     break
 
     def _accept(self) -> None:
@@ -248,6 +271,8 @@ class ComBridge:
         """One read→write hop. False: a tcp peer hung up (serve re-selects)."""
         try:
             data = os.read(fd, READ_CHUNK)
+        except BlockingIOError:
+            return True  # nonblocking drain: nothing queued on this fd right now
         except OSError as exc:
             if os.environ.get("GD_PTYBRIDGE_DEBUG") == "1":
                 print(f"gd-bridge: read fd {fd} OSError {exc}", flush=True)
