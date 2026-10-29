@@ -111,7 +111,10 @@ export GRID_DOWN_WINE_PREFIX="$fx/prefix"
 gd winehub status | grep -q 'prefix: present' || fail "GRID_DOWN_WINE_PREFIX was not honoured"
 
 echo "== stage B2: gd winehub bridge 5 (pty peer) — map, round-trip, live map"
-gd winehub bridge 5 --json > "$ev/bridge-pty.json" 2>&1 &
+# Background python DIRECTLY (not via the gd() function): a function call in
+# background forks a subshell, and $! would name that subshell instead of the
+# bridge — the teardown kill would miss python entirely (found live on the VM).
+python3 "$here/control/cli/gd.py" winehub bridge 5 --json > "$ev/bridge-pty.json" 2>&1 &
 BR1_PID=$!
 i=0
 while [ $i -lt 20 ]; do
@@ -156,7 +159,8 @@ gd winehub status | tee "$ev/winehub-status-up.txt" | grep 'com:    com5' >/dev/
     || fail "human status does not show the bridged com5"
 
 echo "== stage B4: gd winehub bridge 6 --peer tcp — the same map over a TCP shim"
-gd winehub bridge 6 --peer tcp --tcp-port 18399 --json > "$ev/bridge-tcp.json" 2>&1 &
+python3 "$here/control/cli/gd.py" winehub bridge 6 --peer tcp --tcp-port 18399 --json \
+    > "$ev/bridge-tcp.json" 2>&1 &
 BR2_PID=$!
 i=0
 while [ $i -lt 20 ]; do
