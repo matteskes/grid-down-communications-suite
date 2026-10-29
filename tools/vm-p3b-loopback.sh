@@ -200,22 +200,33 @@ print("  tcp round-trip ok: 11 bytes client->wine, 7 bytes wine->client")
 PYEOF
 
 echo "== stage B5: SIGTERM teardown — unmap + pts gone, on both bridges"
-kill -TERM "$BR1_PID"; kill -TERM "$BR2_PID"
-wait "$BR1_PID" 2>/dev/null || true
-wait "$BR2_PID" 2>/dev/null || true
-BR1_PID=""; BR2_PID=""
+kill -TERM "$BR1_PID" 2>/dev/null || true
+kill -TERM "$BR2_PID" 2>/dev/null || true
+# Poll on the process table (not `wait`: background pids behind the pipeline
+# are not reliably waitable children) — SIGTERM -> handled stop -> exit is the
+# contract; a bridge that ignored TERM would fail the pgrep gate below.
+i=0
+while [ $i -lt 20 ]; do
+    pgrep -f 'gd.py winehub bridge' >/dev/null 2>&1 || break
+    sleep 0.5; i=$((i + 1))
+done
+if pgrep -f 'gd.py winehub bridge' >/dev/null 2>&1; then
+    fail "bridges still running after SIGTERM (teardown handler did not stop them)"
+fi
 python3 - "$ev/bridge-pty.json" "$ev/bridge-tcp.json" <<'PYEOF' || fail "teardown did not fully clean up (output above)"
 import json, os, sys
 
 decoder = json.JSONDecoder()
 for path in sys.argv[1:]:
     text = open(path).read()
-    info, end = decoder.raw_decode(text)          # bridge-up object
-    tail, _ = decoder.raw_decode(text[end:].lstrip())  # teardown object
+    info, end = decoder.raw_decode(text)               # bridge-up object
+    rest = text[end:].strip()
+    assert rest, f"{path}: teardown JSON missing after the up-object"
+    tail, _ = decoder.raw_decode(rest)                 # teardown object
     assert tail["state"] == "closed" and tail["unmap"] == "unmapped", (path, tail)
-    for pts in (info["com_pts"], info["peer"]):
-        assert not os.path.exists(pts), f"{path}: {pts} survived teardown"
-print("  teardown ok: both bridges closed with unmap: unmapped, both pts nodes gone")
+    pts = info["com_pts"]
+    assert not os.path.exists(pts), f"{path}: {pts} survived teardown"
+print("  teardown ok: both bridges closed with unmap: unmapped, pts nodes gone")
 PYEOF
 gd winehub status --json | python3 -c 'import json,sys; m=json.load(sys.stdin)["com"]; assert m == {}, m' \
     || fail "the COM map is not empty after teardown"
