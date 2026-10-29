@@ -1,24 +1,30 @@
-# Install recipe for xygrib (pinned M6a, 2026-10-29)
-# strategy: build — pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
-# upstream: opengribs/XyGrib v1.2.6.1 (latest tagged release, 2019).
-# F45 note: openjpeg-devel currently comes from updates-testing (audit M6a);
-# zlib devel package is zlib-ng-compat-devel on F45.
+# Install recipe for xygrib (pinned M6a; source pivoted to the Debian-maintained
+# fork at the M6d gate — opengribs/XyGrib v1.2.6.1 (2019) cannot build on F45:
+# its FindPROJ4 hunts the long-removed proj_api.h (proj >= 8 dropped it). The
+# frfa/XyGrib fork is the Debian-packaged continuation (trixie ships 1.3.x),
+# uses the modern proj.h API, GPL-3.0 unchanged.
+# F45 notes: openjpeg-devel keeps openjpeg.h in a versioned subdir (passed via
+# -D flags; the fork's suffix list stops at 2.3); zlib devel = zlib-ng-compat-devel.
 recipe:
   id: xygrib
   strategy: build
   license: GPL-3.0
   dnf:
     repo: fedora
-    packages: [qt5-qtbase, libpng, openjpeg, proj, zlib-ng-compat]
+    packages: [qt5-qtbase, libpng, openjpeg, proj, zlib-ng-compat, libnova]
   source:
-    git: https://github.com/opengribs/XyGrib.git
-    tag: v1.2.6.1
-    version: 1.2.6.1
-    sha256: 2dc6099293ae6f7a4bfbfc0cab590cf7ad48241d608e6d7a76e35961b9fc2157
+    git: https://github.com/frfa/XyGrib.git
+    tag: v1.3.1
+    version: 1.3.1
+    sha256: d52c426f0e2f363af83c545582178e55ea4890771d314c757f7a7dc1da229e92
     build_container: fedora:45
     build_deps: [cmake, gcc-c++, qt5-qtbase-devel, libpng-devel,
-                 openjpeg-devel, zlib-ng-compat-devel, bzip2-devel, proj-devel]
-    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+                 openjpeg-devel, zlib-ng-compat-devel, bzip2-devel, proj-devel,
+                 libnova-devel]
+    # CMAKE_POLICY_VERSION_MINIMUM: 2019-era cmake_minimum_required vs F45 CMake 4.x.
+    # F45's openjpeg-devel keeps openjpeg.h in a versioned subdir; pass it + the lib.
+    build_cmd: cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DOPENJPEG_INCLUDE_DIR=/usr/include/openjpeg-2.5 -DOPENJPEG_LIBRARY=/usr/lib64/libopenjp2.so -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
     artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+
 

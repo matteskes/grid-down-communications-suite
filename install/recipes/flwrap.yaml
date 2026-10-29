@@ -8,14 +8,14 @@ recipe:
   license: GPL-2.0-or-later   # COPYING verified at pin (M6a)
   dnf:
     repo: fedora
-    packages: [fltk]           # runtime: flwrap links fltk
+    packages: [fltk1.3]        # runtime: flwrap 1.3.6 targets fltk 1.3 (F45 ships 1.4)
   source:
     archive_url: https://downloads.sourceforge.net/project/fldigi/flwrap/flwrap-1.3.6.tar.gz
     version: 1.3.6
     sha256: 83557b6ce720547a43f8d767d36363e08deb188b6e436a8b1a5ad966c85f18ff
     build_container: fedora:45
-    build_deps: [gcc-c++, make, fltk-devel, fltk-fluid]
-    build_cmd: ./configure && make -j"$(nproc)"
+    build_deps: [gcc-c++, make, fltk1.3-devel]
+    build_cmd: FLTK_CONFIG="$(command -v fltk1.3-config || command -v fltk-config)" ./configure && make -j"$(nproc)"
     artifacts: [src/flwrap:bin/flwrap]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

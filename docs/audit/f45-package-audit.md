@@ -199,6 +199,53 @@ Findings folded into recipes (M6a):
   paracon is a Python zipapp (build = zipapp packaging, not compilation).
   meshtastic CLI pinned by PyPI version (2.7.11) — wheels enumerated at M6c.
 
+## M6d full-strategy gate build (2026-10-29) — PASS
+
+`build-kit.sh --no-pack` with all 19 apps (every strategy, zero PIN-ME):
+
+```text
+manifest : 1859 files (sha256sum -c PASS; file-count matches)
+rpms     : 891 (dnf closure incl. every build app's runtime deps)
+built    : 9/9 kit/opt/<id>/ (ardop, dump1090, flwrap, osm-navit, paracon,
+           qttermtcp, sdrpp, wsjtx-improved, xygrib)
+artifacts: 7/7 kit/tarball/<id>/ (sha256-verified at download)
+wheels   : 14 for meshtastic (vendored for python3.14; cp314 wheels included)
+static   : 2 payload slots (meshtastic-web, commstatone — empty by default)
+apps     : 19 · staging 1.8G
+```
+
+Build-fix ledger (each fix lives in the recipe's build_cmd/build_deps — the
+recipes are the record; round-trip + full-build iterations caught them):
+
+| App | F45-toolchain failure | Fix (in recipe) |
+|---|---|---|
+| ardop | gcc C23 default rejects K&R decls (`SendData`); rawhid pointer-fd misuse now errors | `CFLAGS=-std=gnu17 -Wno-error=int-conversion -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types` |
+| dump1090 | view1090 needs curses; Makefile's `DUMP1090_CFLAGS` carries `-Werror` (format-truncation trips) | `ncurses-devel`; rebuild `DUMP1090_CFLAGS` without `-Werror` |
+| flwrap | F45 ships fltk 1.4; 1.3.6-era configure fails against it | fltk1.3 compat stack (`fltk1.3-devel`, `FLTK_CONFIG=fltk1.3-config`) |
+| osm-navit | REQUIRED `protobuf-c`; build downloads an OSM sample map mid-compile | `protobuf-c-devel`; `-DSAMPLE_MAP=n` |
+| qttermtcp | .pro requires Qt serialport+multimedia modules | `qt5-qtserialport-devel qt5-qtmultimedia-devel` (+ runtime rows) |
+| sdrpp | optional SDR drivers are REQUIRED pkg-config deps (libairspy, rtaudio) | `-DOPT_BUILD_*_SOURCE=OFF` (RTL-SDR only); `rtaudio-devel` |
+| wsjtx-improved | CMake 4 rejects ancient `cmake_minimum_required`; reserved target name `install`; docs need asciidoctor; manpages need a2x; full `-j` OOM-kills cc1plus | `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`; sed-rename the custom `install` target; `-DWSJT_GENERATE_DOCS=OFF`; `asciidoc`; `-j2` |
+| xygrib | opengribs 1.2.6.1 hunts removed `proj_api.h` — cannot build on proj >= 8; openjpeg.h in versioned subdir | **source pivot** to the Debian-packaged continuation `frfa/XyGrib` v1.3.1 (modern proj.h, GPL-3.0 unchanged); `-DOPENJPEG_INCLUDE_DIR/LIBRARY` |
+
+Tooling lessons (folded into the builder):
+- **Rosetta (linux/amd64 emulation) lacks `statx`** — GNU tar fails with
+  ENOSYS ("Cannot stat/open: Function not implemented") inside the container
+  on ANY filesystem; same syscall family as the M4 fexecve quirk. Builder
+  extracts with `python3 -m tarfile` and packs via python tarfile + zstd;
+  build scratch rides a host bind mount (virtiofs).
+- **bash `read` collapses consecutive IFS-whitespace tabs** — empty plan
+  fields shifted columns and a sha256 ended up as a curl host. Plan rows now
+  join with `\x1f` (non-whitespace).
+- **fedora:45 base has no python3**; the builder installs python3-pip (+ bsdtar,
+  zstd) in preflight.
+- **meshtastic CLI 2.7.11 caps Requires-Python <3.15** while F45 ships python
+  3.15 — the recipe vendors wheels for the **python3.14** alternate stack
+  (AVAILABLE on F45; pip comes from venv+ensurepip — no python3.14-pip package).
+- Download verified checksums at fetch time for all 7 artifacts; the yaac
+  "latest" URL is checksum-pinned (drift fails the build loudly).
+
+
 
 ## Post-audit correction (2026-10-26, license-research pass)
 

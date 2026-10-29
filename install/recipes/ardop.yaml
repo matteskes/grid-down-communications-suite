@@ -16,7 +16,11 @@ recipe:
     sha256: ede4f3cbd54b60c3380444d8f36dfc28ed3ce47089a1414b929e3b8f1718259e
     build_container: fedora:45
     build_deps: [gcc, make, alsa-lib-devel]
-    build_cmd: make -j"$(nproc)"
+    # F45 gcc (C23 default + promoted warnings) vs ardop 1.0.4.1.3 legacy code:
+    # K&R-style decls (SendData) -> gnu17; rawhid.c pointer-fd misuse -> the
+    # int-conversion/implicit/incompatible-pointer classes were warnings on
+    # the gcc this release was built with — keep them warnings.
+    build_cmd: make -j"$(nproc)" CFLAGS="-g -MMD -std=gnu17 -Wno-error=int-conversion -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
     artifacts: [ardopcf:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

@@ -49,7 +49,7 @@ the kit builder into the manifest.
 | meshtasticd | meshtastic (firmware) | GPL-3.0 | |
 | meshtastic-web | meshtastic (web client) | GPL-3.0 | served on localhost |
 | sdrpp | AlexandreRouma/SDRPlusPlus | GPL-3.0 | |
-| xygrib | opengribs/XyGrib | GPL-3.0 | |
+| xygrib | frfa/XyGrib (Debian continuation of opengribs) | GPL-3.0 | pinned v1.3.1 (fork uses modern proj.h; opengribs 1.2.6.1 cannot build on proj >= 8) |
 | artemis | AresValley/Artemis | GPL-3.0 | .rpm v4.2 |
 | osm-navit | navit-gps/navit | GPL-2.0 | |
 | dump1090 | FlightAware/dump1090 | GPL-2.0-or-later | fork pinned v11.1; LICENSE verified 2026-10-29 — Flags #3 resolved |

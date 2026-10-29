@@ -17,8 +17,11 @@ recipe:
     version: 11.1
     sha256: 21fe1164d9b189274f6837bfffad7a1fe1b3471187ade4b5dc0409c1e640143f
     build_container: fedora:45
-    build_deps: [gcc, make, rtl-sdr-devel]
-    build_cmd: make -j"$(nproc)"
+    build_deps: [gcc, make, rtl-sdr-devel, ncurses-devel]   # view1090 links curses
+    # Makefile's DUMP1090_CFLAGS carries -Werror; gcc's stricter format-truncation
+    # trips on legacy code — rebuild the flag string without -Werror. RTLSDR
+    # auto-detects via pkg-config (rtl-sdr-devel installed above).
+    build_cmd: make -j"$(nproc)" CFLAGS="-O3 -g" DUMP1090_CFLAGS="-std=c11 -fno-common -Wall -Wmissing-declarations -Wformat-signedness -W"
     artifacts: [dump1090:., view1090:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

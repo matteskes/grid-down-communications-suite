@@ -16,12 +16,19 @@ recipe:
     version: 3.2.1
     sha256: 479bd6d9f5e196022f74882b3e3bbd9cf01d6a44fec4a340c689498958eccd9f
     build_container: fedora:45
-    build_deps: [cmake, gcc-c++, gcc-gfortran, make, hamlib-devel, fftw-devel,
+    build_deps: [cmake, gcc-c++, gcc-gfortran, make, patch, git-core, asciidoc,
+                 hamlib-devel, fftw-devel,
                  libusb1-devel, systemd-devel, boost-devel, portaudio-devel,
                  qt6-qtbase-devel, qt6-qttools-devel, qt6-qtserialport-devel,
                  qt6-qtmultimedia-devel, qt6-qtwebsockets-devel, qt6-qtsvg-devel,
                  dos2unix, desktop-file-utils]
-    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+    # CMAKE_POLICY_VERSION_MINIMUM: upstream declares an ancient cmake_minimum_required,
+    # rejected outright by F45's CMake 4.x — 3.5 is the documented compat escape hatch.
+    # CMake 4 also rejects upstream's custom target literally named "install"
+    # (CMakeLists.txt:199); we use `cmake --install`, so the target is renamed.
+    # WSJT_GENERATE_DOCS=OFF: docs need asciidoctor and aren't part of the kit payload
+    # -j2: full -j OOM-killed cc1plus in the Docker VM (map65/wsjtx C++ at 98%)
+    build_cmd: sed -i 's/add_custom_target *(install/add_custom_target(_wsjtx_install/' CMakeLists.txt && cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DWSJT_GENERATE_DOCS=OFF -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j2 && cmake --install build
     artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

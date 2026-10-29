@@ -9,7 +9,7 @@ recipe:
   license: GPL-3.0
   dnf:
     repo: fedora
-    packages: [fftw-libs-single, glfw, glew, volk, libusb1]
+    packages: [fftw-libs-single, glfw, glew, volk, libusb1, rtaudio]
   source:
     git: https://github.com/AlexandreRouma/SDRPlusPlus.git
     tag: f10fb98af8b80de01de94e60c17608e4281e2515   # master pin (nightly channel)
@@ -17,8 +17,11 @@ recipe:
     sha256: 0149b2e196ae7460b955f8ebcb0bb394062ef4b85035b8a6c08f421e3004b5f5
     build_container: fedora:45
     build_deps: [cmake, gcc-c++, fftw-devel, glfw-devel, glew-devel,
-                 volk-devel, libusb1-devel]
-    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+                 volk-devel, libusb1-devel, rtaudio-devel]
+    # Only the RTL-SDR source ships in this kit; every other SDR driver is an
+    # optional cmake module that would otherwise be a REQUIRED pkg-config dep.
+    # Unknown -D flags are ignored by cmake, so this stays safe across versions.
+    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" -DOPT_BUILD_AIRSPY_SOURCE=OFF -DOPT_BUILD_AIRSPYHF_SOURCE=OFF -DOPT_BUILD_BLADERF_SOURCE=OFF -DOPT_BUILD_FOBOS_SOURCE=OFF -DOPT_BUILD_HACKRF_SOURCE=OFF -DOPT_BUILD_HERMES_SOURCE=OFF -DOPT_BUILD_LIMESDR_SOURCE=OFF -DOPT_BUILD_PLUTOSDR_SOURCE=OFF -DOPT_BUILD_SDRPLAY_SOURCE=OFF -DOPT_BUILD_SOAPY_SOURCE=OFF -DOPT_BUILD_SPECTRAN_SOURCE=OFF -DOPT_BUILD_SPECTRAN_V6_SOURCE=OFF && cmake --build build -j"$(nproc)" && cmake --install build
     artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

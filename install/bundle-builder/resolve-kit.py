@@ -143,11 +143,13 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
             p = r.get("pip") or {}
             pkg = p.get("package") or app_id
             ver = p.get("version") or ""
-            plan["pip"].append({
-                "id": app_id,
-                "package": f"{pkg}=={ver}" if ver else pkg,
-                "python": p.get("python") or "python3",
-            })
+            plan["pip"].append(
+                {
+                    "id": app_id,
+                    "package": f"{pkg}=={ver}" if ver else pkg,
+                    "python": p.get("python") or "python3",
+                }
+            )
 
         elif strat == "static":
             s = r.get("static") or {}
