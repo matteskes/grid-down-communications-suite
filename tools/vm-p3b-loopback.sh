@@ -38,14 +38,16 @@ fx=/var/tmp/gd-p3b-fixture
 RIG_MOD=""; USER_SINK_MOD=""; USER_LB_MOD=""; BR1_PID=""; BR2_PID=""
 
 cleanup() {
-    if [ -n "$BR1_PID" ]; then kill -TERM "$BR1_PID" 2>/dev/null; fi
-    if [ -n "$BR2_PID" ]; then kill -TERM "$BR2_PID" 2>/dev/null; fi
-    if [ -n "$RIG_MOD" ]; then pactl unload-module "$RIG_MOD" 2>/dev/null; fi
-    if [ -n "$USER_SINK_MOD" ]; then pactl unload-module "$USER_SINK_MOD" 2>/dev/null; fi
-    if [ -n "$USER_LB_MOD" ]; then pactl unload-module "$USER_LB_MOD" 2>/dev/null; fi
-    python3 "$here/control/cli/gd.py" audio unwire >/dev/null 2>&1
-    python3 "$here/control/cli/gd.py" audio down >/dev/null 2>&1
-    rm -rf "$fx"
+    # every command guarded: set -e applies inside the trap function, and
+    # a legitimately-failing cleanup step must not clobber the exit status
+    if [ -n "$BR1_PID" ]; then kill -TERM "$BR1_PID" 2>/dev/null || true; fi
+    if [ -n "$BR2_PID" ]; then kill -TERM "$BR2_PID" 2>/dev/null || true; fi
+    if [ -n "$RIG_MOD" ]; then pactl unload-module "$RIG_MOD" 2>/dev/null || true; fi
+    if [ -n "$USER_SINK_MOD" ]; then pactl unload-module "$USER_SINK_MOD" 2>/dev/null || true; fi
+    if [ -n "$USER_LB_MOD" ]; then pactl unload-module "$USER_LB_MOD" 2>/dev/null || true; fi
+    python3 "$here/control/cli/gd.py" audio unwire >/dev/null 2>&1 || true
+    python3 "$here/control/cli/gd.py" audio down >/dev/null 2>&1 || true
+    rm -rf "$fx" || true
     return 0
 }
 trap cleanup EXIT INT TERM
