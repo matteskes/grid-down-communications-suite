@@ -125,30 +125,38 @@ grep -q '"map_state": "mapped"' "$ev/bridge-pty.json" || fail "bridge did not ma
 gd winehub status --json | python3 -c 'import json,sys; m=json.load(sys.stdin)["com"]; assert "com5" in m, m' \
     || fail "the bridged COM5 is missing from gd winehub status while up"
 python3 - "$ev/bridge-pty.json" <<'PYEOF' || fail "pty round-trip failed (script output above)"
-import json, os, select, sys, time
+import json, os, sys, time
 
+# Nonblocking polling reads, not select(): on this guest the pty slave's
+# select() wakeup is unreliable under an automation harness even though the
+# bytes ARE delivered (the bridge's byte tally proves delivery) — a blocking
+# reader like VARA is unaffected, and a polling reader is deterministic here.
 info, _ = json.JSONDecoder().raw_decode(open(sys.argv[1]).read())  # first object = bridge-up
 com_fd = os.open(info["wine_side"], os.O_RDWR | os.O_NOCTTY)   # what wine would hold
 rig_fd = os.open(info["peer"], os.O_RDWR | os.O_NOCTTY)        # what the fake rig holds
+os.set_blocking(com_fd, False)
+os.set_blocking(rig_fd, False)
 
 
-def read_exact(fd, count, timeout=5.0):
+def poll_read(fd, count, timeout=10.0):
     buf = b""
     deadline = time.monotonic() + timeout
-    while len(buf) < count:
-        left = deadline - time.monotonic()
-        if left <= 0:
-            raise SystemExit(f"FAIL: timed out reading {count} bytes (got {len(buf)})")
-        r, _, _ = select.select([fd], [], [], min(left, 0.5))
-        if r:
-            buf += os.read(fd, count - len(buf))
+    while len(buf) < count and time.monotonic() < deadline:
+        try:
+            buf += os.read(fd, 4096)
+        except BlockingIOError:
+            pass
+        except OSError:
+            return buf  # EIO etc.: give this stage back to the caller
+        time.sleep(0.05)
     return buf
 
 
-os.write(com_fd, b"FA00007123450;")            # VARA-side grid locator poll ...
-assert read_exact(rig_fd, 14) == b"FA00007123450;"
-os.write(rig_fd, b"FA00007123450;OK")          # ... fake rig answers
-assert read_exact(com_fd, 16) == b"FA00007123450;OK"
+got = poll_read(rig_fd, 14)
+assert got == b"FA00007123450;", f"wine->peer got {got!r}"
+os.write(rig_fd, b"FA00007123450;OK")
+got = poll_read(com_fd, 16)
+assert got == b"FA00007123450;OK", f"peer->wine got {got!r}"
 os.close(com_fd)
 os.close(rig_fd)
 print("  pty round-trip ok: 14 bytes wine->peer, 16 bytes peer->wine")
@@ -169,31 +177,45 @@ while [ $i -lt 20 ]; do
 done
 grep -q 'tcp://127.0.0.1:18399' "$ev/bridge-tcp.json" || fail "tcp bridge did not come up on 18399"
 python3 - "$ev/bridge-tcp.json" <<'PYEOF' || fail "tcp round-trip failed (script output above)"
-import json, os, select, socket, sys, time
+import json, os, socket, sys, time
 
 info, _ = json.JSONDecoder().raw_decode(open(sys.argv[1]).read())
 com_fd = os.open(info["wine_side"], os.O_RDWR | os.O_NOCTTY)
+os.set_blocking(com_fd, False)
 client = socket.create_connection(("127.0.0.1", 18399), timeout=5)
+client.settimeout(0.05)
 
 
-def read_exact(fd, count, timeout=5.0):
+def com_read(count, timeout=10.0):
     buf = b""
     deadline = time.monotonic() + timeout
-    while len(buf) < count:
-        left = deadline - time.monotonic()
-        if left <= 0:
-            raise SystemExit(f"FAIL: timed out reading {count} bytes (got {len(buf)})")
-        r, _, _ = select.select([fd], [], [], min(left, 0.5))
-        if r:
-            buf += os.read(fd, count - len(buf))
+    while len(buf) < count and time.monotonic() < deadline:
+        try:
+            buf += os.read(com_fd, 4096)
+        except BlockingIOError:
+            pass
+        time.sleep(0.05)
+    return buf
+
+
+def sock_read(count, timeout=10.0):
+    buf = b""
+    deadline = time.monotonic() + timeout
+    while len(buf) < count and time.monotonic() < deadline:
+        try:
+            buf += client.recv(4096)
+        except socket.timeout:
+            pass
+        time.sleep(0.05)
     return buf
 
 
 client.sendall(b"CQ P3B shim")
-assert read_exact(com_fd, 11) == b"CQ P3B shim"
+got = com_read(11)
+assert got == b"CQ P3B shim", f"client->wine got {got!r}"
 os.write(com_fd, b"DE W1AW")
-client.settimeout(5)
-assert client.recv(7) == b"DE W1AW"
+got = sock_read(7)
+assert got == b"DE W1AW", f"wine->client got {got!r}"
 os.close(com_fd)
 client.close()
 print("  tcp round-trip ok: 11 bytes client->wine, 7 bytes wine->client")
