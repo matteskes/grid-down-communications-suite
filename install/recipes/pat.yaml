@@ -1,11 +1,19 @@
-# Install recipe for pat (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for pat (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned upstream binary tarball shipped in kit, extracted to /opt/grid-down.
+# upstream: la5nta/pat v1.0.0 — GitHub release-asset sha256 digests used verbatim.
+# arch: any — upstream publishes amd64 + arm64 tarballs; builder picks by target.
 recipe:
   id: pat
   strategy: tarball
   license: MIT
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://github.com/la5nta/pat/releases/download/v1.0.0/pat_1.0.0_linux_amd64.tar.gz
+    sha256: 331e4700c9e8b44098d7173e448da53204f59720c6c19ebc903685666aa377f7
     dest: /opt/grid-down/pat
+    arch: any
+    arch_urls:
+      arm64: https://github.com/la5nta/pat/releases/download/v1.0.0/pat_1.0.0_linux_arm64.tar.gz
+      arm64_sha256: a3c65dadc1f9054f47842b1214059d7d4bb928ce14ec7c99337e1c605ad73f75
+    format: tar.gz
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

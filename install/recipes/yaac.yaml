@@ -1,11 +1,20 @@
-# Install recipe for yaac (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for yaac (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned upstream artifact shipped in kit, extracted to /opt/grid-down.
+# upstream: KA2DDO YAAC 1.0beta230. aprs.org removed its YAAC pages; the
+# author's own site (ka2ddo.org) is canonical and states LGPL. The download is
+# SourceForge yetanotheraprsc "latest" (moving URL) — the sha256 pins the bytes
+# and FAILS THE BUILD on upstream drift (forces a conscious re-pin).
+# AUR (yaac 1.0beta230-7) corroborates the digest; AUR records LGPL-3.0-only
+# (zip carries no standalone LICENSE file — Flags #6 closed on page + AUR).
 recipe:
   id: yaac
   strategy: tarball
-  license: LGPL-2.1-or-later  # verify version at pin (Flags #6)
+  license: LGPL-3.0-only   # author page: LGPL; AUR: LGPL-3.0-only (Flags #6, M6b)
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://sourceforge.net/projects/yetanotheraprsc/files/latest/download/YAAC.zip
+    sha256: a56c4037d1384e399290a1024e3b2d781a251257715528287db83a19429d5d5f
     dest: /opt/grid-down/yaac
-  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+    arch: any
+    format: zip
+  postinst: []           # java runtime pinned in the dnf set (audit: java-latest-openjdk-headless)
+

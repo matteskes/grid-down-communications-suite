@@ -1,11 +1,18 @@
-# Install recipe for gridtracker (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for gridtracker (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned upstream binary tarball shipped in kit, extracted to /opt/grid-down.
+# upstream: GridTracker2 2.261019.5 (download2.gridtracker.org; GitLab tag
+# v2.261019.5 corroborates). License Flags #2 RESOLVED: BSD-3-Clause
+# (GitLab gridtracker.org/gridtracker2 LICENSE, verified 2026-10-29).
+# arch: x86_64 pinned per arch policy (arm64 artifacts exist upstream, unpinned).
 recipe:
   id: gridtracker
   strategy: tarball
-  license: TBD-VERIFY-AT-PIN  # terms unverified (Flags #2)
+  license: BSD-3-Clause   # LICENSE verified on GitLab (Flags #2, M6b)
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://download2.gridtracker.org/GridTracker2-2.261019.5-x64.tar.gz
+    sha256: 93840356c9a916d9d7e844bc505ac4c558e6a439c474f69aea6a317980a35db5
     dest: /opt/grid-down/gridtracker
+    arch: x86_64
+    format: tar.gz
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

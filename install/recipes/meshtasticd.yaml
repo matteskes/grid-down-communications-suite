@@ -1,11 +1,20 @@
-# Install recipe for meshtasticd (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for meshtasticd (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned upstream artifact shipped in kit, extracted to /opt/grid-down.
+# upstream: meshtastic/firmware v2.7.26.54e0d8d (newest stable). The GH release
+# ships no deb/rpm assets; the daemon's Debian channel is OBS:
+# download.opensuse.org/repositories/network:/Meshtastic:/beta/ (obs build id
+# 54e0d8d matches the stable firmware tag). Extracted with station bsdtar
+# (deb-or-rpm fallback policy). Ships in kit, stays OFF at bootstrap — the
+# default mesh path is a USB handset + meshtastic CLI (ride-along #3).
 recipe:
   id: meshtasticd
   strategy: tarball
   license: GPL-3.0
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://download.opensuse.org/repositories/network:/Meshtastic:/beta/Debian_13/amd64/meshtasticd_2.7.26.61~obs54e0d8d~beta_amd64.deb
+    sha256: 324fd99ede031c662c2f483b9fd6ed82f238ee94143d5d6b473f51da53bf2104
     dest: /opt/grid-down/meshtasticd
-  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+    arch: x86_64
+    format: deb
+  postinst: []           # systemd unit (off by default), config adapter — Phase 1+
+

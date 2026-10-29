@@ -1,11 +1,16 @@
-# Install recipe for js8spotter (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for js8spotter (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned source tarball shipped in kit, extracted to /opt/grid-down.
+# upstream: DanDawson/js8spotter v1.09b (Python/Tcl-Tk UI by Joe Lyman KF7MIX;
+# LICENSE.txt states "JS8Spotter MIT License, Joe Lyman KF7MIX").
 recipe:
   id: js8spotter
   strategy: tarball
   license: MIT
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://codeload.github.com/DanDawson/js8spotter/tar.gz/refs/tags/v1.09b
+    sha256: 58c2ca5f99b1831c2fa3995b80ab8493e791af82ef9f1f4e35c80700de7f43da
     dest: /opt/grid-down/js8spotter
+    arch: any
+    format: tar.gz
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

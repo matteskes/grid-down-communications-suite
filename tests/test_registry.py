@@ -162,3 +162,36 @@ def test_build_recipes_are_pinned(apps):
         assert (
             r.get("license") != "TBD-VERIFY-AT-PIN"
         ), f"{a['id']}: license must be resolved after pin"
+
+
+def test_tarball_recipes_are_pinned(apps):
+    """M6b pin contract: every tarball-strategy recipe carries a fully resolved
+    artifact pin (https url, 64-hex sha256, dest, arch, format)."""
+    formats = {"tar.gz", "deb", "rpm", "zip", "npm"}
+    for a in apps:
+        rpath = REC_DIR / f"{a['id']}.yaml"
+        r = yaml.safe_load(rpath.read_text())["recipe"]
+        if r["strategy"] != "tarball":
+            continue
+        assert "PIN-ME" not in rpath.read_text(), f"{a['id']}: tarball recipe still has PIN-ME"
+        t = r.get("tarball") or {}
+        assert str(t.get("url", "")).startswith("https://"), f"{a['id']}: tarball.url must be https"
+        assert re.fullmatch(
+            r"[0-9a-f]{64}", t.get("sha256") or ""
+        ), f"{a['id']}: tarball.sha256 must be 64 hex"
+        assert str(t.get("dest", "")).startswith(
+            "/opt/grid-down/"
+        ), f"{a['id']}: tarball.dest must live under /opt/grid-down/"
+        assert t.get("arch") in {"x86_64", "any"}, f"{a['id']}: tarball.arch must be x86_64|any"
+        assert t.get("format") in formats, f"{a['id']}: bad tarball.format"
+        assert (
+            r.get("license") != "TBD-VERIFY-AT-PIN"
+        ), f"{a['id']}: license must be resolved after pin"
+
+
+def test_no_pin_me_markers(apps):
+    """M6 gate: no recipe carries unresolved PIN-ME / TBD-VERIFY-AT-PIN markers."""
+    for a in apps:
+        text = (REC_DIR / f"{a['id']}.yaml").read_text()
+        assert "PIN-ME" not in text, f"{a['id']}: PIN-ME marker remains"
+        assert "TBD-VERIFY-AT-PIN" not in text, f"{a['id']}: TBD-VERIFY-AT-PIN remains"

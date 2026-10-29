@@ -1,6 +1,6 @@
 # Phase 4 implementation plan (P4)
 
-**Status:** M6a pinned (2026-10-29) · **Order (spec-mandated):** recipes → adapters → services → mesh
+**Status:** M6a+M6b pinned (2026-10-29); M6c builder + M6d gate next · **Order (spec-mandated):** recipes → adapters → services → mesh
 **Baseline:** P3b closed at `cd4e5ba` (3/3 PASS on aarch64 VM; runbook Appendix A).
 This file is P4's single source of truth — milestone scope, adopted decisions, and
 acceptance gates. Status lines are updated as milestones close.

@@ -1,11 +1,16 @@
-# Install recipe for chattervox (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for chattervox (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned npm package tarball shipped in kit (runs under the
+# dnf-provided nodejs), extracted to /opt/grid-down.
+# upstream: brannondorsey/chattervox 0.7.0 (npm registry; GPL-3.0).
 recipe:
   id: chattervox
   strategy: tarball
   license: GPL-3.0
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://registry.npmjs.org/chattervox/-/chattervox-0.7.0.tgz
+    sha256: 24fb37a641ee585d9839596e9d45cb2f4e40cf980016fa2f8cd86d0ed1f0dd83
     dest: /opt/grid-down/chattervox
+    arch: any
+    format: npm
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

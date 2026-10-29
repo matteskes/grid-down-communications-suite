@@ -42,6 +42,7 @@ the kit builder into the manifest.
 | ardopcf | pflarue/ardop | MIT | commonly mis-assumed GPL — it is MIT |
 | paracon | mfncooper/paracon | MIT | LICENSE verified upstream |
 | js8spotter | DanDawson/js8spotter | MIT | LICENSE.txt verified (KF7MIX); incl. Azure TTK Theme (MIT) |
+| GridTracker | GridTracker team (GitLab gridtracker.org/gridtracker2) | BSD-3-Clause | LICENSE verified on GitLab 2026-10-29 — Flags #2 resolved |
 | commstatone | W5DMH/commstatone | GPL-3.0 | GitHub-detected |
 | chattervox | brannondorsey/chattervox | GPL-3.0 | package.json license field |
 | meshtastic | meshtastic (python CLI) | GPL-3.0 | pip-vendored wheels |
@@ -51,12 +52,12 @@ the kit builder into the manifest.
 | xygrib | opengribs/XyGrib | GPL-3.0 | |
 | artemis | AresValley/Artemis | GPL-3.0 | .rpm v4.2 |
 | osm-navit | navit-gps/navit | GPL-2.0 | |
-| dump1090 | fork-dependent | BSD-3-Clause (antirez original) / GPL-2.0-or-later (FlightAware, mutability) | pin the fork — Flags #3 |
-| flwrap | W1HKJ | GPL-2.0-or-later | exact tag verify at pin |
+| dump1090 | FlightAware/dump1090 | GPL-2.0-or-later | fork pinned v11.1; LICENSE verified 2026-10-29 — Flags #3 resolved |
+| flwrap | W1HKJ | GPL-2.0-or-later | pinned 1.3.6 (SF fldigi project); COPYING = GPL v2 (M6a) |
 | flarq | W1HKJ | GPL-2.0-or-later | shipped by fldigi RPM (verified in container) — Flags #4 resolved |
-| wsjtx-improved | WSJT-X improved fork | GPL-3.0-or-later | derivative of GPL-3 WSJT-X |
-| yaac | KA2DDO/YAAC | LGPL (family) | exact version verify at pin — Flags #6 |
-| qttermtcp | g8bpq/QtTermTCP | **none found** | Flags #1 — do not ship until resolved |
+| wsjtx-improved | DG2YCB "WS" (ex WSJT-X Improved) | GPL-3.0-or-later | pinned 3.2.1_261010 SF drop; Qt6 (M6a) |
+| yaac | KA2DDO/YAAC | LGPL-3.0-only | author page states LGPL; AUR metadata corroborates; zip has no LICENSE file — Flags #6 resolved |
+| qttermtcp | g8bpq/QtTermTCP | LicenseRef-Unknown (**none upstream**) | Flags #1: repo ships no license file at all; binary redistribution is a standing caveat — operator decision to ship vs demote to user-supplied |
 
 ## C. user-supplied / closed (kit never redistributes — G6, fails closed)
 
@@ -64,7 +65,6 @@ the kit builder into the manifest.
 |---|---|---|
 | VARA HF/FM/Sat/Chat/Term | proprietary shareware (EA5HVK); unregistered use free with delays; per-mode registration | kit-import installers + user licenses; shared Wine prefix |
 | VarAC | freeware, closed source (4Z1AC) | same as VARA |
-| GridTracker | freeware; source visible on GitLab but no FOSS license found; site license page unreachable (404) | verify redistribution terms before any tarball ships — Flags #2; fallback: operator-download |
 
 ## D. content data (operator-staged, spec §6.8)
 
@@ -77,20 +77,24 @@ the kit builder into the manifest.
 
 ## Flags — resolve at pin time (P3/P4)
 
-1. **QtTermTCP** — no LICENSE/COPYING/README anywhere in `g8bpq/QtTermTCP` (GitHub license
-   detection: none; contents API listing confirmed). Source is public but no grant exists, so
-   redistribution is legally unclear. Action: ask G8BPQ for terms, or demote to user-supplied
-   (kit-import) like the VARA family.
-2. **GridTracker** — exact redistribution terms unverified (license page 404). Capture at pin;
-   fallback is operator-download.
-3. **dump1090** — recipe must pin the fork: antirez original (BSD-3-Clause) or
-   FlightAware/mutability (GPL-2.0-or-later). Either is compatible with the MIT umbrella;
-   record the choice in the manifest.
+1. **QtTermTCP** — RESOLVED 2026-10-29 as "upstream ships no license" (M6a pin
+   round: repo tree has no LICENSE/COPYING/README; GitHub detection none).
+   Recorded `LicenseRef-Unknown` in the recipe; the caveat above stands —
+   shipping the built binary is an operator decision (ship vs demote to
+   user-supplied like VARA).
+2. **GridTracker** — RESOLVED 2026-10-29: BSD-3-Clause LICENSE verified on the
+   upstream GitLab (gridtracker.org/gridtracker2, commit 2026-10); binary
+   redistribution permitted by BSD-3. Row moved from §C to §B.
+3. **dump1090** — RESOLVED 2026-10-29: FlightAware fork pinned (v11.1); its
+   LICENSE states GPL v2 or later (wiedehopf fork identical wording).
 4. **flarq** — RESOLVED 2026-10-26: Fedora's `fldigi` package Provides: flarq = 4.2.13 (mdapi),
    confirmed in the fedora:45 container (`dnf install -y fldigi && test -x /usr/bin/flarq` →
    present). flarq now rides a dnf recipe installing `fldigi`; the pinned-source build recipe is
    retired (addendum in `f45-package-audit.md`). RPM `License:` tag still captured at kit build
    per Flags #5.
 5. **W1HKJ suite / qsstv exact tags** — capture authoritative `License:` tags via rpm at kit
-   build (distro sources were bot-walled during research).
-6. **yaac** — confirm the LGPL version ("or-later"?) from the jar's bundled license at pin.
+   build (distro sources were bot-walled during research). flwrap's own COPYING
+   verified from its tarball at M6a pin (GPL v2).
+6. **yaac** — RESOLVED 2026-10-29: author page (ka2ddo.org) states LGPL; AUR
+   package metadata records LGPL-3.0-only; the 1.0beta230 zip carries no
+   standalone LICENSE file. Recorded LGPL-3.0-only in the recipe.

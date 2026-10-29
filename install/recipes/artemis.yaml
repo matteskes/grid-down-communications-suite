@@ -1,11 +1,17 @@
-# Install recipe for artemis (Phase 0 skeleton)
-# strategy: tarball — Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down.
+# Install recipe for artemis (pinned M6b, 2026-10-29)
+# strategy: tarball — pinned upstream artifact shipped in kit, extracted to /opt/grid-down.
+# upstream: AresValley/Artemis v4.2.0 — x86_64 .rpm chosen over .deb (native for
+# the F45 station); GitHub release-asset sha256 digest used verbatim.
+# arch: x86_64 only upstream (no aarch64) — arch-SKIP + Doctor WARN elsewhere.
 recipe:
   id: artemis
   strategy: tarball
   license: GPL-3.0
   tarball:
-    url: PIN-ME          # exact upstream artifact URL
-    sha256: PIN-ME
+    url: https://github.com/AresValley/Artemis/releases/download/v4.2.0/Artemis-Linux-x86_64-4.2.0.rpm
+    sha256: 39613f95386d9ea00c58733a5789950d34216355c8d3a420436386eb67738e7f
     dest: /opt/grid-down/artemis
+    arch: x86_64
+    format: rpm
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+
