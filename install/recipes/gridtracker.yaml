@@ -13,6 +13,7 @@ recipe:
     sha256: 93840356c9a916d9d7e844bc505ac4c558e6a439c474f69aea6a317980a35db5
     dest: /opt/grid-down/gridtracker
     arch: x86_64
+    version: 2.261019.5
     format: tar.gz
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

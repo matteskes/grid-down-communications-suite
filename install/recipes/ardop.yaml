@@ -6,6 +6,9 @@ recipe:
   id: ardop
   strategy: build
   license: MIT
+  dnf:
+    repo: fedora
+    packages: [alsa-lib]       # runtime: ardopcf links libasound
   source:
     git: https://github.com/pflarue/ardop.git
     tag: 1.0.4.1.3
@@ -13,5 +16,7 @@ recipe:
     sha256: ede4f3cbd54b60c3380444d8f36dfc28ed3ce47089a1414b929e3b8f1718259e
     build_container: fedora:45
     build_deps: [gcc, make, alsa-lib-devel]
+    build_cmd: make -j"$(nproc)"
+    artifacts: [ardopcf:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

@@ -11,6 +11,7 @@ recipe:
     sha256: 331e4700c9e8b44098d7173e448da53204f59720c6c19ebc903685666aa377f7
     dest: /opt/grid-down/pat
     arch: any
+    version: 1.0.0
     arch_urls:
       arm64: https://github.com/la5nta/pat/releases/download/v1.0.0/pat_1.0.0_linux_arm64.tar.gz
       arm64_sha256: a3c65dadc1f9054f47842b1214059d7d4bb928ce14ec7c99337e1c605ad73f75

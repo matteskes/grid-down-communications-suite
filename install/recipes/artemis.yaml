@@ -12,6 +12,7 @@ recipe:
     sha256: 39613f95386d9ea00c58733a5789950d34216355c8d3a420436386eb67738e7f
     dest: /opt/grid-down/artemis
     arch: x86_64
+    version: 4.2.0
     format: rpm
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

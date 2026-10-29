@@ -4,7 +4,12 @@ recipe:
   id: meshtastic
   strategy: pip-vendored
   license: GPL-3.0
+  dnf:
+    repo: fedora
+    packages: [python3.14]     # meshtastic caps Requires-Python <3.15; F45 ships 3.15
   pip:
+    version: 2.7.11            # PyPI pin (M6c); wheels vendored for python3.14
+    python: python3.14         # venv+ensurepip provide pip on the station
     wheels_dir: kit/wheels/
-    install: python3 -m pip install --no-index --find-links kit/wheels/ meshtastic
+    install: python3.14 -m venv /opt/grid-down/meshtastic/venv && /opt/grid-down/meshtastic/venv/bin/pip install --no-index --find-links kit/wheels/ meshtastic
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+

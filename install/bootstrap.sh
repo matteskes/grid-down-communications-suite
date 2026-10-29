@@ -59,6 +59,9 @@ if [ "$DRY_RUN" = "1" ]; then
     echo "  apps     : $APPS_KIT"
     echo "  packages : $(wc -w <<< "$PACKAGES") specs -> $(head -c 300 <<< "$PACKAGES")..."
     echo "  repo     : $N_RPM rpms at $KIT_DIR/repo (repo id gd-kit, gpgcheck=0, sha256-verified)"
+    [ -f "$KIT_DIR/artifacts.tsv" ] && echo "  artifacts: $(($(wc -l < "$KIT_DIR/artifacts.tsv"))) pinned artifact(s) -> bsdtar extract"
+    [ -f "$KIT_DIR/wheels.txt" ] && echo "  wheels   : $(find "$KIT_DIR/wheels" -name '*.whl' 2>/dev/null | wc -l | tr -d ' ') wheel(s) -> pip --no-index"
+    [ -f "$KIT_DIR/static.tsv" ] && echo "  static   : $(($(wc -l < "$KIT_DIR/static.tsv"))) payload slot(s) -> /opt/grid-down"
     echo "  state    : $(gd_state_file)"
     exit 0
 fi
@@ -70,6 +73,12 @@ trap gd_kit_repo_cleanup EXIT
 
 gd_info "offline install: ${#PACKAGES} words of package specs from kit repo only"
 gd_kit_install $PACKAGES   # word-splitting intended: plain package specs
+
+# Non-dnf payloads (phase4-plan M6c): pinned artifacts, vendored wheels,
+# operator-staged static slots. All read the builder's pre-rendered TSVs.
+gd_kit_extract_artifacts "$KIT_DIR"
+gd_kit_install_wheels "$KIT_DIR"
+gd_kit_place_static "$KIT_DIR"
 
 gd_state_init
 gd_state_set kit "$(basename "$KIT_DIR")"

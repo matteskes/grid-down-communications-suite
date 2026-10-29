@@ -15,6 +15,7 @@ recipe:
     sha256: 324fd99ede031c662c2f483b9fd6ed82f238ee94143d5d6b473f51da53bf2104
     dest: /opt/grid-down/meshtasticd
     arch: x86_64
+    version: 2.7.26.61~obs54e0d8d~beta
     format: deb
   postinst: []           # systemd unit (off by default), config adapter — Phase 1+
 

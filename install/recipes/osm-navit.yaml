@@ -7,6 +7,9 @@ recipe:
   id: osm-navit
   strategy: build
   license: GPL-2.0
+  dnf:
+    repo: fedora
+    packages: [glib2, gtk3, libcurl, sqlite-libs, fontconfig, freetype]
   source:
     git: https://github.com/navit-gps/navit.git
     tag: v0.5.7
@@ -17,5 +20,7 @@ recipe:
     build_deps: [cmake, gcc-c++, glib2-devel, gtk3-devel, gettext-devel,
                  libcurl-devel, sqlite-devel, fontconfig-devel, freetype-devel,
                  ncurses-devel]
+    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+    artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

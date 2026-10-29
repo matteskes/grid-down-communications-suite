@@ -52,3 +52,58 @@ gd_kit_install() { # offline install — only the kit repo is enabled
 }
 
 gd_kit_repo_cleanup() { rm -f "$(gd_kit_repo_file)"; }
+
+# --- M6c: air-gap placement of build/tarball/pip/static payloads -------------
+# The builder pre-renders kit/artifacts.tsv, kit/wheels.txt and kit/static.tsv
+# so the air-gap side never parses YAML (station PyYAML is not guaranteed).
+
+gd_kit_extract_artifacts() { # $1 = kit dir — bsdtar-extract pinned artifacts to their recipe dests
+    local kit="$1" tsv="$kit/artifacts.tsv" id file dest fmt arch
+    [ -f "$tsv" ] || return 0
+    command -v bsdtar >/dev/null || { gd_err "bsdtar not found — install the kit dnf set first (it ships bsdtar)"; return 1; }
+    while IFS=$'\t' read -r id file dest fmt arch; do
+        [ -n "$id" ] || continue
+        gd_info "extracting $id ($fmt, arch=$arch) -> $dest"
+        mkdir -p "$dest"
+        case "$fmt" in
+            npm) bsdtar -xf "$kit/$file" -C "$dest" --strip-components=1 ;;
+            *)   bsdtar -xf "$kit/$file" -C "$dest" ;;
+        esac
+    done < "$tsv"
+}
+
+gd_kit_install_wheels() { # $1 = kit dir — offline wheel install (no network, no repos)
+    local kit="$1" tsv="$kit/wheels.txt" id pkg pybin
+    [ -f "$tsv" ] || return 0
+    command -v python3 >/dev/null || { gd_err "python3 not found — required for vendored wheels"; return 1; }
+    while IFS=$'\t' read -r id pkg pybin; do
+        [ -n "$id" ] || continue
+        pybin="${pybin:-python3}"
+        gd_info "installing wheels for $id ($pkg under $pybin)"
+        if [ "$pybin" = "python3" ]; then
+            # shellcheck disable=SC2086 — spec list is word-split by design
+            python3 -m pip install --no-index --find-links "$kit/wheels" $pkg
+        else
+            # alternate python stack (e.g. meshtastic on python3.14): isolated venv,
+            # pip comes from ensurepip (Fedora ships no <pyver>-pip package)
+            command -v "$pybin" >/dev/null || { gd_err "$pybin not found — install the kit dnf set first"; return 1; }
+            mkdir -p "/opt/grid-down/$id"
+            "$pybin" -m venv "/opt/grid-down/$id/venv"
+            # shellcheck disable=SC2086
+            "/opt/grid-down/$id/venv/bin/pip" install --no-index --find-links "$kit/wheels" $pkg
+        fi
+    done < "$tsv"
+}
+
+gd_kit_place_static() { # $1 = kit dir — static payloads into their dest under /opt/grid-down
+    local kit="$1" tsv="$kit/static.tsv" id rel serve
+    [ -f "$tsv" ] || return 0
+    while IFS=$'\t' read -r id rel serve; do
+        [ -n "$id" ] || continue
+        mkdir -p "/opt/grid-down/$id"
+        cp -r "$kit/$rel"/. "/opt/grid-down/$id/" 2>/dev/null || true
+        if [ -z "$(ls -A "/opt/grid-down/$id" 2>/dev/null)" ]; then
+            gd_warn "$id: static payload empty — operator stages content per profile (Doctor WARNs)"
+        fi
+    done < "$tsv"
+}

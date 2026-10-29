@@ -15,6 +15,7 @@ recipe:
     sha256: a56c4037d1384e399290a1024e3b2d781a251257715528287db83a19429d5d5f
     dest: /opt/grid-down/yaac
     arch: any
+    version: 1.0beta230
     format: zip
   postinst: []           # java runtime pinned in the dnf set (audit: java-latest-openjdk-headless)
 

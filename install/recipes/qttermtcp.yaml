@@ -8,6 +8,9 @@ recipe:
   id: qttermtcp
   strategy: build
   license: LicenseRef-Unknown   # upstream ships no license (Flags #1, M6a)
+  dnf:
+    repo: fedora
+    packages: [qt5-qtbase]     # runtime: QtTermTCP links Qt5
   source:
     git: https://github.com/g8bpq/QtTermTCP.git
     tag: 0.81
@@ -15,5 +18,7 @@ recipe:
     sha256: 246b26760b2cf3c24363a6804a6b36d237ed54265991cfb2d3c8ea3d419c22d2
     build_container: fedora:45
     build_deps: [gcc-c++, make, qt5-qtbase-devel]
+    build_cmd: qmake-qt5 QtTermTCP.pro && make -j"$(nproc)"
+    artifacts: [QtTermTCP:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

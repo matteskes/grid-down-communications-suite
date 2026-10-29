@@ -11,6 +11,7 @@ recipe:
     sha256: 58c2ca5f99b1831c2fa3995b80ab8493e791af82ef9f1f4e35c80700de7f43da
     dest: /opt/grid-down/js8spotter
     arch: any
+    version: 1.09b
     format: tar.gz
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

@@ -7,6 +7,9 @@ recipe:
   id: sdrpp
   strategy: build
   license: GPL-3.0
+  dnf:
+    repo: fedora
+    packages: [fftw-libs-single, glfw, glew, volk, libusb1]
   source:
     git: https://github.com/AlexandreRouma/SDRPlusPlus.git
     tag: f10fb98af8b80de01de94e60c17608e4281e2515   # master pin (nightly channel)
@@ -15,5 +18,7 @@ recipe:
     build_container: fedora:45
     build_deps: [cmake, gcc-c++, fftw-devel, glfw-devel, glew-devel,
                  volk-devel, libusb1-devel]
+    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+    artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

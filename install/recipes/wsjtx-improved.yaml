@@ -7,6 +7,10 @@ recipe:
   id: wsjtx-improved
   strategy: build
   license: GPL-3.0-or-later
+  dnf:
+    repo: fedora
+    packages: [qt6-qtbase, qt6-qtmultimedia, qt6-qtserialport, qt6-qtwebsockets,
+               qt6-qtsvg, fftw-libs-single, fftw-libs-double, hamlib]
   source:
     archive_url: https://downloads.sourceforge.net/project/wsjt-x-improved/WS_v3.2.1/Source%20code/Qt6/ws-3.2.1_261010_qt6.tgz
     version: 3.2.1
@@ -17,5 +21,7 @@ recipe:
                  qt6-qtbase-devel, qt6-qttools-devel, qt6-qtserialport-devel,
                  qt6-qtmultimedia-devel, qt6-qtwebsockets-devel, qt6-qtsvg-devel,
                  dos2unix, desktop-file-utils]
+    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+    artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

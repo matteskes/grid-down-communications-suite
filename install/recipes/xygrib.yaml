@@ -7,6 +7,9 @@ recipe:
   id: xygrib
   strategy: build
   license: GPL-3.0
+  dnf:
+    repo: fedora
+    packages: [qt5-qtbase, libpng, openjpeg, proj, zlib-ng-compat]
   source:
     git: https://github.com/opengribs/XyGrib.git
     tag: v1.2.6.1
@@ -15,5 +18,7 @@ recipe:
     build_container: fedora:45
     build_deps: [cmake, gcc-c++, qt5-qtbase-devel, libpng-devel,
                  openjpeg-devel, zlib-ng-compat-devel, bzip2-devel, proj-devel]
+    build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
+    artifacts: [dist:.]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 
