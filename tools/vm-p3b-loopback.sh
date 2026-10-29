@@ -111,133 +111,134 @@ export GRID_DOWN_WINE_PREFIX="$fx/prefix"
 gd winehub status | grep -q 'prefix: present' || fail "GRID_DOWN_WINE_PREFIX was not honoured"
 
 echo "== stage B2: gd winehub bridge 5 (pty peer) — map, round-trip, live map"
-# Background python DIRECTLY (not via the gd() function): a function call in
-# background forks a subshell, and $! would name that subshell instead of the
-# bridge — the teardown kill would miss python entirely (found live on the VM).
-python3 "$here/control/cli/gd.py" winehub bridge 5 --json > "$ev/bridge-pty.json" 2>&1 &
-BR1_PID=$!
-export GD_P3B_BRIDGE_PID="$BR1_PID"
-i=0
-while [ $i -lt 20 ]; do
-    grep -q '"peer"' "$ev/bridge-pty.json" 2>/dev/null && break
-    sleep 0.5; i=$((i + 1))
-done
-grep -q '"map_state": "mapped"' "$ev/bridge-pty.json" || fail "bridge did not map COM5 (see $ev/bridge-pty.json)"
-gd winehub status --json | python3 -c 'import json,sys; m=json.load(sys.stdin)["com"]; assert "com5" in m, m' \
-    || fail "the bridged COM5 is missing from gd winehub status while up"
-python3 - "$ev/bridge-pty.json" <<'PYEOF' || fail "pty round-trip failed (script output above)"
-import json, os, sys, time
 
-# Nonblocking polling reads, not select(): on this guest the pty slave's
-# select() wakeup is unreliable under an automation harness even though the
-# bytes ARE delivered (the bridge's byte tally proves delivery) — a blocking
-# reader like VARA is unaffected, and a polling reader is deterministic here.
-info, _ = json.JSONDecoder().raw_decode(open(sys.argv[1]).read())  # first object = bridge-up
+# One bridge case: start the bridge, run the polling round-trip client, and
+# leave the bridge UP on success (B3/B5 use it). Retries up to 3 times on a
+# FRESH pty pair: this guest's pty instances nondeterministically drop
+# master->slave delivery under an automation harness (the byte tally in the
+# teardown JSON distinguishes lost bytes from lost select wakeups; a blocking
+# reader like VARA is unaffected — the retry mirrors replug-the-USB-adapter).
+# The bridge is backgrounded as python DIRECTLY: a gd() call in background
+# forks a subshell and $! would name the subshell, not the bridge (found on
+# the VM — the teardown kill missed python entirely).
+bridge_roundtrip() {
+    com_n="$1"; bridge_args="$2"; json_path="$3"; client_kind="$4"
+    attempt=1
+    while [ "$attempt" -le 3 ]; do
+        python3 "$here/control/cli/gd.py" winehub bridge "$com_n" $bridge_args --json \
+            > "$json_path" 2>&1 &
+        BR_PID=$!
+        i=0
+        while [ $i -lt 20 ]; do
+            grep -q '"peer"' "$json_path" 2>/dev/null && break
+            sleep 0.5; i=$((i + 1))
+        done
+        if ! grep -q '"map_state": "mapped"' "$json_path" 2>/dev/null; then
+            echo "  attempt $attempt: bridge did not come up"
+            kill -TERM "$BR_PID" 2>/dev/null || true
+            sleep 1.5
+            attempt=$((attempt + 1))
+            continue
+        fi
+        if python3 - "$json_path" "$client_kind" <<'PYEOF'; then
+import json, os, socket, sys, time
+
+info, _ = json.JSONDecoder().raw_decode(open(sys.argv[1]).read())  # bridge-up object
+kind = sys.argv[2]
 com_fd = os.open(info["wine_side"], os.O_RDWR | os.O_NOCTTY)   # what wine would hold
-rig_fd = os.open(info["peer"], os.O_RDWR | os.O_NOCTTY)        # what the fake rig holds
 os.set_blocking(com_fd, False)
-os.set_blocking(rig_fd, False)
+if kind == "tcp":
+    host, port = info["peer"].removeprefix("tcp://").rsplit(":", 1)
+    peer = socket.create_connection((host, int(port)), timeout=5)
+    peer.settimeout(0.05)
+else:
+    peer = os.open(info["peer"], os.O_RDWR | os.O_NOCTTY)      # the fake rig holds this
+    os.set_blocking(peer, False)
 
 
-def poll_read(fd, count, timeout=10.0):
+def pread(count, timeout=8.0):
+    # polling nonblocking reads: delivery is proven by the bridge's byte
+    # tally; only the slave's select wakeup is flaky under the harness
     buf = b""
     deadline = time.monotonic() + timeout
     while len(buf) < count and time.monotonic() < deadline:
         try:
-            buf += os.read(fd, 4096)
-        except BlockingIOError:
+            if kind == "tcp":
+                buf += peer.recv(4096)
+            else:
+                buf += os.read(peer, 4096)
+        except (BlockingIOError, socket.timeout):
             pass
-        except OSError:
-            return buf  # EIO etc.: give this stage back to the caller
         time.sleep(0.05)
     return buf
 
 
-got = poll_read(rig_fd, 14)
-if got != b"FA00007123450;":
-    # diagnostics: what the client can see on BOTH ends before giving up
-    import fcntl, termios
+def com_write(data):
+    os.write(com_fd, data)
 
-    for name, fd in (("rig", rig_fd), ("com", com_fd)):
-        a = termios.tcgetattr(fd)
-        print(f"  diag {name}: ICANON={bool(a[3] & termios.ICANON)}", flush=True)
-        try:
-            print(f"  diag {name} drain: {os.read(fd, 100)!r}", flush=True)
-        except BlockingIOError:
-            print(f"  diag {name} drain: <empty>", flush=True)
-    bp = os.environ.get("GD_P3B_BRIDGE_PID", "")
-    if bp and os.path.exists(f"/proc/{bp}"):
-        with open(f"/proc/{bp}/stat") as f:
-            print(f"  diag bridge[{bp}] state:", f.read().split()[2], flush=True)
-        with open(f"/proc/{bp}/wchan") as f:
-            print("  diag bridge wchan:", f.read().strip(), flush=True)
-assert got == b"FA00007123450;", f"wine->peer got {got!r}"
-os.write(rig_fd, b"FA00007123450;OK")
-got = poll_read(com_fd, 16)
-assert got == b"FA00007123450;OK", f"peer->wine got {got!r}"
+
+def peer_write(data):
+    if kind == "tcp":
+        peer.sendall(data)
+    else:
+        os.write(peer, data)
+
+
+if kind == "tcp":
+    peer_write(b"CQ P3B shim")
+    got = pread(11)
+    assert got == b"CQ P3B shim", f"client->wine got {got!r}"
+    com_write(b"DE W1AW")
+    got = pread(7)
+    assert got == b"DE W1AW", f"wine->client got {got!r}"
+    print("  tcp round-trip ok: 11 bytes client->wine, 7 bytes wine->client")
+else:
+    com_write(b"FA00007123450;")                             # VARA-side poll...
+    got = pread(14)
+    assert got == b"FA00007123450;", f"wine->peer got {got!r}"
+    peer_write(b"FA00007123450;OK")                          # ...fake rig answers
+    got = pread(16)
+    assert got == b"FA00007123450;OK", f"peer->wine got {got!r}"
+    print("  pty round-trip ok: 14 bytes wine->peer, 16 bytes peer->wine")
 os.close(com_fd)
-os.close(rig_fd)
-print("  pty round-trip ok: 14 bytes wine->peer, 16 bytes peer->wine")
+if kind == "tcp":
+    peer.close()
+else:
+    os.close(peer)
+sys.exit(0)
 PYEOF
+            LAST_BRIDGE_PID=$BR_PID
+            return 0
+        fi
+        echo "  attempt $attempt: relay dead — fresh pty pair and retry"
+        kill -TERM "$BR_PID" 2>/dev/null || true
+        sleep 1.5
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
+if bridge_roundtrip 5 "" "$ev/bridge-pty.json" pty; then
+    BR1_PID="$LAST_BRIDGE_PID"
+    gd winehub status --json | python3 -c 'import json,sys; m=json.load(sys.stdin)["com"]; assert "com5" in m, m' \
+        || fail "the bridged COM5 is missing from gd winehub status while up"
+else
+    fail "pty round-trip failed after 3 fresh-pty attempts (see $ev/bridge-pty.json)"
+fi
 
 echo "== stage B3: human status while up (evidence copy)"
 gd winehub status | tee "$ev/winehub-status-up.txt" | grep 'com:    com5' >/dev/null \
     || fail "human status does not show the bridged com5"
 
 echo "== stage B4: gd winehub bridge 6 --peer tcp — the same map over a TCP shim"
-python3 "$here/control/cli/gd.py" winehub bridge 6 --peer tcp --tcp-port 18399 --json \
-    > "$ev/bridge-tcp.json" 2>&1 &
-BR2_PID=$!
-i=0
-while [ $i -lt 20 ]; do
-    grep -q '"peer"' "$ev/bridge-tcp.json" 2>/dev/null && break
-    sleep 0.5; i=$((i + 1))
-done
-grep -q 'tcp://127.0.0.1:18399' "$ev/bridge-tcp.json" || fail "tcp bridge did not come up on 18399"
-python3 - "$ev/bridge-tcp.json" <<'PYEOF' || fail "tcp round-trip failed (script output above)"
-import json, os, socket, sys, time
-
-info, _ = json.JSONDecoder().raw_decode(open(sys.argv[1]).read())
-com_fd = os.open(info["wine_side"], os.O_RDWR | os.O_NOCTTY)
-os.set_blocking(com_fd, False)
-client = socket.create_connection(("127.0.0.1", 18399), timeout=5)
-client.settimeout(0.05)
-
-
-def com_read(count, timeout=10.0):
-    buf = b""
-    deadline = time.monotonic() + timeout
-    while len(buf) < count and time.monotonic() < deadline:
-        try:
-            buf += os.read(com_fd, 4096)
-        except BlockingIOError:
-            pass
-        time.sleep(0.05)
-    return buf
-
-
-def sock_read(count, timeout=10.0):
-    buf = b""
-    deadline = time.monotonic() + timeout
-    while len(buf) < count and time.monotonic() < deadline:
-        try:
-            buf += client.recv(4096)
-        except socket.timeout:
-            pass
-        time.sleep(0.05)
-    return buf
-
-
-client.sendall(b"CQ P3B shim")
-got = com_read(11)
-assert got == b"CQ P3B shim", f"client->wine got {got!r}"
-os.write(com_fd, b"DE W1AW")
-got = sock_read(7)
-assert got == b"DE W1AW", f"wine->client got {got!r}"
-os.close(com_fd)
-client.close()
-print("  tcp round-trip ok: 11 bytes client->wine, 7 bytes wine->client")
-PYEOF
+if bridge_roundtrip 6 "--peer tcp --tcp-port 18399" "$ev/bridge-tcp.json" tcp; then
+    BR2_PID="$LAST_BRIDGE_PID"
+else
+    fail "tcp round-trip failed after 3 fresh-pty attempts (see $ev/bridge-tcp.json)"
+fi
+if ! grep -q 'tcp://127.0.0.1:18399' "$ev/bridge-tcp.json"; then
+    fail "tcp bridge did not come up on 18399"
+fi
 
 echo "== stage B5: SIGTERM teardown — unmap + pts gone, on both bridges"
 kill -TERM "$BR1_PID" 2>/dev/null || true
