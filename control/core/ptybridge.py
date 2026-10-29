@@ -56,23 +56,17 @@ class BridgeError(RuntimeError):
     """Refusal with operator-facing text (same contract as WinehubError)."""
 
 
-def open_pair() -> tuple[int, str]:
-    """Allocate a pty in raw mode; return ``(master_fd, slave_path)``.
+def open_pair() -> tuple[int, int, str]:
+    """Allocate a pty; return ``(master_fd, slave_fd, slave_path)``.
 
-    The slave fd is closed immediately: the path stays valid (the kernel
-    keeps the pts while the master end is open) and the *only* openers of the
-    slave are the two sides being bridged — wine opening ``dosdevices/comN``,
-    and the peer-side script opening the printed path. Raw mode is asserted
-    here for Linux and again per write in :meth:`ComBridge._pump`, because
-    macOS resets the pty to the canonical default when the slave opens.
+    The bridge keeps the slave fd open for the pty's whole life (as
+    ``*_hold``): the line discipline binds at that first open, so raw mode
+    is set on a *live* ldisc, the master never sees the slave-less EIO
+    phase, and the pts node stays alive between client sessions (VARA may
+    close and reopen its COM port freely).
     """
     master, slave = pty.openpty()
-    try:
-        name = os.ttyname(slave)
-    finally:
-        os.close(slave)
-    _set_raw(master)
-    return master, name
+    return master, slave, os.ttyname(slave)
 
 
 def _set_raw(fd: int) -> None:
@@ -119,10 +113,12 @@ class ComBridge:
     def __init__(self, hub: winehub.WineHub):
         self.hub = hub
         self.com_fd: int | None = None
+        self.com_hold: int | None = None  # our own slave fd: ldisc stays bound
         self.com_name: str | None = None
         self.com_pts: str | None = None
         self.com_dev: str | None = None
         self.peer_fd: int | None = None  # pty peer: master end of the 2nd pair
+        self.peer_hold: int | None = None
         self.peer_dev: str | None = None
         self.peer_kind: str | None = None  # "pty" | "tcp"
         self.listener: socket.socket | None = None
@@ -144,23 +140,23 @@ class ComBridge:
         (``bad COM name``, ``prefix not installed yet``, ``already maps to``,
         ``device does not exist`` — the last cannot fire for a held-open pty,
         but the check stays single-source). Any failure after the pty is
-        allocated cleans the fd (and the map, once made) up before raising.
+        allocated cleans everything up before raising.
         """
         if self.com_fd is not None:
             raise BridgeError("bridge already open — close it first (Ctrl-C tears it down)")
         com_name = f"com{com}".lower()
-        self.com_fd, self.com_pts = open_pair()
+        self.com_fd, self.com_hold, self.com_pts = open_pair()
         try:
             mapped = self.hub.map_serial(com_name, self.com_pts)
         except Exception:
-            os.close(self.com_fd)
-            self.com_fd, self.com_pts = None, None
+            self._close_fds()
+            self.com_fd, self.com_hold, self.com_pts = None, None, None
             raise
         self.com_name = com_name
         self.com_dev = str(self.hub.prefix / "dosdevices" / com_name)
         try:
             if peer == "pty":
-                self.peer_fd, peer_pts = open_pair()
+                self.peer_fd, self.peer_hold, peer_pts = open_pair()
                 self.peer_dev = peer_pts
                 self.peer_kind = "pty"
             elif peer == "tcp":
@@ -173,6 +169,11 @@ class ComBridge:
                 self.peer_kind = "tcp"
             else:
                 raise BridgeError(f"unknown peer kind: {peer!r} (pty|tcp)")
+            # both ptys now have a live, bound line discipline (our hold fds):
+            # raw mode set once here holds for the bridge's whole life.
+            _set_raw(self.com_hold)
+            if self.peer_hold is not None:
+                _set_raw(self.peer_hold)
         except Exception:
             self.close()
             raise
@@ -253,16 +254,6 @@ class ComBridge:
                 return True
             return False
         if other is not None:
-            # Re-assert raw before the hop into a pty master (never a socket:
-            # tcgetattr fails with ENOTTY there): opening the slave resets the
-            # pty's termios to the canonical default on macOS (Linux keeps
-            # it), and a COM port has no line discipline — a canonical slave
-            # would sit on our write forever. Two ioctls per frame.
-            if other == self.com_fd or other == self.peer_fd:
-                try:
-                    _set_raw(other)
-                except OSError:
-                    return True  # the peer end vanished mid-flight; serve() re-selects
             view = memoryview(data)
             while view:  # full write: ptys/sockets may take less than one chunk
                 written = os.write(other, view)
@@ -274,6 +265,17 @@ class ComBridge:
         return True  # no peer connected yet: drop and keep serving
 
     # ------------------------------------------------------------ teardown
+    def _close_fds(self) -> None:
+        """Close every held fd (masters + our slave holds), tolerating races."""
+        for attr in ("com_fd", "peer_fd", "com_hold", "peer_hold"):
+            fd = getattr(self, attr)
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                setattr(self, attr, None)
+
     def close(self) -> dict:
         """Unmap ``comN`` (best effort), close the ptys/sockets, tally bytes.
 
@@ -287,14 +289,7 @@ class ComBridge:
             unmap = self.hub.unmap(com_name)["state"]
         except winehub.WinehubError as exc:
             unmap = f"failed ({exc})"
-        for attr in ("com_fd", "peer_fd"):
-            fd = getattr(self, attr)
-            if fd is not None:
-                try:
-                    os.close(fd)
-                except OSError:
-                    pass
-                setattr(self, attr, None)
+        self._close_fds()
         if self.conn is not None:
             self.conn.close()
             self.conn = None
