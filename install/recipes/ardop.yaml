@@ -1,11 +1,17 @@
-# Install recipe for ardop (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for ardop (pinned M6a, 2026-10-29)
+# strategy: build — pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: pflarue/ardop = "ardopcf" (MIT; Rick Muething, John Wiseman, Peter LaRue).
+# The Makefile links ALSA (-lasound, src/linux/ALSASound.o) — hence alsa-lib-devel.
 recipe:
   id: ardop
   strategy: build
   license: MIT
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    git: https://github.com/pflarue/ardop.git
+    tag: 1.0.4.1.3
+    version: 1.0.4.1.3
+    sha256: ede4f3cbd54b60c3380444d8f36dfc28ed3ce47089a1414b929e3b8f1718259e
     build_container: fedora:45
+    build_deps: [gcc, make, alsa-lib-devel]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

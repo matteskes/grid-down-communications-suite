@@ -1,11 +1,21 @@
-# Install recipe for osm-navit (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for osm-navit (pinned M6a, 2026-10-29)
+# strategy: build — pinned source tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: navit-gps/navit v0.5.7 (2026-02). The upstream release asset
+# navit-source-v0.5.7.tar.gz carries an official sha256 digest — preferred
+# over the codeload archive (digest rule, phase4-plan).
 recipe:
   id: osm-navit
   strategy: build
   license: GPL-2.0
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    git: https://github.com/navit-gps/navit.git
+    tag: v0.5.7
+    version: 0.5.7
+    archive_url: https://github.com/navit-gps/navit/releases/download/v0.5.7/navit-source-v0.5.7.tar.gz
+    sha256: 43e71513ae5d674f4d70f811d6aaedf58920c535a0e1aaa4d6ff90a55781d26f
     build_container: fedora:45
+    build_deps: [cmake, gcc-c++, glib2-devel, gtk3-devel, gettext-devel,
+                 libcurl-devel, sqlite-devel, fontconfig-devel, freetype-devel,
+                 ncurses-devel]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

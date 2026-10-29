@@ -1,11 +1,17 @@
-# Install recipe for paracon (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for paracon (pinned M6a, 2026-10-29)
+# strategy: build — pinned git tarball "built" (zipapp packaging) in the fedora:45
+# container during kit build; the executable zipapp is shipped in kit.
+# upstream: mfncooper/paracon — Python zipapp (build_zipapp.sh), MIT.
 recipe:
   id: paracon
   strategy: build
   license: MIT
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    git: https://github.com/mfncooper/paracon.git
+    tag: v1.3.0
+    version: 1.3.0
+    sha256: db1d629e2f2cd352412fdd9fd753f2f9ff9303ad01791cd1d04ba97144cff5fa
     build_container: fedora:45
+    build_deps: [python3, make]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

@@ -1,11 +1,19 @@
-# Install recipe for sdrpp (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for sdrpp (pinned M6a, 2026-10-29)
+# strategy: build — pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: AlexandreRouma/SDRPlusPlus (GPL-3.0). Since 1.0.4 upstream ships a
+# rolling "nightly" release only — pinned BY COMMIT for reproducibility
+# (master HEAD at pin date; re-pin = bump commit + sha256).
 recipe:
   id: sdrpp
   strategy: build
   license: GPL-3.0
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    git: https://github.com/AlexandreRouma/SDRPlusPlus.git
+    tag: f10fb98af8b80de01de94e60c17608e4281e2515   # master pin (nightly channel)
+    version: nightly-20261023
+    sha256: 0149b2e196ae7460b955f8ebcb0bb394062ef4b85035b8a6c08f421e3004b5f5
     build_container: fedora:45
+    build_deps: [cmake, gcc-c++, fftw-devel, glfw-devel, glew-devel,
+                 volk-devel, libusb1-devel]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

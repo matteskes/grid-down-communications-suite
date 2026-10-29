@@ -1,11 +1,16 @@
-# Install recipe for flwrap (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for flwrap (pinned M6a, 2026-10-29)
+# strategy: build — pinned source tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: w1hkj flwrap 1.3.6 (latest; 1.3.x line — 3.0.x is fldigi's versioning).
+# Hosted under SourceForge's fldigi project files; COPYING = GPL v2.
 recipe:
   id: flwrap
   strategy: build
-  license: GPL-2.0-or-later
+  license: GPL-2.0-or-later   # COPYING verified at pin (M6a)
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    archive_url: https://downloads.sourceforge.net/project/fldigi/flwrap/flwrap-1.3.6.tar.gz
+    version: 1.3.6
+    sha256: 83557b6ce720547a43f8d767d36363e08deb188b6e436a8b1a5ad966c85f18ff
     build_container: fedora:45
+    build_deps: [gcc-c++, make, fltk-devel, fltk-fluid]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

@@ -1,11 +1,19 @@
-# Install recipe for xygrib (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for xygrib (pinned M6a, 2026-10-29)
+# strategy: build — pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: opengribs/XyGrib v1.2.6.1 (latest tagged release, 2019).
+# F45 note: openjpeg-devel currently comes from updates-testing (audit M6a);
+# zlib devel package is zlib-ng-compat-devel on F45.
 recipe:
   id: xygrib
   strategy: build
   license: GPL-3.0
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    git: https://github.com/opengribs/XyGrib.git
+    tag: v1.2.6.1
+    version: 1.2.6.1
+    sha256: 2dc6099293ae6f7a4bfbfc0cab590cf7ad48241d608e6d7a76e35961b9fc2157
     build_container: fedora:45
+    build_deps: [cmake, gcc-c++, qt5-qtbase-devel, libpng-devel,
+                 openjpeg-devel, zlib-ng-compat-devel, bzip2-devel, proj-devel]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

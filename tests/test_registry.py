@@ -7,6 +7,7 @@ Run: python3 -m pytest tests/ -q   (skips if PyYAML is absent)
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -130,3 +131,34 @@ def test_recipes_declare_license(apps):
         else:
             lic = r.get("license")
             assert isinstance(lic, str) and lic.strip(), f"{a['id']}: recipe missing license"
+
+
+def test_build_recipes_are_pinned(apps):
+    """M6a pin contract: every build-strategy recipe carries a fully resolved
+    source pin (repo+tag or archive_url, 64-hex sha256, version, verified
+    build_deps). Phase4-plan docs/phase4-plan.md "Pin format".
+    """
+    for a in apps:
+        rpath = REC_DIR / f"{a['id']}.yaml"
+        r = yaml.safe_load(rpath.read_text())["recipe"]
+        if r["strategy"] != "build":
+            continue
+        assert "PIN-ME" not in rpath.read_text(), f"{a['id']}: build recipe still has PIN-ME"
+        s = r.get("source") or {}
+        assert re.fullmatch(
+            r"[0-9a-f]{64}", s.get("sha256") or ""
+        ), f"{a['id']}: source.sha256 must be 64 hex"
+        assert s.get("version"), f"{a['id']}: missing source.version"
+        assert s.get("git") or s.get(
+            "archive_url"
+        ), f"{a['id']}: build source needs git(+tag) or archive_url"
+        if s.get("git"):
+            assert s.get("tag"), f"{a['id']}: git pin needs source.tag"
+        deps = s.get("build_deps")
+        assert (
+            isinstance(deps, list) and deps and all(isinstance(d, str) and d for d in deps)
+        ), f"{a['id']}: source.build_deps must be a non-empty list (M6a pre-pass)"
+        assert s.get("build_container"), f"{a['id']}: missing build_container"
+        assert (
+            r.get("license") != "TBD-VERIFY-AT-PIN"
+        ), f"{a['id']}: license must be resolved after pin"

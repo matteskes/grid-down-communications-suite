@@ -1,15 +1,22 @@
-# Install recipe for dump1090 (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for dump1090 (pinned M6a, 2026-10-29)
+# strategy: build — pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: FlightAware/dump1090 (active; pushed 2026-10). License Flags #3
+# RESOLVED: the LICENSE file states "GPL, v2 or later" (both FlightAware and
+# wiedehopf forks) — GPL-2.0-or-later.
 recipe:
   id: dump1090
   strategy: build
-  license: TBD-VERIFY-AT-PIN  # fork-dependent: BSD-3 vs GPL-2+ (Flags #3)
+  license: GPL-2.0-or-later   # LICENSE verified at pin (Flags #3, M6a)
   dnf:
     repo: fedora
     packages:
       - rtl-sdr
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    git: https://github.com/FlightAware/dump1090.git
+    tag: v11.1
+    version: 11.1
+    sha256: 21fe1164d9b189274f6837bfffad7a1fe1b3471187ade4b5dc0409c1e640143f
     build_container: fedora:45
+    build_deps: [gcc, make, rtl-sdr-devel]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

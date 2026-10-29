@@ -1,11 +1,21 @@
-# Install recipe for wsjtx-improved (Phase 0 skeleton)
-# strategy: build — Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit.
+# Install recipe for wsjtx-improved (pinned M6a, 2026-10-29)
+# strategy: build — pinned source tarball built in fedora:45 container during kit build; binary shipped in kit.
+# upstream: "WS" (formerly WSJT-X Improved) by DG2YCB — GPL-3.0-or-later, Qt6.
+# Upstream publishes SF source drops, no git releases; pinned via the Copr
+# packager's exact drop (xsnrg/ws-copr ws.spec, snapshot 261010 corroborated).
 recipe:
   id: wsjtx-improved
   strategy: build
   license: GPL-3.0-or-later
   source:
-    git: PIN-ME          # repo URL + tag
-    sha256: PIN-ME       # archive sha256
+    archive_url: https://downloads.sourceforge.net/project/wsjt-x-improved/WS_v3.2.1/Source%20code/Qt6/ws-3.2.1_261010_qt6.tgz
+    version: 3.2.1
+    sha256: 479bd6d9f5e196022f74882b3e3bbd9cf01d6a44fec4a340c689498958eccd9f
     build_container: fedora:45
+    build_deps: [cmake, gcc-c++, gcc-gfortran, make, hamlib-devel, fftw-devel,
+                 libusb1-devel, systemd-devel, boost-devel, portaudio-devel,
+                 qt6-qtbase-devel, qt6-qttools-devel, qt6-qtserialport-devel,
+                 qt6-qtmultimedia-devel, qt6-qtwebsockets-devel, qt6-qtsvg-devel,
+                 dos2unix, desktop-file-utils]
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+

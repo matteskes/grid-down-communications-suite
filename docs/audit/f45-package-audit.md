@@ -146,6 +146,60 @@ gd 0.4.0-m3
 - **php-cli** is available — JS8Spotter's local service needs no extra repo.
 - `pat`, `meshtastic`, `gridtracker` absent as designed (tarball / vendored-wheels strategies).
 
+## M6a build-deps audit (2026-10-29, `tools/audit-f45-build-deps.sh`)
+
+Method: `dnf list available` per candidate build dep inside `fedora:45`
+`linux/amd64` (same as P0), plus `rpm -q` for installed-packages (the P0
+lesson generalizes: `dnf list available` HIDES installed packages, so a
+MISSING row must be cross-checked before believing it).
+
+```text
+image: fedora:45 (linux/amd64)  date: 2026-10-29T18:17:15Z  container-arch: x86_64
+--- base toolchain ---
+AVAILABLE gcc gcc-c++ make cmake patch git-core
+--- qt5 ---  AVAILABLE qt5-qtbase-devel qt5-qtmultimedia-devel qt5-qtserialport-devel qt5-qttools-devel
+--- qt6 (WSJT-X Improved / "WS" needs Qt6, per xsnrg/ws-copr ws.spec) ---
+AVAILABLE qt6-qtbase-devel qt6-qttools-devel qt6-qtserialport-devel qt6-qtmultimedia-devel
+AVAILABLE qt6-qtwebsockets-devel qt6-qtsvg-devel
+--- audio ---  AVAILABLE alsa-lib-devel portaudio-devel pulseaudio-libs-devel
+--- dsp/ham --- AVAILABLE fftw-devel hamlib-devel boost-devel asciidoc glfw-devel glew-devel volk-devel
+MISSING libusb-devel   → renamed: F45 package is libusb1-devel (AVAILABLE 1.0.30-2.fc45)
+--- sdr ---   AVAILABLE rtl-sdr-devel;  MISSING librtlsdr-devel (wrong name)
+--- fltk ---  AVAILABLE fltk-devel fltk-fluid libsamplerate-devel  (fltk 1.4.5; fltk1.3 compat exists)
+--- imaging/geo --- AVAILABLE libpng-devel bzip2-devel proj-devel glib2-devel gtk3-devel
+                     gettext-devel libcurl-devel sqlite-devel fontconfig-devel freetype-devel ncurses-devel
+MISSING openjpeg2-devel → renamed: F45 package is openjpeg-devel (2.5.4-5.fc45, updates-testing)
+MISSING zlib-devel      → renamed: F45 package is zlib-ng-compat-devel (2.3.3-6.fc45)
+--- station-side extraction ---
+MISSING libarchive-tools (Debian name) → F45 package is bsdtar (AVAILABLE 3.8.9-2.fc45, provides /usr/bin/bsdtar)
+AVAILABLE cpio unzip rpm-build;  libarchive libs already INSTALLED
+```
+
+Findings folded into recipes (M6a):
+- **Build-dep renames on F45:** `libusb1-devel` (not libusb-devel), `openjpeg-devel`
+  (not openjpeg2-devel; currently updates-testing — the kit builder must enable
+  updates-testing on F45 until it reaches the updates repo), `zlib-ng-compat-devel`
+  (not zlib-devel), station-side extractor package = **`bsdtar`** (not
+  libarchive-tools; `cpio`/`unzip` available as fallbacks).
+- **wsjtx-improved** is now "WS" v3.2.1 by DG2YCB, **Qt6**-based, GPL-3.0-or-later,
+  published as SF source drops (no git releases). Fedora COPR packager
+  (xsnrg/ws-copr ws.spec) corroborates version + BuildRequires — used as the
+  authoritative build_deps list.
+- **License flags resolved at pin:** Flags #1 qttermtcp → upstream (g8bpq) ships
+  **no license file at all** (repo has no LICENSE/COPYING/README) → recorded
+  `LicenseRef-Unknown`; redistribution caveat goes in third-party-licenses.md.
+  Flags #3 dump1090 → FlightAware LICENSE states **GPL v2 or later** →
+  GPL-2.0-or-later (wiedehopf fork identical wording).
+  flwrap COPYING → GPL v2 (w1hkj suite); gridtracker (Flags #2) → **BSD-3-Clause**
+  (GitLab gridtracker.org/gridtracker2 LICENSE, verified 2026-10-29).
+- **Pin-anchoring notes:** SDR++ ships a rolling "nightly" release since 1.0.4 →
+  pinned by master commit `f10fb98af8b80de01de94e60c17608e4281e2515` (2026-10-23).
+  wsjtx-improved/flwrap/osm-navit pin upstream-hosted archives (`archive_url`)
+  where upstream digests exist (navit source asset carries an official sha256).
+  paracon is a Python zipapp (build = zipapp packaging, not compilation).
+  meshtastic CLI pinned by PyPI version (2.7.11) — wheels enumerated at M6c.
+
+
 ## Post-audit correction (2026-10-26, license-research pass)
 
 - **flarq — RESOLVED 2026-10-26** — Fedora's `fldigi` package **Provides: flarq = 4.2.13** (Fedora
