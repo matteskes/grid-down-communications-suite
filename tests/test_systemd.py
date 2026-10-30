@@ -578,7 +578,8 @@ def _doctor_units_result(sd, monkeypatch):
 
 def test_doctor_units_check_skip_and_count(sd, monkeypatch):
     results, unit_check = _doctor_units_result(sd, monkeypatch)
-    assert len(results) == 21  # 18 checks before M9 (three mesh checks added)
+    assert len(results) == 20  # 18 before M9 (+3 mesh) = 21; M10 removed the
+    # 8091/js8spotter port check with the php-service contract correction
     assert unit_check.status == "skip"
     assert "gd units install" in unit_check.detail
 

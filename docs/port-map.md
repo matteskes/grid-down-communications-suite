@@ -10,7 +10,7 @@ loopback-only binding and port conflicts).
 | 4532 | hamlib | rigctld TCP (rig control) | managed-service (unit `grid-down-hamlib.service`) | `nc -z 127.0.0.1 4532` |
 | 8001 | direwolf | KISS over TCP (APRS/AX.25 frames) | managed-service (unit `grid-down-direwolf.service`) | `nc -z 127.0.0.1 8001` |
 | 8090 | commstatone | HTTP static dashboard | local-service (suite-served) | `curl -sf http://127.0.0.1:8090/` |
-| 8091 | js8spotter | HTTP (PHP built-in server) | local-service (suite-served) | `curl -sf http://127.0.0.1:8091/` |
+| 8091 | *(unassigned)* | — | — | M10 correction: js8spotter is a Tcl/Tk desktop app, not a web service — reserved for a future web dashboard |
 | 8092 | meshtastic-web | HTTP static dashboard (+ Web Serial from browser) | local-service (suite-served) | `curl -sf http://127.0.0.1:8092/` |
 | 8515 | ardop | ARDOP TNC TCP command port | managed-service (unit `grid-down-ardop.service`) | `nc -z 127.0.0.1 8515` |
 
@@ -35,12 +35,15 @@ cwd set to the docroot. Docroot is `<app_root>/<app_id>` — i.e.
 the kit (content itself is operator-supplied, spec §6.8). Refuses to start
 when the docroot directory is missing (install-state error, not a crash).
 
-### 8091 — js8spotter (kit tarball app, PHP)
-`php -S 127.0.0.1:8091 -t /opt/grid-down/js8spotter` with the docroot as cwd.
-Requires `php-cli` on PATH (comes with the kit's dnf recipe set); without it
-the launch fails with an install-state error naming the fix, never a
-half-started service. Content: JS8Spotter tarball extracted flat into
-`/opt/grid-down/js8spotter/`.
+### 8091 — unassigned (M10 correction)
+
+js8spotter was documented here as a `php -S` service in M8 — a misreading:
+upstream v1.09b is a **Python/Tcl-Tk desktop app** (`js8spotter.py`,
+`azure.tcl` — no PHP, no web root; the M10 container E2E caught it when the
+"happy path" 404'd). It ships as a kit tarball payload at
+`/opt/grid-down/js8spotter/`, launches from the station console (needs X11 +
+a JS8 modem), `via: cli-tool` refuses it as a service, and the `js8` bundle
+skips it with a note. The port stays reserved for a future web dashboard.
 
 ### 8515 — ardop (`ardopcf`, M7/M8)
 `/opt/grid-down/ardop/ardopcf 8515 <capture> <playback>` — first argument is
@@ -61,7 +64,8 @@ resolution path, and `gd doctor` re-renders — an args-file edit after
 output); ardop ExecStart rendered both ways (args file → pinned `hw:`
 devices, no file → preset endpoints); commstatone (8090) and meshtastic-web
 (8092) launched, `ss -tlnp` confirmed loopback-only binding, `curl` → 200;
-js8spotter exercised its php-cli refusal branch (VM offline — happy path
-needs `php-cli`, deferred to M10 live E2E); `gd doctor` → 0 fail, units
+js8spotter exercised its refusal branch (VM offline — M10 then corrected the
+contract itself: Tcl/Tk desktop app, no php service; see 8091 above);
+`gd doctor` → 0 fail, units
 "current", drift check catches args-file edits. Evidence: this file,
 `docs/phase4-plan.md` §M8.

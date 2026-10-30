@@ -73,6 +73,11 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
     strategy_by_id: dict[str, str] = {}
     pkgs_fed: list[str] = []
     pkgs_rf: list[str] = []
+    # Installer tooling rides the kit (the spec §8 dnf class with createrepo_c /
+    # python3-pip): the air-gap side extracts tarball/deb payloads with bsdtar
+    # (gd_kit_extract_artifacts) and the kit repo is the only enabled repo
+    # there — M10 container E2E caught its absence from the install set.
+    pkgs_fed.append("bsdtar")
 
     for app_id in sorted(set(ids)):
         r, path = recs[app_id]
@@ -168,6 +173,21 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
             )
         else:
             raise PlanError(f"{app_id}: unknown strategy {strat!r}")
+
+        # A recipe's dnf row is honored for EVERY strategy (M10 container E2E:
+        # tarball js8spotter's php-cli and pip meshtastic's python3.14 were
+        # silently dropped when only the dnf/build branches read it). The
+        # dnf/build branches add their own row above — don't double-append.
+        if strat not in ("dnf", "build"):
+            d = r.get("dnf") or {}
+            if d.get("packages"):
+                plan["dnf"].append(
+                    {
+                        "id": app_id,
+                        "repo": d.get("repo", "fedora"),
+                        "packages": d["packages"],
+                    }
+                )
 
     non_dnf = sorted(i for i in plan["apps"] if strategy_by_id[i] != "dnf")
     if arch == "aarch64" and non_dnf:

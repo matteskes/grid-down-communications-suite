@@ -130,11 +130,24 @@ refusal-surface round (no LoRa hardware — M8 precedent): adapter refusals,
 `meshtasticd` apply refuses not-installed, `gd launch mesh` skips-with-notes,
 doctor 0 fail. Payload/flag pins → M10 live E2E (BLE target flags unverified).
 
-## M10 — Acceptance + corrections
-E2E on the x86_64 station profile (3×PASS discipline); spec §8 wording
-corrections applied together with the audit doc (artemis ".rpm" → .deb,
-meshtasticd "RPM" → deb-or-rpm, recipes README "Phase 3" → P4);
-phase4-plan status closure; push.
+## M10 — Acceptance + corrections ✅ (2026-10-30)
+3×`P4: PASS` on the x86_64 station profile — full 19-app kit, three fresh
+air-gapped containers (`--network none`), each: `bootstrap.sh --kit` offline
+install → gate set G0–G11 (`tools/container-p4-e2e.sh` +
+`tools/p4-e2e-gates.sh`; carrier: Docker Desktop, `--platform linux/amd64`,
+scope-locked to a container). Manifest 2190 files, strict verify each round;
+doctor 0 fail; mesh bundle skip-with-notes + meshtastic-web :8092 → 200;
+refusals exact (js8spotter desktop app, meshtasticd not-installed).
+Evidence + the five E2E-caught install-path fixes (kit/opt placement,
+`local` self-reference in the kit helpers, per-strategy `dnf:` rows, bsdtar
+as installer tooling, wrapped-tarball flattening/xattrs) and the js8spotter
+"php service" contract correction (Tcl/Tk desktop app — registry/supervisor/
+port-map/spec updated): `docs/audit/p4-container-e2e.md`. Spec §8 wording
+corrections: meshtasticd "RPM" → OBS .deb (lines 287/347), recipes README
+"Phase 3" → P4, php-cli out of the profile dnf list; suite 250 green,
+black/ruff/isort clean. Note: this header's artemis ".rpm" → .deb item was
+stale — M6c pinned the `.deb` and spec §8 already said so; no edit needed.
+phase4-plan status closure; pushed.
 
 ## Arch policy (adopted default)
 P4 kits target x86_64, matching the Phase 0 station decision (audit

@@ -284,7 +284,7 @@ ZIM/GRIB/OSM data staged by the operator · `manifest.sha256` (path, sha256, url
 - `meshtastic` Python CLI + library: vendored wheels in the kit; manages devices over USB/serial,
   TCP, BLE. Profile `mesh:` block applied via `meshtastic configure` (node names, region, modem
   preset, channel URLs; PSKs stay local).
-- `meshtasticd`: Linux-native LoRa HAT daemon; upstream RPM pinned in kit; systemd unit managed by
+- `meshtasticd`: Linux-native LoRa HAT daemon; upstream OBS .deb pinned in kit; systemd unit managed by
   the supervisor; off by default (USB-handset stations don't need it).
 - `meshtastic-web`: official web client served on localhost:8092 (Web Serial in-browser).
 - Dashboard tiles: node list, SNR/RSSI, battery via CLI JSON polling.
@@ -339,12 +339,12 @@ Post-audit state (2026-10-26; `docs/audit/f45-package-audit.md` is authoritative
 
 - **dnf** — hamlib (+python3-hamlib), fldigi (ships flarq), direwolf, wsjtx, js8call, flamp, flmsg, fllog,
   qsstv, kiwix-desktop, audacity, sox, conky, snapshot, ffmpeg (needs RPM Fusion release rpms),
-  wine 11.20 (x86_64), winetricks, java-25-openjdk (YAAC runtime), nodejs, rtl-sdr, php-cli,
+  wine 11.20 (x86_64), winetricks, java-25-openjdk (YAAC runtime), nodejs, rtl-sdr,
   createrepo_c, python3-pip
 - **build** (pinned git sources in fedora:45 container) — ardop, wsjtx-improved, qttermtcp,
   paracon, sdrpp, dump1090, flwrap, xygrib, osm-navit
 - **tarball** — pinned upstream artifacts: pat, chattervox (npm), yaac (jar), artemis (.rpm,
-  AresValley GPL-3.0 v4.2), gridtracker, js8spotter, meshtasticd (RPM), commstatone (static)
+  AresValley GPL-3.0 v4.2), gridtracker, js8spotter, meshtasticd (OBS .deb), commstatone (static)
 - **wine** — user-supplied installers into shared prefix: vara-hf, vara-fm, vara-sat, vara-chat,
   varac, vara-term
 - **pip-vendored** — meshtastic (wheels in kit)

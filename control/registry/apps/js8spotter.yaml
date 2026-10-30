@@ -1,17 +1,22 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
+# M10 E2E correction (2026-10-30): upstream v1.09b is a Python/Tcl-Tk DESKTOP
+# app (js8spotter.py + azure.tcl) — the M8 "php -S :8091 localhost service"
+# reading was wrong (no PHP anywhere in the payload; M10's live round caught
+# it). Launches from the station console; the supervisor refuses it as a
+# service (cli-tool) and the js8 bundle skips it with a note.
 id: js8spotter
 name: JS8Spotter
 category: monitor
 ui:
-  tagline: "JS8 call-activity dashboard, served on localhost (DanDawson)"
+  tagline: "JS8 call-activity dashboard (Tcl/Tk desktop app, DanDawson)"
 install:
   strategy: tarball
   recipe: js8spotter
   packages: []
-  note: "Pinned upstream tarball/binary shipped in kit, extracted to /opt/grid-down."
+  note: "Pinned upstream tarball shipped in kit, extracted flat to /opt/grid-down/js8spotter."
 launch:
-  via: local-service
-  cmd: "php -S 127.0.0.1:8091 (served by suite)"
+  via: cli-tool
+  cmd: "/opt/grid-down/js8spotter/js8spotter.py (Tcl/Tk desktop app — needs X11 and a JS8 modem; run on the station console)"
 config:
   adapter: none
   native_path: TBD   # pin exact native config path per station (Phase 3/4)

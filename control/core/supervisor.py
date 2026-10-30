@@ -57,7 +57,6 @@ PORTS = {
     "hamlib": 4532,
     "direwolf": 8001,
     "commstatone": 8090,
-    "js8spotter": 8091,
     "meshtastic-web": 8092,
     "ardop": 8515,
 }
@@ -384,11 +383,6 @@ class Supervisor:
                 f"{app_id}: content not installed (expected {docroot}); "
                 "serving is available after kit install (bootstrap.sh --kit)"
             )
-        if app_id == "js8spotter":  # PHP app (spec §6.6)
-            php = shutil.which("php")
-            if php is None:
-                raise SupervisorError("js8spotter needs php-cli on PATH (dnf install php-cli)")
-            return [php, "-S", f"127.0.0.1:{port}", "-t", str(docroot)], docroot
         return (
             [
                 sys.executable,

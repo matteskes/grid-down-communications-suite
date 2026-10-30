@@ -17,6 +17,11 @@ install/bundle-builder/builds/out/
 install/kit-import/*
 !install/kit-import/README.md
 
+# Operator-staged static payload content (spec §6.8) — local only, never committed.
+# The directory ships with its README alone; container-p4-e2e.sh stages releases.
+kit-static/*
+!kit-static/README.md
+
 # Local state
 *.state.json
 *.log

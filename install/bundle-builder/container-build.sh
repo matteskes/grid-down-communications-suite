@@ -193,10 +193,20 @@ done < <(plan_rows pip id package python)
     log "wheels: $(find "$OUT/wheels" -name '*.whl' | wc -l) files for $(wc -l < "$OUT/wheels.txt") apps"
 
 # --- static-strategy phase: operator-staged payload slots (region ride-along) ---
+# Operator content is staged on the HOST at kit-static/<id>/ (build-kit.sh bind-
+# mounts it read-only at /kit-static); it rides the kit and its manifest. Empty
+# slots stay empty (Doctor WARNs) — content is operator-supplied, spec §6.8.
 : > "$OUT/static.tsv"
 while IFS=$'\x1f' read -r id src serve; do
     [ -n "$id" ] || continue
     mkdir -p "$OUT/static/$id"
+    if [ -d "/kit-static/$id" ] && [ -n "$(ls -A "/kit-static/$id" 2>/dev/null)" ]; then
+        log "static[$id]: staging operator content"
+        cp -a "/kit-static/$id/." "$OUT/static/$id/"
+        log "static[$id]: $(find "$OUT/static/$id" -type f | wc -l | tr -d ' ') files"
+    else
+        log "static[$id]: slot empty (operator stages via kit-static/$id)"
+    fi
     printf '%s\t%s\t%s\n' "$id" "static/$id" "$serve" >> "$OUT/static.tsv"
 done < <(plan_rows static id src serve)
 

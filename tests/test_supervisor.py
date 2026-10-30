@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import shlex
-import shutil
 import signal
 import sys
 import time
@@ -57,10 +56,6 @@ def _apps(rig_cmd: str = "rigctld") -> list[dict]:
                 "via": "local-service",
                 "cmd": "python3 -m http.server 8090 (served by suite)",
             },
-        },
-        {
-            "id": "js8spotter",
-            "launch": {"via": "local-service", "cmd": "php -S 127.0.0.1:8091 (served by suite)"},
         },
     ]
 
@@ -229,14 +224,9 @@ def test_local_service_cmd_builder(sup, tmp_path):
     assert "--directory" in argv and cwd == docroot
 
 
-def test_js8spotter_needs_php_or_errors(sup, tmp_path):
-    (tmp_path / "opt" / "js8spotter").mkdir(parents=True)
-    if shutil.which("php"):
-        argv, _ = sup._local_service_cmd(sup.app("js8spotter"))
-        assert "php" in argv[0] and "127.0.0.1:8091" in argv
-    else:
-        with pytest.raises(SupervisorError, match="php-cli"):
-            sup._local_service_cmd(sup.app("js8spotter"))
+# M10 correction: js8spotter's "php -S on 8091" service contract is gone —
+# upstream v1.09b is a Tcl/Tk desktop app (no PHP, no web root); it is a
+# cli-tool via now (refuses; the js8 bundle skips it with a note).
 
 
 # ------------------------------------------------------- M2: rig from profile

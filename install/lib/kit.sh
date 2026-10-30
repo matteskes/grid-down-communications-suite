@@ -58,7 +58,14 @@ gd_kit_repo_cleanup() { rm -f "$(gd_kit_repo_file)"; }
 # so the air-gap side never parses YAML (station PyYAML is not guaranteed).
 
 gd_kit_extract_artifacts() { # $1 = kit dir — bsdtar-extract pinned artifacts to their recipe dests
-    local kit="$1" tsv="$kit/artifacts.tsv" id file dest fmt arch
+    # --no-xattrs: upstream tarballs may carry xattrs (pat's binary does) that a
+    # container fs can't restore ("Unknown error -1") — restoring them is not
+    # part of the payload contract; exit code must reflect real extraction
+    # errors only. M10 container E2E.
+    # split local: `$kit` in the same declaration expands from the CALLER's
+    # scope (empty under bootstrap's set -u, wrong paths otherwise) — M10 E2E.
+    local kit="$1"
+    local tsv="$kit/artifacts.tsv" id file dest fmt arch wrk
     [ -f "$tsv" ] || return 0
     command -v bsdtar >/dev/null || { gd_err "bsdtar not found — install the kit dnf set first (it ships bsdtar)"; return 1; }
     while IFS=$'\t' read -r id file dest fmt arch; do
@@ -66,14 +73,33 @@ gd_kit_extract_artifacts() { # $1 = kit dir — bsdtar-extract pinned artifacts 
         gd_info "extracting $id ($fmt, arch=$arch) -> $dest"
         mkdir -p "$dest"
         case "$fmt" in
-            npm) bsdtar -xf "$kit/$file" -C "$dest" --strip-components=1 ;;
-            *)   bsdtar -xf "$kit/$file" -C "$dest" ;;
+            npm) bsdtar --no-xattrs -xf "$kit/$file" -C "$dest" --strip-components=1 ;;
+            deb|rpm) bsdtar --no-xattrs -xf "$kit/$file" -C "$dest" ;;
+            *)
+                # Release tarballs/zips usually wrap everything in one top dir;
+                # flatten it so the recipe dest IS the payload root — registry
+                # cmd/docroot paths assume that (M10: js8spotter served 404s
+                # from the wrapped dir; gridtracker/pat wrapped, yaac not).
+                wrk="$(mktemp -d "$dest/.extract.XXXXXX")"
+                bsdtar --no-xattrs -xf "$kit/$file" -C "$wrk"
+                set -- "$wrk"/* "$wrk"/.[!.]*
+                if [ $# -eq 2 ] && [ -d "$1" ] && [ "$2" = "$wrk"/.[!.]* ]; then
+                    set -- "$1"
+                fi
+                if [ $# -eq 1 ] && [ -d "$1" ]; then
+                    ( shopt -s dotglob; mv "$1"/* "$dest"/ )
+                else
+                    ( shopt -s dotglob; mv "$wrk"/* "$dest"/ )
+                fi
+                rm -rf "$wrk"
+                ;;
         esac
     done < "$tsv"
 }
 
 gd_kit_install_wheels() { # $1 = kit dir — offline wheel install (no network, no repos)
-    local kit="$1" tsv="$kit/wheels.txt" id pkg pybin
+    local kit="$1"
+    local tsv="$kit/wheels.txt" id pkg pybin
     [ -f "$tsv" ] || return 0
     command -v python3 >/dev/null || { gd_err "python3 not found — required for vendored wheels"; return 1; }
     while IFS=$'\t' read -r id pkg pybin; do
@@ -95,8 +121,24 @@ gd_kit_install_wheels() { # $1 = kit dir — offline wheel install (no network, 
     done < "$tsv"
 }
 
+gd_kit_place_opt() { # $1 = kit dir — build-strategy payloads into /opt/grid-down
+    # kit/opt/<id>/ mirrors the recipes' artifact dests under /opt/grid-down/<id>/
+    # (container-build.sh collects build artifacts there). No TSV needed: the
+    # payload set is whatever build apps the plan selected. Manifest-verified.
+    local kit="$1" id dir
+    [ -d "$kit/opt" ] || return 0
+    for dir in "$kit"/opt/*; do
+        [ -d "$dir" ] || continue
+        id="$(basename "$dir")"
+        gd_info "placing build payload $id -> /opt/grid-down/$id"
+        mkdir -p "/opt/grid-down/$id"
+        cp -a "$dir/." "/opt/grid-down/$id/"
+    done
+}
+
 gd_kit_place_static() { # $1 = kit dir — static payloads into their dest under /opt/grid-down
-    local kit="$1" tsv="$kit/static.tsv" id rel serve
+    local kit="$1"
+    local tsv="$kit/static.tsv" id rel serve
     [ -f "$tsv" ] || return 0
     while IFS=$'\t' read -r id rel serve; do
         [ -n "$id" ] || continue

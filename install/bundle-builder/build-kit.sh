@@ -70,7 +70,7 @@ echo "  arch        : $ARCH   rpmfusion-enablement: $RPMFUSION"
 echo "  image       : $IMAGE (linux/amd64)   out: $OUT   pack: $PACK"
 
 STAGING="$GD_ROOT/kit-staging"
-rm -rf "$STAGING"; mkdir -p "$STAGING" "$OUT"
+rm -rf "$STAGING"; mkdir -p "$STAGING" "$OUT" "$GD_ROOT/kit-static"
 # Build scratch lives on a HOST bind mount: the container-local overlay under
 # Rosetta (linux/amd64 on Apple Silicon) returns ENOSYS for tar's mkdir/open
 # calls (same syscall family as the M4 fexecve quirk — audit doc). virtiofs
@@ -82,6 +82,7 @@ docker run --rm --platform linux/amd64 \
     -e GD_IN_OUT=/kit-staging -e GD_IN_ARCH="$ARCH" -e GD_IN_RPMFUSION="$RPMFUSION" \
     -e GD_IN_PACK="$PACK" -e GD_IN_PLAN="$PLAN" \
     -v "$GD_ROOT/install:/install-src:ro" \
+    -v "$GD_ROOT/kit-static:/kit-static:ro" \
     -v "$STAGING:/kit-staging" \
     -v "$OUT:/kits" \
     -v "$BUILD_HOST_DIR:/gd-build" \
