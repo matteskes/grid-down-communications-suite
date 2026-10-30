@@ -84,6 +84,11 @@ available); the two display services per spec §7; systemd units for
 managed-service apps (ardop, dump1090, meshtasticd) + M4 verify round; port
 map documented.
 
+Note (operator, 2026-10-30): `kit-staging/` (1.8G from the M6d dry runs) is
+kept through M8 as unit-test fixture material — untracked as always, wiped by
+the next `build-kit.sh` run and before gate runs; M8 must not trigger a kit
+rebuild.
+
 ## M9 — Mesh profile
 meshtasticd ships but stays **off** by default (ride-along #3: USB handset +
 `meshtastic` CLI is the default path); mesh bundle wiring (`bundles.yaml`);

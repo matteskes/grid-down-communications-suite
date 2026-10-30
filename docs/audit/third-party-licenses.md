@@ -57,7 +57,7 @@ the kit builder into the manifest.
 | flarq | W1HKJ | GPL-2.0-or-later | shipped by fldigi RPM (verified in container) — Flags #4 resolved |
 | wsjtx-improved | DG2YCB "WS" (ex WSJT-X Improved) | GPL-3.0-or-later | pinned 3.2.1_261010 SF drop; Qt6 (M6a) |
 | yaac | KA2DDO/YAAC | LGPL-3.0-only | author page states LGPL; AUR metadata corroborates; zip has no LICENSE file — Flags #6 resolved |
-| qttermtcp | g8bpq/QtTermTCP | LicenseRef-Unknown (**none upstream**) | Flags #1: repo ships no license file at all; binary redistribution is a standing caveat — operator decision to ship vs demote to user-supplied |
+| qttermtcp | g8bpq/QtTermTCP | LicenseRef-Unknown (**none upstream**) | Flags #1: repo ships no license file at all; **SHIPPED as-is** (operator decision 2026-10-30) — binary stays in the kit, no-upstream-license caveat below remains documented |
 
 ## C. user-supplied / closed (kit never redistributes — G6, fails closed)
 
@@ -82,6 +82,10 @@ the kit builder into the manifest.
    Recorded `LicenseRef-Unknown` in the recipe; the caveat above stands —
    shipping the built binary is an operator decision (ship vs demote to
    user-supplied like VARA).
+   **SHIPPED 2026-10-30** — operator elected to ship the built binary as-is:
+   `LicenseRef-Unknown` stands in recipe/registry, the kit keeps qttermtcp,
+   and the no-upstream-license caveat stays documented here and in §B's row.
+   Decision closed; wrap-up and gate runs must not re-surface it.
 2. **GridTracker** — RESOLVED 2026-10-29: BSD-3-Clause LICENSE verified on the
    upstream GitLab (gridtracker.org/gridtracker2, commit 2026-10); binary
    redistribution permitted by BSD-3. Row moved from §C to §B.
