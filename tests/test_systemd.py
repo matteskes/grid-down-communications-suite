@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -152,6 +153,27 @@ def test_hamlib_unit_is_unbound(sd):
     text = service_unit_text(app, sup.bundles, sup.state_dir, argv)
     assert "BindsTo=" not in text  # singleton: reference-counted, never target-bound
     assert "After=grid-down-" not in text
+
+
+def test_ardop_unit_execstart_uses_args_file(sd):
+    """M8/M7 contract: the rendered ExecStart carries the args file's launch
+    args (units render from _resolve_cmd, so both backends agree). Doctor's
+    re-render then flags drift when the file changes post-install."""
+    sup = _sup(sd)
+    args_dir = sd.tmp / "state" / "app-args"
+    args_dir.mkdir(parents=True)
+    (args_dir / "ardop.args").write_text("8515\nhw:CARD=rig\nhw:CARD=spk\n")
+    app = {
+        "id": "ardop",
+        "launch": {
+            "via": "managed-service",
+            "cmd": f"{sys.executable} -c pass 8515 <capture> <playback>",
+        },
+    }
+    argv, _ = sup._resolve_cmd(app)
+    text = service_unit_text(app, sup.bundles, sup.state_dir, argv)
+    exec_line = next(ln for ln in text.splitlines() if ln.startswith("ExecStart="))
+    assert exec_line == f"ExecStart={shlex.join(argv)}"
 
 
 def test_target_text_wants_and_orders_members():

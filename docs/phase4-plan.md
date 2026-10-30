@@ -78,11 +78,28 @@ prints INI sections, JSON/YAML values, or the args list; `apply` output is
 format-agnostic. 29 new tests (`tests/test_adapters_native.py`); full suite
 230 green; black/ruff/isort clean. M10 owns the live E2E key pins.
 
-## M8 — Services
+## M8 — Services ✅ (2026-10-30)
 js8spotter localhost service (`php -S 127.0.0.1:8091` — php-cli verified
 available); the two display services per spec §7; systemd units for
 managed-service apps (ardop, dump1090, meshtasticd) + M4 verify round; port
 map documented.
+
+Landed: `_resolve_cmd` now honors an existing non-empty
+`<state>/app-args/<id>.args` (M7 ardop-cfg contract) — file args replace
+everything after the cmd's binary, presets stay the fallback; units render
+from the same path, so Doctor's existing drift check covers args-file edits
+(no systemd.py change). Registry corrections: ardop cmd `ardopc` →
+`/opt/grid-down/ardop/ardopcf …` and dump1090 → `/opt/grid-down/dump1090/…`
+(/opt kit convention — bare names never resolve). Verify round on the
+Fedora 45 VM: units 12 services + 9 targets (P2 baseline was 8), daemon-reload
+ok; `systemd-analyze verify grid-down-*` clean; ardop ExecStart rendered both
+ways (args file wins / preset fallback); commstatone 8090 + meshtastic-web
+8092 loopback-only (ss) with HTTP 200; js8spotter refusal branch exercised
+(VM offline — php-cli happy path deferred to M10 live E2E); meshtasticd stays
+unresolved until its upstream RPM installs (by design); `gd doctor` 0 fail,
+drift check catches args-file edits. 4 new tests (`test_supervisor.py` ×3,
+`test_systemd.py` ×1); full suite 234 green; black/ruff/isort clean. Port map:
+`docs/port-map.md`.
 
 Note (operator, 2026-10-30): `kit-staging/` (1.8G from the M6d dry runs) is
 kept through M8 as unit-test fixture material — untracked as always, wiped by

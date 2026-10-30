@@ -301,3 +301,50 @@ def test_placeholder_partial_profile_override(sup):
     app = {"id": "bad2", "launch": {"via": "managed-service", "cmd": "x <capture> <playback>"}}
     with pytest.raises(SupervisorError, match=r"presets\.bad2\.playback"):
         sup._resolve_cmd(app)  # capture resolved; playback still missing
+
+
+# ------------------------------------------- M8: args-file launch (ardop-cfg contract)
+def test_args_file_replaces_registry_args(sup):
+    """A written args file (M7 ardop-cfg contract) owns the launch args:
+    the cmd's first token stays the binary, everything after comes from the
+    file — audio presets are never consulted."""
+    args_dir = sup.state_dir / "app-args"
+    args_dir.mkdir(parents=True)
+    (args_dir / "ardop.args").write_text("# pinned at M10 E2E\n8515\nhw:CARD=rig\nhw:CARD=spk\n")
+    app = {
+        "id": "ardop",
+        "launch": {
+            "via": "managed-service",
+            "cmd": f"{sys.executable} -c pass 8515 <capture> <playback>",
+        },
+    }
+    argv, _ = sup._resolve_cmd(app)
+    assert argv == [sys.executable, "8515", "hw:CARD=rig", "hw:CARD=spk"]
+
+
+def test_args_file_comments_only_falls_back_to_presets(sup):
+    """Absent, empty or comment-only file → registry placeholder path."""
+    args_dir = sup.state_dir / "app-args"
+    args_dir.mkdir(parents=True)
+    (args_dir / "ardop.args").write_text("# nothing pinned yet\n\n")
+    app = {
+        "id": "ardop",
+        "launch": {
+            "via": "managed-service",
+            "cmd": f"{sys.executable} -c pass 8515 <capture> <playback>",
+        },
+    }
+    argv, _ = sup._resolve_cmd(app)
+    assert argv[-2:] == ["grid_down_hf_out.monitor", "grid_down_hf_in"]
+
+
+def test_args_file_absent_falls_back_to_presets(sup):
+    app = {
+        "id": "ardop",
+        "launch": {
+            "via": "managed-service",
+            "cmd": f"{sys.executable} -c pass 8515 <capture> <playback>",
+        },
+    }
+    argv, _ = sup._resolve_cmd(app)  # no app-args/ dir at all
+    assert argv[-2:] == ["grid_down_hf_out.monitor", "grid_down_hf_in"]

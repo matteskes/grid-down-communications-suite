@@ -313,16 +313,23 @@ class Supervisor:
         raw = [t for t in shlex.split(cmd) if not re.fullmatch(r"\([^)]*\)", t)]
         if not raw:
             raise SupervisorError(f"{app_id}: launch.cmd is only prose: {cmd!r}")
-        tokens = []
-        for t in raw:  # <placeholders> resolve through audio.presets (spec §6.6)
-            m = re.fullmatch(r"<([a-z_]+)>", t)
-            if m:
-                try:
-                    tokens.append(audio.resolve_preset(app_id, m.group(1), self.profile))
-                except audio.AudioError as exc:
-                    raise SupervisorError(f"{app_id}: {exc}") from None
-            else:
-                tokens.append(t)
+        file_args = self._args_file_args(app_id)
+        if file_args is not None:
+            # M7 args-file adapter owns the arg list (ardop-cfg): the cmd's
+            # first token stays the launch binary, the file's args replace
+            # everything after it — no audio-preset resolution happens.
+            tokens = raw[:1] + file_args
+        else:
+            tokens = []
+            for t in raw:  # <placeholders> resolve through audio.presets (spec §6.6)
+                m = re.fullmatch(r"<([a-z_]+)>", t)
+                if m:
+                    try:
+                        tokens.append(audio.resolve_preset(app_id, m.group(1), self.profile))
+                    except audio.AudioError as exc:
+                        raise SupervisorError(f"{app_id}: {exc}") from None
+                else:
+                    tokens.append(t)
         if any(re.search(r"[<>\[\]{}]", t) for t in tokens):
             raise SupervisorError(
                 f"{app_id}: launch.cmd has placeholders ({cmd}) — needs "
@@ -335,6 +342,23 @@ class Supervisor:
                 "installed? air-gap install: bootstrap.sh --kit <dir>"
             )
         return argv, None
+
+    def _args_file_args(self, app_id: str) -> list[str] | None:
+        """Launch args owned by a config adapter's args file (M7: ardop-cfg —
+        ardopcf has no config file): ``<state>/app-args/<id>.args``, one
+        argument per line, '#' comments, station tokens already expanded at
+        apply time. None when the file is absent or has no content — launch
+        then falls back to the registry cmd's own args (audio presets, §6.6).
+        """
+        path = self.state_dir / "app-args" / f"{app_id}.args"
+        if not path.is_file():
+            return None
+        args = [
+            line.strip()
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+        return args or None
 
     def _local_service_cmd(self, app: dict) -> tuple[list[str], Path]:
         app_id = app["id"]

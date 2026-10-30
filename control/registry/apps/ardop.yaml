@@ -11,7 +11,12 @@ install:
   note: "Pinned git tarball built in fedora:45 container during kit build; binary shipped in kit."
 launch:
   via: managed-service
-  cmd: "ardopc 8515 <capture> <playback>"
+  # /opt path per kit convention (flwrap, qttermtcp, paracon, …); the build
+  # artifact is ardopcf (pflarue/ardop). When <state>/app-args/ardop.args
+  # exists (config adapter ardop-cfg, M7) its args replace everything after
+  # the binary; otherwise the <capture>/<playback> placeholders resolve via
+  # audio presets (§6.6). TCP port pinned at M10 live E2E with the args file.
+  cmd: "/opt/grid-down/ardop/ardopcf 8515 <capture> <playback>"
 config:
   adapter: ardop-cfg
   native_path: "<state>/app-args/ardop.args"  # launch args — ardopcf has no config file (M7/M8)
