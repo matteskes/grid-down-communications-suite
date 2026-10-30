@@ -15,5 +15,7 @@ recipe:
     arch: x86_64
     version: 2.261019.5
     format: tar.gz
+  config:
+    set: []                # writable keys pinned at live E2E (§6.2 discipline, like wine.ini_set)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

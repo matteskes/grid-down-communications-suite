@@ -17,5 +17,9 @@ recipe:
     arch: x86_64
     version: 2.7.26.61~obs54e0d8d~beta
     format: deb
+  config:
+    set:                     # suite-owned drop-in /etc/meshtasticd/config.d/99-grid-down.yaml
+      - {key: Lora.Module, value: auto}   # key verified from the deb's default config.yaml
+    # board pins (General/, GPIO, network) at live E2E — upstream config.yaml is never touched
   postinst: []           # systemd unit (off by default), config adapter — Phase 1+
 

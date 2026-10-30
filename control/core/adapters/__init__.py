@@ -21,28 +21,98 @@ recipe declares (``install/recipes/<id>.yaml`` → ``wine.ini_set:`` rows of
 (G6: license keys are operator-applied in-app) are always masked in
 ``read()`` output. Exact VARA.ini key names get pinned into the shipped
 recipes at the live E2E — same discipline as the ``exes`` candidates.
+
+M7 extends the same contract to the twelve native apps: paths are pinned
+from each app's own source/artifact shipped in the kit (per-module
+docstrings carry the evidence), recipes declare writable keys under a
+top-level ``config:`` block (``config.set`` rows; ``config.args`` for
+ardopcf's launch-args file), and masking generalizes to any credential-
+shaped key name (reg/password/key/token/secret/passcode). See
+``adapters/native.py`` for the shared machinery.
 """
 
 from __future__ import annotations
 
-from .base import BaseAdapter, ConfigError, IniFile
+from .ardop_args import ArdopArgsAdapter
+from .base import BaseAdapter, ConfigError, IniFile, is_secret_key
+from .ini_conf import (
+    ArtemisPathsAdapter,
+    IniConfAdapter,
+    ParaconConfAdapter,
+    QtTermTCPConfAdapter,
+    XyGribConfAdapter,
+)
+from .json_conf import (
+    ChattervoxConfAdapter,
+    GridtrackerConfAdapter,
+    JsonConfAdapter,
+    PatConfAdapter,
+    SdrppConfAdapter,
+)
+from .meshtasticd_conf import MeshtasticdYamlAdapter
+from .native import (
+    JsonDoc,
+    NativeConfigAdapter,
+    PropsDoc,
+    YamlDoc,
+    mask_tree,
+    xdg_config_dir,
+    xdg_data_dir,
+)
+from .navit_conf import NavitXmlAdapter
 from .vara import VaraIniAdapter
 from .varac import VaracIniAdapter
+from .yaac_props import YaacPrefsAdapter
 
 __all__ = [
     "ADAPTERS",
+    "ArdopArgsAdapter",
+    "ArtemisPathsAdapter",
     "BaseAdapter",
+    "ChattervoxConfAdapter",
     "ConfigError",
+    "GridtrackerConfAdapter",
+    "IniConfAdapter",
     "IniFile",
+    "JsonConfAdapter",
+    "JsonDoc",
+    "MeshtasticdYamlAdapter",
+    "NativeConfigAdapter",
+    "NavitXmlAdapter",
+    "ParaconConfAdapter",
+    "PatConfAdapter",
+    "PropsDoc",
+    "QtTermTCPConfAdapter",
+    "SdrppConfAdapter",
     "VaraIniAdapter",
     "VaracIniAdapter",
+    "XyGribConfAdapter",
+    "YaacPrefsAdapter",
+    "YamlDoc",
     "get_adapter",
+    "is_secret_key",
+    "mask_tree",
+    "xdg_config_dir",
+    "xdg_data_dir",
 ]
 
 # registry `config.adapter` name -> implementation (control/registry/apps/*.yaml)
 ADAPTERS = {
     "vara-ini": VaraIniAdapter,  # VARA HF / FM / SAT / Chat / Terminal
     "varac-ini": VaracIniAdapter,  # VarAC
+    # native apps (M7) — paths pinned in each adapter's docstring
+    "ardop-cfg": ArdopArgsAdapter,  # launch-args file (ardopcf has no config file)
+    "pat-conf": PatConfAdapter,  # ~/.config/pat/config.json
+    "qttermtcp-cfg": QtTermTCPConfAdapter,  # exe-adjacent QtTermTCP.ini
+    "paracon-cfg": ParaconConfAdapter,  # paracon.cfg (cwd-first, kit dir)
+    "sdrpp-conf": SdrppConfAdapter,  # <dist>/config.json
+    "gridtracker-conf": GridtrackerConfAdapter,  # ~/.config/GridTracker2/…
+    "yaac-prefs": YaacPrefsAdapter,  # ~/.yaac/yaac.properties
+    "meshtasticd-yaml": MeshtasticdYamlAdapter,  # /etc/meshtasticd/config.d drop-in
+    "chattervox-json": ChattervoxConfAdapter,  # ~/.chattervox/config.json
+    "xygrib-conf": XyGribConfAdapter,  # ~/.config/openGribs/XyGrib.conf
+    "navit-xml": NavitXmlAdapter,  # ~/.navit/navit.xml (seed-then-patch)
+    "artemis-paths": ArtemisPathsAdapter,  # ~/.local/share/AresValley/Artemis
 }
 
 

@@ -23,5 +23,7 @@ recipe:
     # -DSAMPLE_MAP=n: navit would otherwise fetch an OSM sample map mid-build
     build_cmd: cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" -DSAMPLE_MAP=n && cmake --build build -j"$(nproc)" && cmake --install build
     artifacts: [dist:.]
+  config:
+    set: []                # xpath rows pinned at live E2E (vehicle/gpsd source, against the seeded overlay)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

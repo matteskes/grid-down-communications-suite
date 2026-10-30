@@ -16,5 +16,11 @@ recipe:
       arm64: https://github.com/la5nta/pat/releases/download/v1.0.0/pat_1.0.0_linux_arm64.tar.gz
       arm64_sha256: a3c65dadc1f9054f47842b1214059d7d4bb928ce14ec7c99337e1c605ad73f75
     format: tar.gz
+  config:
+    set:                     # keys the pat-conf adapter may write (§6.2, M7)
+      - {key: mycall, value: "{callsign}"}
+      - {key: locator, value: "{grid}"}
+      - {key: ardop.addr, value: "127.0.0.1:8100"}   # pat -> ardopcf control port
+    # httpd/telnet listeners + rig (rigctld 127.0.0.1:4532, §6.4) pinned at live E2E
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

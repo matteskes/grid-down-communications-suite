@@ -20,5 +20,7 @@ recipe:
     build_deps: [gcc-c++, make, qt5-qtbase-devel, qt5-qtserialport-devel, qt5-qtmultimedia-devel]
     build_cmd: qmake-qt5 QtTermTCP.pro "QMAKE_CFLAGS += -std=gnu17" "QMAKE_CXXFLAGS += -std=gnu17" && make -j"$(nproc)"
     artifacts: [QtTermTCP:.]
+  config:
+    set: []                # writable keys pinned at live E2E (§6.2 discipline, like wine.ini_set)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

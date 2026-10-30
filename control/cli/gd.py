@@ -532,10 +532,14 @@ def cmd_config(args) -> int:
             return 0
         tail = "" if info["exists"] else "  (not created yet)"
         print(f"{info['app']}: {info['path']}{tail}")
-        for sec, keys in info["sections"].items():
+        for sec, keys in (info.get("sections") or {}).items():
             print(f"[{sec}]")
             for k, v in keys.items():
                 print(f"{k}={v}")
+        if info.get("values"):
+            print(json.dumps(info["values"], indent=2, ensure_ascii=False))
+        for line in info.get("args") or []:
+            print(line)
         print(f"registration: {info['registration']}")
         return 0
     out = adapter.apply(profile.load_profile(), dry_run=args.dry_run)

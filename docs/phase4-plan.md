@@ -56,11 +56,27 @@ container round-trip with one app per strategy (`--no-pack`).
 **Gate:** full-strategy kit build, zero `PIN-ME`, complete `manifest.sha256`.
 (The 3×`P4: PASS` E2E discipline starts at M10, not here.)
 
-## M7 — Registry-driven adapters
+## M7 — Registry-driven adapters ✅ (2026-10-29)
 Adapter framework following the `control/core/adapters/vara.py` pattern:
 ardop-cfg, pat-conf, qttermtcp-cfg, paracon-cfg, sdrpp-conf, gridtracker-conf,
 yaac-prefs, meshtasticd-yaml, chattervox-json, xygrib-conf, navit-xml,
 artemis-paths. Registry `state: stub → active` per app as its adapter lands.
+
+Done: all twelve adapters land with paths pinned from each app's own
+source/artifact shipped in the kit (evidence in the per-module docstrings —
+e.g. sdrpp `core.cpp` `root + "/config.json"` → `<dist>/config.json`,
+qttermtcp `GetConfPath()` exe-adjacent INI, paracon `Config('paracon')`
+cwd-first `.cfg`, artemis `AresValley/Artemis` prefs dir, meshtasticd's
+`config.d` drop-in override, ardopcf = launch-args file only). Shared
+machinery in `adapters/native.py` (JsonDoc/PropsDoc/YamlDoc +
+NativeConfigAdapter); VARA's `_expand` generalized to `base.expand_tokens`
+(behavior unchanged). Recipes grew top-level `config:` blocks (schema in
+`install/recipes/README.md`); rows shipped where the format is
+offline-verifiable (pat mycall/locator/ardop.addr, paracon Setup/Unproto,
+meshtasticd Lora.Module), `[]` + E2E-pin notes elsewhere. `gd config show`
+prints INI sections, JSON/YAML values, or the args list; `apply` output is
+format-agnostic. 29 new tests (`tests/test_adapters_native.py`); full suite
+230 green; black/ruff/isort clean. M10 owns the live E2E key pins.
 
 ## M8 — Services
 js8spotter localhost service (`php -S 127.0.0.1:8091` — php-cli verified

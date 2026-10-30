@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: paracon
 name: Paracon
 category: packet
@@ -14,5 +14,5 @@ launch:
   cmd: "/opt/grid-down/paracon/paracon"
 config:
   adapter: paracon-cfg
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "/opt/grid-down/paracon/paracon.cfg"  # launcher cwd (config.py find_user_config)
+state: active  # M7: config adapter implemented (key pins at E2E)

@@ -13,5 +13,7 @@ recipe:
     arch: any
     version: 0.7.0
     format: npm
+  config:
+    set: []                # writable keys pinned at live E2E (§6.2 discipline, like wine.ini_set)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

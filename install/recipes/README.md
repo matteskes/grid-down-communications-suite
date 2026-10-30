@@ -15,3 +15,35 @@ Rules:
   `PIN-ME` fields are resolved (Doctor flags them at kit build). `wine` recipes carry
   `wine.license: user-supplied` instead (G6). Inventory: `docs/audit/third-party-licenses.md`.
 - Recipe strategy must match the registry entry's `install.strategy` (enforced by tests).
+
+## Config blocks (P4 M7, spec §6.2)
+
+Native apps' adapters write ONLY the keys their recipe declares, under a
+top-level `config:` block — the VARA `wine.ini_set:` precedent generalized:
+
+```yaml
+recipe:
+  config:
+    set:                                  # structured formats (JSON/YAML): dotted keys
+      - {key: mycall, value: "{callsign}"}
+    # INI-family apps (qttermtcp, xygrib, paracon, artemis) use {section, key, value}
+    # osm-navit uses {xpath, attribute, value} rows (relative xpaths, seeded overlay)
+    # ardop manages config.args instead (a list of launch arguments — ardopcf has
+    # no config file; the managed service consumes <state>/app-args/ardop.args)
+```
+
+- `value` may template `{callsign}` and `{grid}` from the station profile;
+  unknown tokens and empty profile fields refuse with the exact fix.
+- `[]` rows are deliberate: the mechanism + path are pinned from each app's
+  own source/artifact at M7; exact key names are pinned at the live E2E
+  (same discipline as VARA's `wine.ini_set`).
+- `config.file:` (artemis) overrides which file in the prefs dir the
+  adapter manages. Adapter paths live in `control/core/adapters/*.py`
+  docstrings (with the upstream evidence) and in each registry entry's
+  `native_path`.
+- Adapter reads mask any credential-shaped key (reg/password/passwd/key/
+  token/secret/passcode, case-insensitive) as `***` — presence is surfaced,
+  never contents (G6).
+- Every write is preceded by a timestamped backup under
+  `<state>/config-backups/<app>/` and lands atomically (tmpfile +
+  `os.replace`); re-applying an in-sync config writes nothing.

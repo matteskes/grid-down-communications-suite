@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: xygrib
 name: XYGrib
 category: map_weather
@@ -14,5 +14,5 @@ launch:
   cmd: "/opt/grid-down/xygrib/xyGrib"
 config:
   adapter: xygrib-conf
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "~/.config/openGribs/XyGrib.conf"  # QSettings(org=openGribs, app=XyGrib)
+state: active  # M7: config adapter implemented (key pins at E2E)

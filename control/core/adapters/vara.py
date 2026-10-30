@@ -19,13 +19,9 @@ the exact key names are pinned at the live E2E.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
-from .base import BaseAdapter, ConfigError, IniFile
-
-_TOKEN_RE = re.compile(r"\{([a-z_]+)\}")
-_ALLOWED_TOKENS = ("callsign", "grid")
+from .base import BaseAdapter, ConfigError, IniFile, expand_tokens
 
 
 def winehub_recipe(app_id: str, recipes_dir):
@@ -142,24 +138,4 @@ class VaraIniAdapter(BaseAdapter):
 
     def _expand(self, value, station: dict, row: dict) -> str:
         """INI values are strings; {callsign}/{grid} come from the station profile."""
-
-        text = "" if value is None else str(value)
-
-        def sub(match: re.Match) -> str:
-            token = match.group(1)
-            if token not in _ALLOWED_TOKENS:
-                allowed = ", ".join(f"{{{t}}}" for t in _ALLOWED_TOKENS)
-                raise ConfigError(
-                    f"{self.app_id}: wine.ini_set value {text!r} uses unknown template "
-                    f"{{{token}}} — allowed: {allowed} (row: {row!r})"
-                )
-            got = str(station.get(token) or "").strip()
-            if not got:
-                raise ConfigError(
-                    f"{self.app_id}: wine.ini_set needs {{{token}}} but the station "
-                    f"profile's {token} is empty — set it first (spec §4, "
-                    "profiles/<id>.yaml, `gd profile show`)"
-                )
-            return got
-
-        return _TOKEN_RE.sub(sub, text)
+        return expand_tokens(self.app_id, value, station, "wine.ini_set", row)

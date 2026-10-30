@@ -14,5 +14,7 @@ recipe:
     arch: x86_64
     version: 4.2.0
     format: rpm
+  config:
+    set: []                # writable keys pinned at live E2E (§6.2 discipline, like wine.ini_set)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: qttermtcp
 name: QtTermTCP
 category: packet
@@ -14,5 +14,5 @@ launch:
   cmd: "/opt/grid-down/qttermtcp/QtTermTCP"
 config:
   adapter: qttermtcp-cfg
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "/opt/grid-down/qttermtcp/QtTermTCP.ini"  # exe-adjacent (GetConfPath)
+state: active  # M7: config adapter implemented (key pins at E2E)

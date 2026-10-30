@@ -25,6 +25,8 @@ recipe:
     # F45's openjpeg-devel keeps openjpeg.h in a versioned subdir; pass it + the lib.
     build_cmd: cmake -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DOPENJPEG_INCLUDE_DIR=/usr/include/openjpeg-2.5 -DOPENJPEG_LIBRARY=/usr/lib64/libopenjp2.so -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PWD/dist" && cmake --build build -j"$(nproc)" && cmake --install build
     artifacts: [dist:.]
+  config:
+    set: []                # writable keys pinned at live E2E (§6.2 discipline, like wine.ini_set)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 
 

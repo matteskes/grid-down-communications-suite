@@ -20,6 +20,7 @@ import configparser
 import difflib
 import io
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,6 +32,52 @@ except ImportError:  # pragma: no cover - sibling import inside control/core/
 
 class ConfigError(RuntimeError):
     """Refusal with operator-facing text (same contract as WinehubError)."""
+
+
+# §6.2 value templating: {callsign}/{grid} from the station profile, shared by
+# the VARA (wine.ini_set) and native (config.set / config.args) adapters.
+_TOKEN_RE = re.compile(r"\{([a-z_]+)\}")
+_ALLOWED_TOKENS = ("callsign", "grid")
+
+# §6.2 masking rule, generalized from VARA's registration check (M7): any
+# value whose KEY contains one of these (case-insensitive) is reported as
+# "***" — the suite surfaces that a credential is present, never its contents.
+SECRET_KEY_PARTS = ("reg", "password", "passwd", "key", "token", "secret", "passcode")
+
+
+def is_secret_key(name: str) -> bool:
+    """True when a config key's *name* looks like a credential (§6.2)."""
+    low = str(name).lower()
+    return any(part in low for part in SECRET_KEY_PARTS)
+
+
+def expand_tokens(app_id: str, value, station: dict, what: str, row) -> str:
+    """Substitute ``{callsign}``/``{grid}`` from the station profile.
+
+    ``what`` names the recipe block in refusals (``wine.ini_set`` for VARA,
+    ``config.set``/``config.args`` for native apps). Same contract everywhere:
+    unknown tokens and empty profile fields refuse with the exact fix.
+    """
+    text = "" if value is None else str(value)
+
+    def sub(match: re.Match) -> str:
+        token = match.group(1)
+        if token not in _ALLOWED_TOKENS:
+            allowed = ", ".join(f"{{{t}}}" for t in _ALLOWED_TOKENS)
+            raise ConfigError(
+                f"{app_id}: {what} value {text!r} uses unknown template "
+                f"{{{token}}} — allowed: {allowed} (row: {row!r})"
+            )
+        got = str(station.get(token) or "").strip()
+        if not got:
+            raise ConfigError(
+                f"{app_id}: {what} needs {{{token}}} but the station "
+                f"profile's {token} is empty — set it first (spec §4, "
+                "profiles/<id>.yaml, `gd profile show`)"
+            )
+        return got
+
+    return _TOKEN_RE.sub(sub, text)
 
 
 def _new_parser() -> configparser.ConfigParser:

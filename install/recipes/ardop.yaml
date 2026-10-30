@@ -22,5 +22,7 @@ recipe:
     # the gcc this release was built with — keep them warnings.
     build_cmd: make -j"$(nproc)" CFLAGS="-g -MMD -std=gnu17 -Wno-error=int-conversion -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types"
     artifacts: [ardopcf:.]
+  config:
+    args: []               # launch args (TCP port + ALSA capture/playback) pinned at live E2E (§6.4 audio presets)
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

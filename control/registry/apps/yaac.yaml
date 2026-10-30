@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: yaac
 name: YAAC
 category: aprs
@@ -14,5 +14,5 @@ launch:
   cmd: "java -jar /opt/grid-down/yaac/YAAC.jar"
 config:
   adapter: yaac-prefs
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "~/.yaac/yaac.properties"  # java.util.Properties (M7)
+state: active  # M7: config adapter implemented (key pins at E2E)

@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: meshtasticd
 name: Meshtastic daemon
 category: mesh
@@ -14,5 +14,5 @@ launch:
   cmd: "meshtasticd"
 config:
   adapter: meshtasticd-yaml
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "/etc/meshtasticd/config.d/99-grid-down.yaml"  # suite-owned drop-in; config.yaml never touched
+state: active  # M7: config adapter implemented (key pins at E2E)

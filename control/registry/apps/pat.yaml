@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: pat
 name: Pat (Winlink client)
 category: winlink
@@ -14,5 +14,5 @@ launch:
   cmd: "pat"
 config:
   adapter: pat-conf
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "~/.config/pat/config.json"  # XDG_CONFIG_HOME honored (M7)
+state: active  # M7: config adapter implemented (key pins at E2E)

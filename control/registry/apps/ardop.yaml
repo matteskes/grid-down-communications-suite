@@ -1,4 +1,4 @@
-# Grid Down app registry entry (Phase 0 stub; schema: docs/SPECIFICATION.md §6.1)
+# Grid Down app registry entry (schema: docs/SPECIFICATION.md §6.1)
 id: ardop
 name: ARDOP TNC
 category: winlink
@@ -14,5 +14,5 @@ launch:
   cmd: "ardopc 8515 <capture> <playback>"
 config:
   adapter: ardop-cfg
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  native_path: "<state>/app-args/ardop.args"  # launch args — ardopcf has no config file (M7/M8)
+state: active  # M7: config adapter implemented (key pins at E2E)

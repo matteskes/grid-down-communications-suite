@@ -15,5 +15,10 @@ recipe:
     build_deps: [python3, python3-pip, make]
     build_cmd: sed -i 's/python /python3 /g' build_zipapp.sh && bash build_zipapp.sh
     artifacts: [paracon_*.pyz:paracon]
+  config:
+    set:                     # rows the paracon-cfg adapter may write (§6.2, M7)
+      - {section: Setup, key: callsign, value: "{callsign}"}
+      - {section: Unproto, key: source, value: "{callsign}"}
+    # Unproto destination/via are session-specific — pinned at live E2E if wanted
   postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
 

@@ -17,5 +17,7 @@ recipe:
     arch: any
     version: 1.0beta230
     format: zip
+  config:
+    set: []                # writable keys pinned at live E2E (key names are per-port/dynamic)
   postinst: []           # java runtime pinned in the dnf set (audit: java-latest-openjdk-headless)
 
