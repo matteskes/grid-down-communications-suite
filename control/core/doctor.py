@@ -12,9 +12,13 @@ PipeWire tooling, §6.6 loopback port occupancy, supervisor state hygiene
 switch report. M4 adds the systemd user-unit check (§6.5): unit-set drift
 vs a fresh render, and — with a user bus reachable — services outliving
 every bound target. M5 upgrades the wine check to the wine hub (§6.4):
-prefix + wine binary + COM mapping report via core/winehub. Deferred: kit
-manifest verification, deep PipeWire graph audit, Meshtastic VID:PID probe,
-per-app phone-home scan.
+prefix + wine binary + COM mapping report via core/winehub. M9 (§6.11)
+adds the mesh checks: handset VID:PID-family sweep (cp210x/ch341,
+injectable globs), node payload sanity (incl. the daemon/handset
+conflict), and the MQTT air-gap scan of the meshtasticd config files
+(device-side MQTT unscannable — stated limitation). Deferred: kit
+manifest verification, deep PipeWire graph audit, per-app phone-home
+scan beyond the meshtasticd MQTT surface.
 """
 
 from __future__ import annotations
@@ -22,11 +26,14 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import shutil
 import socket
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+import yaml
 
 try:  # package import (gd CLI, pytest)
     from . import audio, registry
@@ -51,10 +58,20 @@ USB_SERIAL_GLOBS = (
 # Wine prefix lives in core/winehub.py (single source, M5) — doctor and the
 # install-state probe both read it from there.
 
+# M9 mesh checks: the VID:PID-family sweep globs USB serial devices (by-id
+# names carry the cp210x/ch341 chip families) and the MQTT scan reads the
+# meshtasticd config files read-only (upstream config.yaml is never touched).
+# Both constants are monkeypatched by tests — a bench/VM host has neither the
+# handset nor /etc/meshtasticd.
+MESH_USB_GLOBS = USB_SERIAL_GLOBS + ("/dev/serial/by-id/*",)
+MESHTASTICD_CONFIG_FILES = (
+    Path("/etc/meshtasticd/config.yaml"),  # upstream-managed default (read-only here)
+    Path("/etc/meshtasticd/config.d/99-grid-down.yaml"),  # suite-owned drop-in
+)
+
 DEFERRED = (
     "kit manifest sha256 verification (needs kit/ from a build)",
-    "Meshtastic USB VID:PID probe (cp210x/ch341)",
-    "phone-home scan of running apps when air-gapped",
+    "per-app phone-home scan beyond the meshtasticd MQTT surface (M9)",
 )
 
 
@@ -291,7 +308,7 @@ def _check_profile(profile_data: dict | None) -> list[CheckResult]:
                 "air-gap master switch",
                 "ok",
                 "internet.present=false — suite stays fully offline (G2); "
-                "per-app phone-home scan lands with adapters",
+                "meshtastic MQTT is scanned below (mesh-mqtt)",
             )
         )
     else:
@@ -304,6 +321,186 @@ def _check_profile(profile_data: dict | None) -> list[CheckResult]:
             )
         )
     return out
+
+
+def _mesh_section(profile_data: dict | None) -> tuple[dict, dict, dict]:
+    mesh = (profile_data or {}).get("mesh") or {}
+    return mesh.get("device") or {}, mesh.get("node") or {}, mesh.get("daemon") or {}
+
+
+def _check_mesh_handset(profile_data: dict | None) -> CheckResult:
+    """M9 (§6.11): the USB handset path — profile sanity + presence via the
+    VID:PID chip-family sweep (cp210x / ch341 shape the by-id device names)."""
+    cid, title = "mesh-handset", "mesh handset (cp210x/ch341)"
+    if profile_data is None:
+        return CheckResult(cid, title, "skip", "no profile loaded")
+    dev, _node, daemon = _mesh_section(profile_data)
+    if daemon.get("enabled"):
+        return CheckResult(
+            cid,
+            title,
+            "skip",
+            "mesh.daemon.enabled=true — meshtasticd owns the radio (LoRa HAT); "
+            "handset probe not applicable",
+        )
+    dtype = str(dev.get("type") or "").strip().lower()
+    if not dtype:
+        return CheckResult(
+            cid, title, "skip", "mesh.device.type unset — configure the handset (`gd profile mesh`)"
+        )
+    if dtype == "tcp":
+        host = str(dev.get("host") or "").strip()
+        if not host:
+            return CheckResult(
+                cid,
+                title,
+                "warn",
+                "mesh.device.type is tcp but mesh.device.host is empty — set it in the profile",
+            )
+        return CheckResult(cid, title, "ok", f"tcp node {host} — handset probe not applicable")
+    if dtype == "ble":
+        return CheckResult(
+            cid,
+            title,
+            "ok",
+            "ble node — the meshtastic CLI discovers the handset; keep it powered and paired",
+        )
+    if dtype != "serial":
+        return CheckResult(
+            cid,
+            title,
+            "warn",
+            f"mesh.device.type {dtype!r} is not serial|tcp|ble — fix the profile (spec §4)",
+        )
+    path = str(dev.get("path") or "").strip()
+    if not path:
+        return CheckResult(
+            cid,
+            title,
+            "warn",
+            "mesh.device.type is serial but mesh.device.path is empty — set it "
+            "(e.g. /dev/ttyUSB1 — `ls /dev/serial/by-id/`)",
+        )
+    hits = sorted({p for pat in MESH_USB_GLOBS for p in glob.glob(pat)})
+    family = [p for p in hits if re.search(r"cp210|ch341", p, re.I)]
+    if path in hits:
+        detail = f"{path} present"
+        if family:
+            detail += " — cp210x/ch341 handset detected: " + ", ".join(family[:3])
+        return CheckResult(cid, title, "ok", detail)
+    if family:
+        return CheckResult(
+            cid,
+            title,
+            "warn",
+            f"{path} not present, but a cp210x/ch341 handset is on: {family[0]} — "
+            "point mesh.device.path at it (`ls /dev/serial/by-id/`)",
+        )
+    return CheckResult(
+        cid,
+        title,
+        "warn",
+        f"{path} not present — attach the handset (cp210x 10c4:ea60 / ch341 1a86:7523)",
+    )
+
+
+def _check_mesh_node(profile_data: dict | None) -> CheckResult:
+    """M9: the payload the meshtastic-cli adapter would push — set vs empty,
+    and the one conflict §6.11 forbids (daemon + handset identity at once).
+    channel_url can carry the PSK: the summary reports it set, never its value."""
+    cid, title = "mesh-node", "mesh node payload (profile)"
+    if profile_data is None:
+        return CheckResult(cid, title, "skip", "no profile loaded")
+    _dev, node, daemon = _mesh_section(profile_data)
+    if daemon.get("enabled") and any(str(v or "").strip() for v in node.values()):
+        return CheckResult(
+            cid,
+            title,
+            "warn",
+            "mesh.daemon.enabled=true (HAT) and handset node identity are both set — pick one "
+            "radio path: clear mesh.node for the HAT, or mesh.daemon.enabled for the handset",
+        )
+    summary = ", ".join(
+        f"{k}={v}" for k, v in node.items() if str(v or "").strip() and k != "channel_url"
+    )
+    if str(node.get("channel_url") or "").strip():
+        summary += (", " if summary else "") + "channel_url set (PSK masked)"
+    if not summary:
+        return CheckResult(
+            cid,
+            title,
+            "skip",
+            "mesh.node empty — nothing to push (`gd profile mesh` / GUI Mesh tab)",
+        )
+    return CheckResult(cid, title, "ok", summary)
+
+
+def _check_mesh_mqtt(profile_data: dict | None) -> CheckResult:
+    """M9: the only meshtasticd-side phone-home is MQTT (§6.11). MQTT on the
+    handset itself is device-side and not file-scannable here — stated limitation."""
+    cid, title = "mesh-mqtt", "mesh MQTT uplink (air-gap scan)"
+    if (profile_data or {}).get("internet", {}).get("present") is not False:
+        return CheckResult(
+            cid,
+            title,
+            "skip",
+            "internet.present is not false — the scan applies to air-gapped stations",
+        )
+    present, hits, unreadable = False, [], []
+    for path in MESHTASTICD_CONFIG_FILES:
+        if not path.is_file():
+            continue
+        present = True
+        try:
+            data = yaml.safe_load(path.read_text()) or {}
+        except OSError, yaml.YAMLError:
+            unreadable.append(str(path))
+            continue
+        stack = [("", data)]
+        while stack:
+            prefix, obj = stack.pop()
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    stack.append((f"{prefix}.{k}" if prefix else str(k), v))
+            elif "mqtt" in prefix.lower() and obj:
+                hits.append(f"{prefix}={obj} ({path})")
+    if hits:
+        return CheckResult(
+            cid,
+            title,
+            "warn",
+            "MQTT uplink configured while air-gapped — disable it (spec §6.11): "
+            + "; ".join(hits[:4]),
+        )
+    if unreadable:
+        return CheckResult(
+            cid,
+            title,
+            "warn",
+            "meshtasticd config present but unreadable: " + ", ".join(unreadable),
+        )
+    if not present:
+        return CheckResult(
+            cid,
+            title,
+            "skip",
+            "no meshtasticd config on disk — daemon not installed, no MQTT surface",
+        )
+    return CheckResult(
+        cid,
+        title,
+        "ok",
+        "no MQTT uplink configured in: " + ", ".join(str(p) for p in MESHTASTICD_CONFIG_FILES),
+    )
+
+
+def _check_mesh(profile_data: dict | None) -> list[CheckResult]:
+    """M9 (§6.11): handset presence, node payload sanity, MQTT air-gap scan."""
+    return [
+        _check_mesh_handset(profile_data),
+        _check_mesh_node(profile_data),
+        _check_mesh_mqtt(profile_data),
+    ]
 
 
 def _check_wine() -> CheckResult:
@@ -431,6 +628,7 @@ def run_checks(
     results.append(_check_systemd_units(state_dir, profile_data))
     results += _check_profile(profile_data)
     results.append(_check_rig_model(profile_data))
+    results += _check_mesh(profile_data)
     results.append(_check_wine())
     results.append(_check_deferred())
     return results

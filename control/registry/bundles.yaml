@@ -26,5 +26,5 @@ bundles:
     description: "SDR monitoring & signal identification"
     members: [sdrpp, dump1090, artemis]
   mesh:
-    description: "LoRa/Meshtastic mesh management (spec §6.11)"
-    members: [meshtastic, meshtasticd, meshtastic-web]
+    description: "LoRa/Meshtastic mesh (spec §6.11) — meshtasticd stays explicit (HAT: `gd start meshtasticd`)"
+    members: [meshtastic, meshtastic-web]

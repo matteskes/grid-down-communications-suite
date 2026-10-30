@@ -14,5 +14,7 @@ launch:
   cmd: "meshtastic"
 config:
   adapter: meshtastic-cli
-  native_path: TBD   # pin exact native config path per station (Phase 3/4)
-state: stub
+  # No on-disk config: the profile's mesh: block is pushed to the node via
+  # `meshtastic configure` (adapters/meshtastic_cli.py, M9).
+  native_path: "device-side — payload applied via `meshtastic configure` from the profile mesh: block"
+state: active  # M9: device adapter implemented (payload/flag pins at live E2E, M10)

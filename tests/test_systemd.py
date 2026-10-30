@@ -578,7 +578,7 @@ def _doctor_units_result(sd, monkeypatch):
 
 def test_doctor_units_check_skip_and_count(sd, monkeypatch):
     results, unit_check = _doctor_units_result(sd, monkeypatch)
-    assert len(results) == 18  # 17 checks before M4b
+    assert len(results) == 21  # 18 checks before M9 (three mesh checks added)
     assert unit_check.status == "skip"
     assert "gd units install" in unit_check.detail
 

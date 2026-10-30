@@ -80,6 +80,140 @@ def test_text_and_json_rendering(tmp_path):
     assert all(set(c) == {"id", "title", "status", "detail"} for c in payload["checks"])
 
 
+# -- mesh checks (M9, spec §6.11) ----------------------------------------------
+
+
+def test_mesh_checks_skipped_on_unconfigured_profile(tmp_path):
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={})
+    for cid in ("mesh-handset", "mesh-node", "mesh-mqtt"):
+        check = next(r for r in results if r.id == cid)
+        assert check.status == "skip", (cid, check.detail)
+    assert doctor.all_ok(results)
+
+
+def test_deferred_list_narrowed_after_m9():
+    assert all("VID:PID" not in d for d in doctor.DEFERRED)
+    assert any("MQTT" in d for d in doctor.DEFERRED)
+
+
+def _mesh_profile(dev: dict, node: dict | None = None, daemon: dict | None = None) -> dict:
+    return {
+        "profile": {"id": "d", "callsign": "W1AW", "grid": "FN31"},
+        "mesh": {
+            "device": dev,
+            "node": node or {},
+            "daemon": daemon if daemon is not None else {"enabled": False},
+        },
+    }
+
+
+def _check(run_results, cid):
+    return next(r for r in run_results if r.id == cid)
+
+
+def test_mesh_handset_present_missing_and_mispointed(tmp_path, monkeypatch):
+    byid = tmp_path / "by-id"
+    byid.mkdir()
+    handset = byid / "usb-Silicon_Labs_CP2102N_if00-port0"
+    handset.write_text("")
+    monkeypatch.setattr(doctor, "MESH_USB_GLOBS", (str(byid / "*"),))
+    prof = _mesh_profile({"type": "serial", "path": str(handset), "host": None})
+
+    ok = _check(doctor.run_checks(state_dir=tmp_path, profile_data=prof), "mesh-handset")
+    assert ok.status == "ok"
+    assert "present" in ok.detail and "handset detected" in ok.detail
+
+    prof["mesh"]["device"]["path"] = "/dev/ttyUSB9"  # profile points elsewhere
+    warn = _check(doctor.run_checks(state_dir=tmp_path, profile_data=prof), "mesh-handset")
+    assert warn.status == "warn"
+    assert "point mesh.device.path at it" in warn.detail and "CP2102N" in warn.detail
+
+    monkeypatch.setattr(doctor, "MESH_USB_GLOBS", (str(tmp_path / "nothing*"),))
+    warn2 = _check(doctor.run_checks(state_dir=tmp_path, profile_data=prof), "mesh-handset")
+    assert warn2.status == "warn"
+    assert "attach the handset" in warn2.detail and "10c4:ea60" in warn2.detail
+
+
+def test_mesh_handset_tcp_ble_and_daemon(tmp_path):
+    tcp = doctor._check_mesh_handset(
+        _mesh_profile({"type": "tcp", "path": None, "host": "meshtastic.lan:4403"})
+    )
+    assert tcp.status == "ok" and "tcp node" in tcp.detail
+    tcp_bad = doctor._check_mesh_handset(_mesh_profile({"type": "tcp", "path": None, "host": None}))
+    assert tcp_bad.status == "warn" and "host is empty" in tcp_bad.detail
+    ble = doctor._check_mesh_handset(_mesh_profile({"type": "ble", "path": None, "host": None}))
+    assert ble.status == "ok" and "discovers" in ble.detail
+    bad = doctor._check_mesh_handset(_mesh_profile({"type": "smoke", "path": "", "host": None}))
+    assert bad.status == "warn" and "not serial|tcp|ble" in bad.detail
+    daemon = doctor._check_mesh_handset(
+        _mesh_profile(
+            {"type": "serial", "path": "/dev/ttyUSB1", "host": None}, daemon={"enabled": True}
+        )
+    )
+    assert daemon.status == "skip" and "meshtasticd owns the radio" in daemon.detail
+
+
+def test_mesh_node_summary_conflict_and_masking(tmp_path):
+    node = {
+        "long_name": "Hilltop",
+        "short_name": "HILL",
+        "region": "US",
+        "channel_url": "https://meshtastic.org/e/#PSK",
+    }
+    ok = _check(
+        doctor.run_checks(
+            state_dir=tmp_path,
+            profile_data=_mesh_profile({"type": "ble", "path": None, "host": None}, node),
+        ),
+        "mesh-node",
+    )
+    assert ok.status == "ok"
+    assert "long_name=Hilltop" in ok.detail and "region=US" in ok.detail
+    assert "channel_url set (PSK masked)" in ok.detail
+    assert "#PSK" not in ok.detail, "channel URL must not surface in doctor output"
+
+    conflict = _check(
+        doctor.run_checks(
+            state_dir=tmp_path,
+            profile_data=_mesh_profile(
+                {"type": "serial", "path": "/dev/ttyUSB1", "host": None}, node, {"enabled": True}
+            ),
+        ),
+        "mesh-node",
+    )
+    assert conflict.status == "warn" and "pick one" in conflict.detail
+
+
+def test_mesh_mqtt_air_gap_scan(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.yaml"
+    monkeypatch.setattr(doctor, "MESHTASTICD_CONFIG_FILES", (cfg,))
+
+    def run(prof):
+        return _check(doctor.run_checks(state_dir=tmp_path, profile_data=prof), "mesh-mqtt")
+
+    airgapped = {"internet": {"present": False}, "profile": {"callsign": "W1AW", "grid": "FN31"}}
+
+    # daemon not installed → skip (no MQTT surface on the station)
+    assert run(airgapped).status == "skip"
+    assert "not installed" in run(airgapped).detail
+
+    # MQTT enabled while air-gapped → warn, naming the key and file
+    cfg.write_text("mqtt:\n  enabled: true\n  address: mqtt.example.com\n")
+    warn = run(airgapped)
+    assert warn.status == "warn"
+    assert "mqtt.enabled=True" in warn.detail and str(cfg) in warn.detail
+
+    # MQTT disabled → ok
+    cfg.write_text("mqtt:\n  enabled: false\n")
+    ok = run(airgapped)
+    assert ok.status == "ok" and "no MQTT uplink" in ok.detail
+
+    # not air-gapped → the scan does not apply
+    online = {"internet": {"present": True}, "profile": {"callsign": "W1AW", "grid": "FN31"}}
+    skip = run(online)
+    assert skip.status == "skip" and "not false" in skip.detail
+
+
 # ------------------------------------------------------- M2: rig + audio checks
 def test_rig_model_check(tmp_path):
     results = doctor.run_checks(state_dir=tmp_path, profile_data={})

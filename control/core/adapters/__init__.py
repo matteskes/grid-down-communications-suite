@@ -49,6 +49,7 @@ from .json_conf import (
     PatConfAdapter,
     SdrppConfAdapter,
 )
+from .meshtastic_cli import MeshtasticCliAdapter
 from .meshtasticd_conf import MeshtasticdYamlAdapter
 from .native import (
     JsonDoc,
@@ -76,6 +77,7 @@ __all__ = [
     "IniFile",
     "JsonConfAdapter",
     "JsonDoc",
+    "MeshtasticCliAdapter",
     "MeshtasticdYamlAdapter",
     "NativeConfigAdapter",
     "NavitXmlAdapter",
@@ -108,6 +110,7 @@ ADAPTERS = {
     "sdrpp-conf": SdrppConfAdapter,  # <dist>/config.json
     "gridtracker-conf": GridtrackerConfAdapter,  # ~/.config/GridTracker2/…
     "yaac-prefs": YaacPrefsAdapter,  # ~/.yaac/yaac.properties
+    "meshtastic-cli": MeshtasticCliAdapter,  # device payload via `meshtastic configure` (M9)
     "meshtasticd-yaml": MeshtasticdYamlAdapter,  # /etc/meshtasticd/config.d drop-in
     "chattervox-json": ChattervoxConfAdapter,  # ~/.chattervox/config.json
     "xygrib-conf": XyGribConfAdapter,  # ~/.config/openGribs/XyGrib.conf

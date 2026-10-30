@@ -106,10 +106,29 @@ kept through M8 as unit-test fixture material — untracked as always, wiped by
 the next `build-kit.sh` run and before gate runs; M8 must not trigger a kit
 rebuild.
 
-## M9 — Mesh profile
+## M9 — Mesh profile ✅ (2026-10-30)
 meshtasticd ships but stays **off** by default (ride-along #3: USB handset +
 `meshtastic` CLI is the default path); mesh bundle wiring (`bundles.yaml`);
 config adapter; Doctor checks. Node firmware builds are user-side, not kit-side.
+
+Done (operator decisions a+b): `meshtasticd` is structurally out of the `mesh`
+bundle (`members: [meshtastic, meshtastic-web]`) — bundle launch can never
+raise the daemon into existence; HAT stations start it explicitly
+(`daemon.enabled` + `gd start meshtasticd`). The new `meshtastic-cli` device
+adapter (§6.2 contract, no on-disk file) renders `mesh.node` into a
+`meshtastic configure` payload (stdin) + optional `--seturl` — the channel URL
+can carry the PSK, so it shows as `***` in display/logs and travels on the real
+argv only. dry_run provably never spawns; refusals name the exact fix (CLI
+missing on PATH **and** venv, serial path absent, tcp without host, empty
+mesh.node, `daemon.enabled: true` conflict). `launch_bundle` hardened: a
+member's SupervisorError → skip-with-note (all bundles). Doctor: `mesh-handset`
+VID:PID sweep (cp210x/ch341 via injectable globs), `mesh-node` sanity + PSK
+masking, `mesh-mqtt` air-gap scan of the meshtasticd config files (device-side
+MQTT unscannable — stated limitation); DEFERRED narrowed. Registry `meshtastic`
+state stub → active. Evidence: full suite + black/ruff/isort clean; Fedora VM
+refusal-surface round (no LoRa hardware — M8 precedent): adapter refusals,
+`meshtasticd` apply refuses not-installed, `gd launch mesh` skips-with-notes,
+doctor 0 fail. Payload/flag pins → M10 live E2E (BLE target flags unverified).
 
 ## M10 — Acceptance + corrections
 E2E on the x86_64 station profile (3×PASS discipline); spec §8 wording

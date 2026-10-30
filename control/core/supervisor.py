@@ -188,17 +188,30 @@ class Supervisor:
         return {"id": app_id, "state": "running", "pid": entry["pid"], "log": entry["log"]}
 
     def launch_bundle(self, name: str) -> dict:
+        """Launch every member, skipping what cannot launch (M9 hardening).
+
+        wine-hub/cli-tool members are managed elsewhere/interactive (M2), and a
+        member whose launch cannot be resolved (unresolved cmd placeholders,
+        missing rig, stale registry id) now skips with a note instead of
+        raising mid-bundle: one broken member must not strand the rest —
+        `gd start mesh` must not lose meshtastic-web because a handset tool is
+        absent. Returns {bundle, notes[]} in member order.
+        """
         bundle = self.bundles.get(name)
         if bundle is None:
             known = ", ".join(sorted(self.bundles))
             raise SupervisorError(f"unknown bundle: {name} (known: {known})")
         notes: list[str] = []
         for app_id in bundle.get("members", []):
-            via = self.app(app_id).get("launch", {}).get("via")
-            if via in ("wine-hub", "cli-tool"):
-                notes.append(f"skip {app_id} ({via}: managed elsewhere / interactive)")
+            try:
+                via = self.app(app_id).get("launch", {}).get("via")
+                if via in ("wine-hub", "cli-tool"):
+                    notes.append(f"skip {app_id} ({via}: managed elsewhere / interactive)")
+                    continue
+                res = self.launch(app_id, bundle=name)
+            except SupervisorError as exc:
+                notes.append(f"skip {app_id} ({exc})")
                 continue
-            res = self.launch(app_id, bundle=name)
             notes.append(
                 f"{res['state']}: {app_id}" + (f" (pid {res['pid']})" if res.get("pid") else "")
             )

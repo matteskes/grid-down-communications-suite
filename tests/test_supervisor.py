@@ -69,6 +69,7 @@ BUNDLES = {
     "wb": {"members": ["hamlib", "dep"]},
     "wb2": {"members": ["hamlib", "dep2"]},
     "mixed": {"members": ["hamlib", "tool", "vara", "term"]},
+    "brk": {"members": ["bad", "term"]},  # M9: first member cannot launch
 }
 
 
@@ -138,6 +139,16 @@ def test_launch_bundle_skips_wine_and_cli(sup):
     assert sup.is_running("term") and sup.is_running("hamlib")
     assert any("tool" in n for n in out["notes"])
     assert any("vara" in n for n in out["notes"])
+
+
+def test_launch_bundle_skips_unresolved_member(sup):
+    """M9: a member that cannot launch skips with a note — the rest still start
+    (one broken member must not strand the bundle, `gd start mesh` shape)."""
+    out = sup.launch_bundle("brk")
+    assert sup.is_running("term")
+    assert any(n.startswith("skip bad (") for n in out["notes"])
+    assert any("running: term" in n for n in out["notes"])
+    assert "bad" not in sup.state["instances"]
 
 
 def test_stop_all_teardown(sup):
