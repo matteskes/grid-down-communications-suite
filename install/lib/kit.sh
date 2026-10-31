@@ -262,7 +262,12 @@ gd_postinst_wine_prefix() { # $1 = operator $2 = kit dir $3 = app id
         || gd_die "postinst[$id/wine-prefix]: cached prefix tarball missing ($ball) — rebuild the kit with wine-prefix packing (M11b)"
     gd_info "postinst[$id/wine-prefix]: unpacking cached prefix -> $dest"
     mkdir -p "$dest"
-    bsdtar -xf "$ball" -C "$dest" || gd_die "postinst[$id/wine-prefix]: prefix unpack failed"
+    # The cached ball carries a top-level "wine-prefix/" component (the builder
+    # packs the prefix dir itself) — strip it so the contents land AT $dest;
+    # a plain -C left them one level deep and the re-run guard never matched
+    # (found by tools/roundtrip-dnf.sh --with-wine, M11d).
+    bsdtar -xf "$ball" -C "$dest" --strip-components=1 \
+        || gd_die "postinst[$id/wine-prefix]: prefix unpack failed"
     if [ -n "$op" ]; then
         chown -R "$(getent passwd "$op" | cut -d: -f3):$(getent passwd "$op" | cut -d: -f4)" "$dest" \
             || gd_die "postinst[$id/wine-prefix]: prefix chown to $op failed"
