@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) landed · next: M11d ·
+**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) landed · next: M12 ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -179,11 +179,53 @@ bash ERR traps skip guarded commands (a `|| gd_die` path never prints the
 phase line; the ERROR step line is the assertion there). M11d re-asserts
 the idempotency proof inside its round-trip harness.
 
-### M11d — gate
+### M11d — gate — **LANDED** (`d40877d`, 2026-10-31)
 Container round-trip (`--network none`) with postinst assertions: unit files
 present + drift-clean vs a fresh render, udev rule placed, dialout handled,
 prefix path sane (x86_64) / loud skip (aarch64), re-run is a no-op.
 **Gate:** `ROUNDTRIP OK` incl. postinst; suite + lint green.
+
+**Shipped:**
+- `tools/roundtrip-dnf.sh` — the P1 harness grew into the P5 gate
+  ("ROUNDTRIP OK — incl. postinst"): builds the kit (`--with-wine` adds
+  varac — the M11b-proven leg), augments it with the **M11d udev probe**
+  (real rule file + direwolf `postinst.tsv` row flip + full manifest re-hash
+  — the M6c edit-re-hash discipline as a positive test; retires when a
+  recipe ships a real rule), then runs ONE air-gapped container that
+  installs with an operator (`bootstrap.sh --user`) and asserts:
+  - **A** — dialout gid via `id -nG`, probe rule placed 0644 with content
+    intact, units loud-skip lines present and UNMARKED, applied steps
+    watermarked in `state.postinst_done`, `kit_manifest_lines` ==
+    on-disk manifest rows;
+  - **W** — the shared prefix unpacks to the documented
+    `GRID_DOWN_WINE_PREFIX` path (`drive_c` + `.update-timestamp`), chowned
+    to the operator, `varac/wine-install` loud-skips naming
+    `gd winehub install varac`;
+  - **G** — a PATH-shimmed `uname -m` (aarch64) makes the prefix step DIE
+    naming x86_64 (exit ≠ 0, `state.json` byte-identical) — a die, not a
+    skip;
+  - **N** — re-run is a no-op: dnf reports installed packages, watermarks
+    skip, self-skips re-attempt, `state.json` byte-identical (python3
+    byte-compare — no cmp/diff in f45).
+- `install/lib/kit.sh` — wine-prefix fix the gate caught on its first
+  `--with-wine` run: the cached ball packs the prefix dir itself
+  (top-level `wine-prefix/` component; the builder's unpack target is
+  documented as `-C /opt/grid-down`), but `gd_postinst_wine_prefix` used
+  `-C "$dest"` — `drive_c` landed one level deep, the re-run guard never
+  matched, and every re-bootstrap re-unpacked ~1 GB. Unpack now uses
+  `--strip-components=1` so the contents land at `$dest`
+  (`GRID_DOWN_WINE_PREFIX` overrides stay correct); the guard + watermark
+  work as designed.
+
+**Bullet-vs-code corrections (M11c style):** units asserts the loud-skip
+contract only (the step needs `$GD_ROOT/control/cli/gd.py`, M12 — presence +
+drift moves to M12/M13-G5); udev is a harness probe (no shipped recipe
+declares a rule); the aarch64 prefix leg is a loud `gd_die`, asserted as
+such (not a skip).
+
+**Validation:** lean + `--with-wine` round-trips green on the final tree
+(66 s / 232 s, one run each, gd-f45-current, `--network none`); suite 269
+green; lint + pre-commit clean.
 
 ## M12 — USB kit packaging
 
