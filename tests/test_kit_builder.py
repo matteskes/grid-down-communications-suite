@@ -88,3 +88,114 @@ def test_resolver_refuses_wine_apps():
     p = run_resolver("--apps", "vara-hf")
     assert p.returncode == 2
     assert "kit-import" in p.stderr
+
+
+# --- postinst plan rows + vocabulary guards (M11a, spec §5) -------------------
+
+
+def test_resolver_emits_postinst_rows():
+    """Flipped recipes resolve into wide plan["postinst"] rows; apps without
+    steps carry no row. The builder renders kit/postinst.tsv from these."""
+    p = run_resolver("--apps", "direwolf,fldigi,hamlib")
+    assert p.returncode == 0, p.stderr
+    plan = json.loads(p.stdout)
+    rows = {r["id"]: r for r in plan["postinst"]}
+    assert set(rows) == {"direwolf", "fldigi", "hamlib"}
+    for app_id, row in rows.items():
+        assert row["units"] == "install"
+        assert row["dialout"] == "1"
+        assert row["udev"] == "" and row["prefix"] == "" and row["install"] == ""
+    # step-less selection: empty list, no rows
+    p = run_resolver("--apps", "pat")
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout)["postinst"] == []
+
+
+def test_resolver_refuses_unknown_postinst_step(tmp_path):
+    rec = yaml.safe_load((REC_DIR / "direwolf.yaml").read_text())
+    rec["recipe"]["postinst"] = ["rm -rf /"]
+    (tmp_path / "direwolf.yaml").write_text(yaml.safe_dump(rec))
+    p = subprocess.run(
+        [PY, str(RESOLVER), str(tmp_path), "--apps", "direwolf"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert p.returncode == 2
+    assert "unknown postinst step" in p.stderr
+
+
+def test_resolver_refuses_wine_step_off_wine_recipe(tmp_path):
+    rec = yaml.safe_load((REC_DIR / "direwolf.yaml").read_text())
+    rec["recipe"]["postinst"] = ["wine-prefix"]
+    (tmp_path / "direwolf.yaml").write_text(yaml.safe_dump(rec))
+    p = subprocess.run(
+        [PY, str(RESOLVER), str(tmp_path), "--apps", "direwolf"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert p.returncode == 2
+    assert "only valid on wine-strategy" in p.stderr
+
+
+def test_resolver_refuses_postinst_udev_path_outside_kit_layout(tmp_path):
+    rec = yaml.safe_load((REC_DIR / "direwolf.yaml").read_text())
+    rec["recipe"]["postinst"] = [{"udev": "../secrets/x.rules"}]
+    (tmp_path / "direwolf.yaml").write_text(yaml.safe_dump(rec))
+    p = subprocess.run(
+        [PY, str(RESOLVER), str(tmp_path), "--apps", "direwolf"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert p.returncode == 2
+    assert "udev/<name>.rules" in p.stderr
+
+
+def test_resolver_refuses_postinst_udev_rule_missing_from_repo(tmp_path):
+    """A well-shaped udev path with no file under install/udev/ fails the plan."""
+    rec_dir = tmp_path / "recipes"  # mirror the repo layout: <root>/recipes + <root>/udev
+    rec_dir.mkdir()
+    (tmp_path / "udev").mkdir()
+    rec = yaml.safe_load((REC_DIR / "direwolf.yaml").read_text())
+    rec["recipe"]["postinst"] = [{"udev": "udev/99-grid-down-meshtastic.rules"}]
+    (rec_dir / "direwolf.yaml").write_text(yaml.safe_dump(rec))
+    p = subprocess.run(
+        [PY, str(RESOLVER), str(rec_dir), "--apps", "direwolf"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert p.returncode == 2
+    assert "missing from install/udev/" in p.stderr
+
+
+def test_resolver_carries_udev_row_kit_relative(tmp_path):
+    """A present rule file resolves into a udev row whose value is the
+    KIT-relative path (install/udev/…), joinable against the kit root."""
+    rec_dir = tmp_path / "recipes"
+    rec_dir.mkdir()
+    (tmp_path / "udev").mkdir()
+    (tmp_path / "udev" / "99-grid-down-test.rules").write_text("# rule\n")
+    rec = yaml.safe_load((REC_DIR / "direwolf.yaml").read_text())
+    rec["recipe"]["postinst"] = [{"udev": "udev/99-grid-down-test.rules"}]
+    (rec_dir / "direwolf.yaml").write_text(yaml.safe_dump(rec))
+    p = subprocess.run(
+        [PY, str(RESOLVER), str(rec_dir), "--apps", "direwolf"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert p.returncode == 0, p.stderr
+    rows = json.loads(p.stdout)["postinst"]
+    assert rows == [
+        {
+            "id": "direwolf",
+            "units": "",
+            "udev": "install/udev/99-grid-down-test.rules",
+            "dialout": "",
+            "prefix": "",
+            "install": "",
+        }
+    ]

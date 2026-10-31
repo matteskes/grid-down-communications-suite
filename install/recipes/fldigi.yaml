@@ -8,4 +8,6 @@ recipe:
     repo: fedora
     packages:
       - fldigi
-  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+  postinst:             # M11a declarative steps (spec §5) — applied by gd_kit_postinst
+    - units             # render + install the grid-down-* user unit set for the operator
+    - dialout           # serial-port group membership for the operator

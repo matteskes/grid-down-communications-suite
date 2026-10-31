@@ -210,9 +210,30 @@ while IFS=$'\x1f' read -r id src serve; do
     printf '%s\t%s\t%s\n' "$id" "static/$id" "$serve" >> "$OUT/static.tsv"
 done < <(plan_rows static id src serve)
 
+# --- postinst.tsv: declarative postinst steps (M11a, spec §5) ----------------
+# The resolver validated the vocabulary (known steps, wine-* off wine only,
+# udev paths inside the kit layout); the air-gap side reads only this TSV —
+# same pattern as artifacts.tsv. Columns: id, units, udev, dialout, prefix,
+# install. Normalized here to 1 / - (udev: kit-relative path / -) so NO cell
+# is ever empty: tab-`read` collapses empty cells and would shift columns
+# (the same reason plan_rows splits the plan on \x1f). Rows only for apps
+# that declare steps.
+: > "$OUT/postinst.tsv"
+while IFS=$'\x1f' read -r id units udev dialout prefix install; do
+    [ -n "$id" ] || continue
+    [ "$units" = "install" ] && units=1 || units=-
+    [ -n "$udev" ] || udev=-
+    [ "$dialout" = "1" ] || dialout=-
+    [ "$prefix" = "1" ] || prefix=-
+    [ "$install" = "1" ] || install=-
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$id" "$units" "$udev" "$dialout" "$prefix" "$install" >> "$OUT/postinst.tsv"
+done < <(plan_rows postinst id units udev dialout prefix install)
+[ -s "$OUT/postinst.tsv" ] && log "postinst: $(wc -l < "$OUT/postinst.tsv") app row(s) of declarative steps"
+
 # --- air-gap installer snapshot + selection lists ---
 mkdir -p "$OUT/install"
 cp -r /install-src/bootstrap.sh /install-src/lib /install-src/recipes "$OUT/install/"
+[ -d /install-src/udev ] && cp -r /install-src/udev "$OUT/install/udev"   # postinst udev targets (M11a)
 plan_rows_apps() {
     GD_IN_PLAN="$PLAN" python3 -c 'import json,os; print("\n".join(json.loads(os.environ["GD_IN_PLAN"])["apps"]))'
 }

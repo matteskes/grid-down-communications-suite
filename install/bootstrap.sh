@@ -5,6 +5,7 @@
 # Spec: docs/SPECIFICATION.md §5.
 #
 #   bootstrap.sh --kit <dir>       # air-gap install from an offline kit
+#   bootstrap.sh --kit <dir> --user <name|uid>   # operator for postinst steps
 #   bootstrap.sh --kit <dir> --dry-run
 #
 # Exit codes: 0 ok · 1 verification/install failure · 2 usage
@@ -19,19 +20,22 @@ source "$GD_ROOT/install/lib/kit.sh"
 MODE=""
 KIT_DIR=""
 DRY_RUN=0
+GD_POSTINST_USER=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --online)  MODE="online" ;;
         --kit)     MODE="kit"; KIT_DIR="${2:?--kit requires a directory}"; shift ;;
+        --user)    GD_POSTINST_USER="${2:?--user requires a name or uid}"; shift ;;
         --dry-run) DRY_RUN=1 ;;
         -h|--help)
-            printf 'usage: bootstrap.sh (--online | --kit DIR) [--dry-run]\n'
+            printf 'usage: bootstrap.sh (--online | --kit DIR) [--user NAME|UID] [--dry-run]\n'
             exit 0 ;;
         *) gd_die "unknown argument: $1" ;;
     esac
     shift
 done
+export GD_POSTINST_USER
 
 [ -n "$MODE" ] || gd_die "choose --online or --kit DIR (see --help)"
 gd_is_fedora || gd_die "not a Fedora system (/etc/fedora-release missing)"
@@ -63,6 +67,7 @@ if [ "$DRY_RUN" = "1" ]; then
     [ -d "$KIT_DIR/opt" ] && echo "  build    : $(find "$KIT_DIR/opt" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') build payload(s) -> /opt/grid-down"
     [ -f "$KIT_DIR/wheels.txt" ] && echo "  wheels   : $(find "$KIT_DIR/wheels" -name '*.whl' 2>/dev/null | wc -l | tr -d ' ') wheel(s) -> pip --no-index"
     [ -f "$KIT_DIR/static.tsv" ] && echo "  static   : $(($(wc -l < "$KIT_DIR/static.tsv"))) payload slot(s) -> /opt/grid-down"
+    [ -f "$KIT_DIR/postinst.tsv" ] && echo "  postinst : $(($(wc -l < "$KIT_DIR/postinst.tsv"))) app row(s) of declarative steps -> gd_kit_postinst${GD_POSTINST_USER:+ (operator: $GD_POSTINST_USER)}"
     echo "  state    : $(gd_state_file)"
     exit 0
 fi
@@ -87,16 +92,14 @@ gd_state_set kit "$(basename "$KIT_DIR")"
 gd_state_set installed_apps "$APPS_KIT"
 gd_state_set installed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-for id in $APPS_KIT; do
-    recipe="$KIT_DIR/install/recipes/$id.yaml"
-    if ! grep -Eq '^  postinst: \[\]' "$recipe" 2>/dev/null; then
-        gd_die "$id: recipe declares postinst hooks — not supported until P2+ (fail-closed)"
-    fi
-done
-gd_info "postinst hooks: none declared (P1 scaffold OK)"
+# Declarative postinst (M11a, spec §5): payload placement already succeeded, so
+# state says what's on disk; step failures now die naming the step, with
+# postinst_done set only after every selected app's steps applied. Steps are
+# self-guarding, so fixing + re-running bootstrap resumes.
+gd_kit_postinst "$KIT_DIR"
 
 echo "install complete:"
 echo "  apps     : $APPS_KIT"
 echo "  kit      : $(basename "$KIT_DIR") ($(du -sh "$KIT_DIR" | cut -f1))"
-echo "  next     : Control Center GUI + Doctor land in P2"
+echo "  next     : gd doctor (first run) · gd units install refreshes user units"
 

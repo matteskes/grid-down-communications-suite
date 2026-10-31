@@ -47,3 +47,39 @@ recipe:
 - Every write is preceded by a timestamped backup under
   `<state>/config-backups/<app>/` and lands atomically (tmpfile +
   `os.replace`); re-applying an in-sync config writes nothing.
+
+## Postinst steps (M11a, spec §5)
+
+A recipe's `postinst:` list names declarative setup steps the bootstrap
+executor (`gd_kit_postinst`, `install/lib/kit.sh`) applies per selected app
+after payload placement — in canonical order dialout → udev → units →
+wine-prefix → wine-install:
+
+```yaml
+recipe:
+  postinst:
+    - units             # render + install the grid-down-* user unit set (operator's dirs)
+    - dialout           # operator -> dialout group (serial-port access)
+    - udev: udev/99-grid-down-<app>.rules   # file must exist under install/udev/
+    - wine-prefix       # wine-strategy only: unpack the kit's cached prefix tarball
+    - wine-install      # wine-strategy only: silent kit-import installer run (G6)
+```
+
+Rules (resolver-enforced, `install/bundle-builder/resolve-kit.py`):
+- Known steps only; bare steps are exact literals. No command strings, no
+  metacharacters — the air-gap side never interprets shell from a recipe
+  (steps travel as `kit/postinst.tsv` columns, not code).
+- `wine-*` steps are only valid on `strategy: wine` recipes. The installer
+  file, mode and flags keep living in the recipe's `wine:` block — the single
+  source the suite reads (`gd winehub install <id>`); the executor delegates.
+- `udev:` targets must match `udev/<name>.rules` and the file must exist in
+  `install/udev/` (the kit carries it; see `install/udev/README.md`).
+- Steps needing an operator identity (`--user` flag, or sudo's `SUDO_UID`)
+  skip with a loud note naming the follow-up command; real failures stop the
+  install naming the step. Every step self-guards, so re-running bootstrap
+  after a fix resumes where it stopped.
+
+M11a flips: direwolf/fldigi/hamlib declare `units` + `dialout`; the VARA
+family declares `dialout` + `wine-prefix` + `wine-install` (kit-import
+artifacts + the prefix tarball are packed from M11b). meshtasticd stays `[]`
+— the daemon is explicit-start by design (P4 M9).

@@ -9,4 +9,7 @@ recipe:
     exes: [FM.exe, VARAFM.exe]   # candidate basenames probed under <prefix>/drive_c
     ini_set: []           # config keys the vara-ini adapter may write (§6.2); pinned at live E2E
     license: user-supplied   # applied in-app by the operator; unregistered works (trial delay)
-  postinst: []           # systemd units, udev rules, adapter hooks — Phase 1+
+  postinst:             # M11a declarative steps (spec §5) — applied by gd_kit_postinst
+    - dialout           # VARA COM ports need the operator in dialout
+    - wine-prefix       # shared prefix from the kit's cached tarball (packed at M11b)
+    - wine-install      # silent kit-import installer run, in place (G6; details in wine:)

@@ -149,3 +149,146 @@ gd_kit_place_static() { # $1 = kit dir — static payloads into their dest under
         fi
     done < "$tsv"
 }
+
+# --- M11a: declarative postinst (spec §5) ------------------------------------
+# The builder pre-renders kit/postinst.tsv (id, units, udev, dialout, prefix,
+# install) from the recipes' postinst: steps — the air-gap side never parses
+# YAML. Per app, steps apply in the canonical order dialout -> udev -> units
+# -> wine-prefix -> wine-install; every step self-guards, so a re-run resumes
+# after a fix. Real failures die loudly naming the step; steps that need an
+# operator identity skip with the exact follow-up command when none is known.
+
+gd_as_user() { # gd_as_user <name-or-uid> <cmd...> — run as the operator, root-side
+    # with the operator's HOME (units render into their user dirs; wine must
+    # never run as root). runuser (util-linux) — no sudo dependency.
+    local who="$1"; shift
+    local home
+    home=$(getent passwd "$who" | cut -d: -f6)
+    [ -n "$home" ] || { gd_err "gd_as_user: no passwd entry for $who"; return 1; }
+    runuser -u "$who" -- env HOME="$home" "$@"
+}
+
+gd_postinst_operator() { # the operator: bootstrap's --user wins, then SUDO_UID
+    if [ -n "${GD_POSTINST_USER:-}" ]; then printf '%s' "$GD_POSTINST_USER"; return 0; fi
+    if [ -n "${SUDO_UID:-}" ]; then printf '%s' "$SUDO_UID"; return 0; fi
+    return 1
+}
+
+gd_postinst_dialout() { # $1 = operator ("" = none known) $2 = app id
+    local op="$1" id="$2"
+    if ! getent group dialout >/dev/null; then
+        gd_warn "postinst[$id/dialout]: dialout group missing — create it (groupadd --system dialout) and re-run bootstrap"
+        return 0
+    fi
+    if [ -z "$op" ]; then
+        gd_warn "postinst[$id/dialout]: no operator identity — skipped (re-run with --user, or as root: usermod -aG dialout <operator>)"
+        return 0
+    fi
+    if id -nG "$op" 2>/dev/null | tr ' ' '\n' | grep -qx dialout; then
+        gd_info "postinst[$id/dialout]: $op already in dialout"
+        return 0
+    fi
+    gd_info "postinst[$id/dialout]: adding $op to dialout"
+    usermod -aG dialout "$op" || gd_die "postinst[$id/dialout]: usermod failed"
+}
+
+gd_postinst_udev() { # $1 = kit dir $2 = kit-relative rule path $3 = app id
+    # split local: `$rel` in the same declaration expands from the CALLER's
+    # scope (unbound under set -u) — the M10 E2E lesson, met again here.
+    local kit="$1" rel="$2" id="$3"
+    local dest="/etc/udev/rules.d/$(basename "$rel")"
+    gd_info "postinst[$id/udev]: installing $(basename "$rel") -> $dest"
+    mkdir -p /etc/udev/rules.d
+    install -m 0644 "$kit/$rel" "$dest" || gd_die "postinst[$id/udev]: rule install failed"
+    # Best-effort reload: containers and minimal hosts may lack the daemon —
+    # rules still apply at next boot and Doctor re-checks drift.
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload 2>/dev/null \
+            || gd_warn "postinst[$id/udev]: udevadm reload unavailable — rules apply at next boot"
+    fi
+}
+
+gd_postinst_units() { # $1 = operator ("" = none known) $2 = app id — suite delegation
+    # The unit SET's content lives in the control suite (M12 packs control/
+    # into the kit); delegating keeps render byte-identical with what Doctor
+    # diffs (units_current), instead of reimplementing it in bash.
+    local op="$1" id="$2" gd="$GD_ROOT/control/cli/gd.py"
+    if [ ! -f "$gd" ]; then
+        gd_warn "postinst[$id/units]: control suite not in this kit yet (M12 packs control/) — run as the operator: gd units install"
+        return 0
+    fi
+    if [ -z "$op" ]; then
+        gd_warn "postinst[$id/units]: no operator identity — skipped (re-run with --user, or as the operator: gd units install)"
+        return 0
+    fi
+    gd_info "postinst[$id/units]: rendering + installing grid-down-* user units for $op"
+    gd_as_user "$op" python3 "$gd" units install \
+        || gd_die "postinst[$id/units]: gd units install failed (unresolved presets are named in its output)"
+}
+
+gd_postinst_wine_prefix() { # $1 = operator $2 = kit dir $3 = app id
+    local op="$1" kit="$2" id="$3"
+    [ "$(uname -m)" = "x86_64" ] \
+        || gd_die "postinst[$id/wine-prefix]: wine prefix requires x86_64 (this host: $(uname -m)) — VARA/wine is x86_64-only upstream"
+    local dest="${GRID_DOWN_WINE_PREFIX:-/opt/grid-down/wine-prefix}"
+    if [ -d "$dest/drive_c" ]; then
+        gd_info "postinst[$id/wine-prefix]: prefix already present at $dest (skip)"
+        return 0
+    fi
+    local ball="$kit/wine-prefix.tar.zst"
+    [ -f "$ball" ] \
+        || gd_die "postinst[$id/wine-prefix]: cached prefix tarball missing ($ball) — rebuild the kit with wine-prefix packing (M11b)"
+    gd_info "postinst[$id/wine-prefix]: unpacking cached prefix -> $dest"
+    mkdir -p "$dest"
+    bsdtar -xf "$ball" -C "$dest" || gd_die "postinst[$id/wine-prefix]: prefix unpack failed"
+    if [ -n "$op" ]; then
+        chown -R "$(getent passwd "$op" | cut -d: -f3):$(getent passwd "$op" | cut -d: -f4)" "$dest" \
+            || gd_die "postinst[$id/wine-prefix]: prefix chown to $op failed"
+    fi
+}
+
+gd_postinst_wine_install() { # $1 = operator $2 = app id — suite-run silent installer
+    # G6: kit-import installers, never kit-built; the installer file, mode and
+    # flags live in the recipe's wine: block, read only by the suite
+    # (gd winehub install) — the executor never parses them.
+    local op="$1" id="$2" gd="$GD_ROOT/control/cli/gd.py"
+    if [ ! -f "$gd" ]; then
+        gd_warn "postinst[$id/wine-install]: control suite not in this kit yet (M12) — run as the operator: gd winehub install $id"
+        return 0
+    fi
+    if [ -z "$op" ]; then
+        gd_warn "postinst[$id/wine-install]: no operator identity — skipped (wine never runs as root; re-run with --user)"
+        return 0
+    fi
+    gd_info "postinst[$id/wine-install]: silent kit-import installer for $id (operator: $op)"
+    gd_as_user "$op" python3 "$gd" winehub install "$id" \
+        || gd_die "postinst[$id/wine-install]: $id installer failed (see its output above)"
+}
+
+gd_kit_postinst() { # $1 = kit dir — apply every selected app's declarative steps
+    local kit="$1"
+    local tsv="$kit/postinst.tsv"
+    local id units udev dialout prefix install op=""
+    if op=$(gd_postinst_operator); then
+        gd_info "postinst: operator=$op (units/dialout/wine steps apply for them)"
+    else
+        gd_warn "postinst: no operator identity (--user or sudo) — operator steps will note their follow-up"
+    fi
+    if [ ! -f "$tsv" ]; then
+        gd_info "postinst: no steps declared by the selected apps"
+        return 0
+    fi
+    # Columns (builder-normalized, never empty — tab-read collapses empties):
+    # id, units, udev, dialout, prefix, install — 1 = step, - = absent,
+    # udev carries the kit-relative rule path when present.
+    while IFS=$'\t' read -r id units udev dialout prefix install; do
+        [ -n "$id" ] || continue
+        if [ "$dialout" = "1" ]; then gd_postinst_dialout "$op" "$id"; fi
+        if [ "$udev" != "-" ]; then gd_postinst_udev "$kit" "$udev" "$id"; fi
+        if [ "$units" = "1" ]; then gd_postinst_units "$op" "$id"; fi
+        if [ "$prefix" = "1" ]; then gd_postinst_wine_prefix "$op" "$kit" "$id"; fi
+        if [ "$install" = "1" ]; then gd_postinst_wine_install "$op" "$id"; fi
+    done < "$tsv"
+    gd_state_set postinst_done yes
+    gd_info "postinst: declarative steps applied ($(grep -c . "$tsv" 2>/dev/null || echo 0) app row(s))"
+}

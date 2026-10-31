@@ -13,11 +13,15 @@ container-build.sh as GD_IN_PLAN:
     tarball   [{id, url, sha256, dest, arch, format, version, arm64_url, arm64_sha256}]
     pip       [{id, package}]         — "name==version" when the recipe pins one
     static    [{id, src, serve}]
+    postinst  [{id, units, udev, dialout, prefix, install}] — declarative M11a steps
     pkgs_fedora / pkgs_rpmfusion   merged, de-duplicated download lists
 
 Guards (fail loudly, exit 2):
     - unknown --apps ids
     - any selected recipe still carrying PIN-ME / TBD-VERIFY-AT-PIN
+    - postinst vocabulary violations (M11a, spec §5): unknown step, wine-*
+      steps off a wine recipe, udev path outside the kit layout or a rule
+      file missing from install/udev/
     - --arch aarch64 with any non-dnf app selected — full kits are x86_64-only
       in P4 (docs/phase4-plan.md §Arch policy); dnf-only subsets keep the S4
       --forcearch path.
@@ -27,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -49,6 +54,59 @@ def _require_pinned(r: dict, path: Path) -> None:
         raise PlanError(f"{r['id']}: license still TBD-VERIFY-AT-PIN — resolve it first (M6)")
 
 
+# M11a postinst vocabulary (spec §5): what a recipe may declare, and the exact
+# shapes the air-gap executor (install/lib/kit.sh gd_kit_postinst) applies.
+# Bare steps are exact literals; `udev` carries a kit-relative rule path.
+# Nothing else is accepted — recipes are data, never shell: the air-gap side
+# has no interpreter for step contents.
+POSTINST_BARE = {"units", "dialout", "wine-prefix", "wine-install"}
+POSTINST_WINE_ONLY = {"wine-prefix", "wine-install"}
+POSTINST_UDEV_RE = re.compile(r"udev/[A-Za-z0-9][A-Za-z0-9._-]*\.rules")
+
+
+def _validate_postinst(r: dict, udev_dir: Path) -> list[str]:
+    """Validate one recipe's postinst steps (M11a, spec §5) and return the
+    normalized tokens: bare step names, or "install/udev/<name>.rules" for a
+    udev step (already kit-relative)."""
+    steps = r.get("postinst") or []
+    if not isinstance(steps, list):
+        raise PlanError(f"{r['id']}: postinst must be a list of steps")
+    out: list[str] = []
+    for step in steps:
+        if isinstance(step, str):
+            if step not in POSTINST_BARE:
+                known = ", ".join(sorted(POSTINST_BARE))
+                raise PlanError(
+                    f"{r['id']}: unknown postinst step {step!r} "
+                    f"(known steps: {known}; or a single-key udev: <path> map)"
+                )
+            name, arg = step, ""
+        elif isinstance(step, dict) and set(step) == {"udev"}:
+            arg = str(step["udev"])
+            if not POSTINST_UDEV_RE.fullmatch(arg):
+                raise PlanError(
+                    f"{r['id']}: postinst.udev must be a kit-relative "
+                    f"udev/<name>.rules path, got {arg!r}"
+                )
+            if not (udev_dir / Path(arg).name).is_file():
+                raise PlanError(
+                    f"{r['id']}: postinst.udev rule missing from install/udev/: {arg}"
+                )
+            name = "udev"
+        else:
+            raise PlanError(
+                f"{r['id']}: malformed postinst step {step!r} "
+                "(a bare step name, or a single-key {udev: <kit-relative path>} map)"
+            )
+        if name in POSTINST_WINE_ONLY and r.get("strategy") != "wine":
+            raise PlanError(f"{r['id']}: postinst.{name} is only valid on wine-strategy recipes")
+        # Recipe vocabulary is installer-relative (udev/<name>.rules under
+        # install/); the plan/TSV carry the KIT-relative path (install/udev/…)
+        # so the air-gap executor joins it against the kit root directly.
+        out.append(f"install/{arg}" if arg else name)
+    return out
+
+
 def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -> dict:
     recs: dict[str, tuple[dict, Path]] = {}
     for p in sorted(recipes.glob("*.yaml")):
@@ -69,7 +127,16 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
     if unknown:
         raise PlanError(f"unknown apps: {unknown}")
 
-    plan: dict = {"apps": [], "dnf": [], "build": [], "tarball": [], "pip": [], "static": []}
+    plan: dict = {
+        "apps": [],
+        "dnf": [],
+        "build": [],
+        "tarball": [],
+        "pip": [],
+        "static": [],
+        "postinst": [],
+    }
+    udev_dir = recipes.parent / "udev"  # kit-relative udev rule targets live here
     strategy_by_id: dict[str, str] = {}
     pkgs_fed: list[str] = []
     pkgs_rf: list[str] = []
@@ -188,6 +255,32 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
                         "packages": d["packages"],
                     }
                 )
+
+        # M11a (spec §5): validate declarative postinst steps and carry them
+        # to the plan — container-build.sh renders kit/postinst.tsv from these
+        # rows and the air-gap executor reads only the TSV (never YAML).
+        steps = _validate_postinst(r, udev_dir)
+        if steps:
+            row = {
+                "id": app_id,
+                "units": "",
+                "udev": "",
+                "dialout": "",
+                "prefix": "",
+                "install": "",
+            }
+            for step in steps:
+                if step == "units":
+                    row["units"] = "install"
+                elif step == "dialout":
+                    row["dialout"] = "1"
+                elif step == "wine-prefix":
+                    row["prefix"] = "1"
+                elif step == "wine-install":
+                    row["install"] = "1"
+                else:  # kit-relative udev rule path ("install/udev/<name>.rules")
+                    row["udev"] = step
+            plan["postinst"].append(row)
 
     non_dnf = sorted(i for i in plan["apps"] if strategy_by_id[i] != "dnf")
     if arch == "aarch64" and non_dnf:
