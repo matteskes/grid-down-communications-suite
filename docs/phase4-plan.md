@@ -1,6 +1,6 @@
 # Phase 4 implementation plan (P4)
 
-**Status:** M6 GATE PASS (2026-10-29) — 3 commits + gate ledger; M7 adapters next · **Order (spec-mandated):** recipes → adapters → services → mesh
+**Status:** P4 complete — M6–M10 closed; 3×`P4: PASS` container E2E (2026-10-30, `00a38b3`); next: P5 · **Order (spec-mandated):** recipes → adapters → services → mesh
 **Baseline:** P3b closed at `cd4e5ba` (3/3 PASS on aarch64 VM; runbook Appendix A).
 This file is P4's single source of truth — milestone scope, adopted decisions, and
 acceptance gates. Status lines are updated as milestones close.
