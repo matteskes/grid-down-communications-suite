@@ -1,0 +1,179 @@
+# Phase 5 implementation plan (P5)
+
+**Status:** P5 planning — M11–M14 open · next: M11 · **Order:** installer completion →
+USB packaging → clean-host drill → acceptance closure
+**Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
+2026-10-30; audit `docs/audit/p4-container-e2e.md`).
+This file is P5's single source of truth — milestone scope, adopted decisions, and
+acceptance gates. Status lines are updated as milestones close.
+
+Scope (spec §11): **USB kit, bootstrap hardening, drills** — acceptance:
+**full offline rebuild from USB kit on a clean host** (spec §10: automated in a
+`fedora:45` container with networking removed + human in a Fedora 45 GUI VM,
+any arch).
+
+## Drill-kit scope (adopted, 2026-10-30)
+
+The acceptance drill builds and installs the **stageable full kit**: all 41
+registry apps; the wine subset limited to what `install/kit-import/` carries
+today (VARA HF v4.9.0, FM v4.4.0, portable VarAC v16.1.8 — G6 keeps
+SAT/Chat/Term out until staged); region static slots (ZIM/OSM/GRIB) build
+empty with Doctor WARNs recorded as drill caveats. Nothing in M11–M13 blocks
+on operator input; each staged region/artifact lands later as a kit rebuild +
+drill re-run (the meshtastic-web pattern from P4).
+
+## M11 — Installer completion + postinst (bootstrap grows to spec §5)
+
+Research facts this milestone builds on:
+
+- Every recipe already declares `postinst: []` ("systemd units, udev rules,
+  adapter hooks — Phase 1+") — M11 defines the vocabulary and flips keys;
+  no schema-field work is needed.
+- `gd units install` is user-bus-bound (`core/systemd.py`: `user_unit_dir()`,
+  daemon-reload) while `bootstrap.sh` runs as root — the units postinst step
+  must install unit *files* into the operator user's dirs root-side, treating
+  `daemon-reload --user` as best-effort (Doctor reports drift, so the
+  first-login reload is safe and observable).
+- The wine-prefix cached tarball promised by spec §5 does not exist yet —
+  `core/winehub.py`'s refusal strings already name the contract ("created by
+  the kit postinst from the cached prefix tarball").
+- `bootstrap.sh` still carries the P1 fail-closed `gd_die` on any recipe that
+  declares hooks (lines ~90–96) — the gate for removal is the executor being
+  real.
+
+### M11a — postinst vocabulary + executor
+1. `postinst:` grows a typed list (see "Postinst format" below): `units`,
+   `udev`, `dialout`, `wine-prefix`, `wine-install`. `tests/test_registry.py`
+   gains the contract: known keys only, udev paths under the kit, declarative
+   steps only (the executor interprets; recipes never embed shell).
+2. `install/lib/kit.sh` gains the executor (`gd_kit_postinst`), run after
+   payload placement per selected app; failures stop loud with the step named
+   and re-runs resume. `bootstrap.sh` drops the P1 `gd_die` once the executor
+   is real.
+3. Steps:
+   - `units` → render + install the `grid-down-*` user units into the operator
+     user's `~/.config/systemd/user` (operator = `SUDO_UID` of the invoker, or
+     `--user` on bootstrap); best-effort `daemon-reload --user` with a printed
+     first-login note.
+   - `udev` → copy kit rule files to `/etc/udev/rules.d/` + `udevadm` reload.
+   - `dialout` → ensure the operator user is in `dialout` when the group
+     exists (a stock container may lack it: warn, never fail).
+   - `wine-prefix` → unpack `kit/wine-prefix.tar.zst` into
+     `/opt/grid-down/wine-prefix` (x86_64-gated: loud skip on aarch64).
+   - `wine-install` → staged installers per `wine.installer` (`setup` = silent
+     Inno run under wine; `portable` = unpack to `wine.install_dir`), success
+     decided by the same per-app probe as `gd winehub install` (`wine.exes`
+     candidates under `drive_c`).
+
+### M11b — builder side: prefix tarball
+`container-build.sh` builds the shared prefix once in the x86_64 container
+(wine from the kit dnf set + the staged `kit-import/` installers), packs
+`kit/wine-prefix.tar.zst` + manifest rows. G6 unchanged: installers ride the
+kit to the operator's own station only; licenses stay applied in-app.
+
+### M11c — hardening
+- **Arch guard:** the kit records its target arch (builder side writes it);
+  `bootstrap.sh` refuses an arch mismatch before touching dnf — the P1
+  finding #1 failure mode dies up front instead of in the solver.
+- **Idempotency proof:** re-running a completed install exits 0 and changes
+  nothing (dnf no-op, payload re-placement no-op, state preserved); asserted
+  in the round-trip harness (spec §5 claims it; M11 proves it).
+- **Partial failure:** stop loud with the failing step named; a re-run resumes
+  (dnf is transactional; payload steps are copy/extract idempotent).
+- **State:** `state.json` gains `kit_arch`, `kit_manifest_lines`,
+  `postinst_done` (per-step watermarks).
+
+### M11d — gate
+Container round-trip (`--network none`) with postinst assertions: unit files
+present + drift-clean vs a fresh render, udev rule placed, dialout handled,
+prefix path sane (x86_64) / loud skip (aarch64), re-run is a no-op.
+**Gate:** `ROUNDTRIP OK` incl. postinst; suite + lint green.
+
+## M12 — USB kit packaging
+
+- `tools/make-usb-kit.sh`: assembles a USB layout from a built kit —
+  `grid-down-kit-<date>.tar.zst` + `.sha256` sidecar, the `control/` suite
+  snapshot, README with restore/verify steps (the two-end sha256 discipline
+  carried over verbatim from the P3 transfer recipe). exFAT-safe layout: no
+  symlinks, no reliance on POSIX perms on the stick.
+- `bootstrap.sh` accepts a USB mount path verbatim — no special-casing; the
+  strict manifest re-hash + file-count equality already catches truncated or
+  partial copies. M12 adds the drills' unpack-from-mount step and documents
+  the mount-agnostic checks in the runbook.
+- **Gate:** build → write layout → mount path → `bootstrap.sh --kit <mount>`
+  offline with the manifest verified *from the mount*; a tamper probe (one
+  flipped byte) is refused loudly.
+
+## M13 — Clean-host drill (automated + human, per spec §10)
+
+- `tools/drill-clean-rebuild.sh` — the P4 harness pattern: fresh `fedora:45`
+  `linux/amd64` image, `--network none`, kit unpacked **from the M12 USB
+  layout**, timed, gate list, `P5: PASS` banner, evidence dir. Gates:
+  - G0 — layout + sidecar verify (USB content, not a bare staging tree)
+  - G1 — arch guard refuses a mismatched kit up front
+  - G2 — strict manifest verify from the mount
+  - G3 — dnf install from the kit repo only (no network-capable repo)
+  - G4 — payloads placed (build/tarball/pip/static per TSVs)
+  - G5 — postinst effects asserted (units/udev/dialout; wine subset on x86_64)
+  - G6 — re-run is a no-op
+  - G7 — `gd doctor` fail=0 (warns recorded as caveats: empty region slots,
+    hardware-absent checks)
+  - G8 — bundle render sanity: targets/units render, rig argv previews
+    (headless container: no GUI spawn)
+  Discipline: **3×`P5: PASS`** fresh runs (P4 precedent); logs kept in
+  `$TMPDIR`, outcomes recorded in the audit doc.
+- `docs/phase5-runbook.md` — the human half (written at M13): fresh Fedora 45
+  GUI VM (any arch), USB layout in via image mount/transfer, `bootstrap.sh
+  --kit`, `gd doctor` fail=0, one bundle start (Control Center or `gd launch`);
+  evidence pattern identical to the P1–P3b runbooks.
+- **Gate:** 3× drill PASS + runbook executed once, evidence committed.
+
+## M14 — Acceptance + closure
+
+- Audit doc `docs/audit/p5-clean-rebuild.md`: runs + carriers, gate table,
+  findings that shaped the design, caveats (empty region slots, wine subset,
+  hardware-gated leftovers).
+- Spec §12 sweep; phase5-plan closure; status banner; commit + push via the
+  `.git/COMMIT_MSG.txt` discipline.
+- **Gate:** spec §10 P5 acceptance met and evidenced.
+
+## Arch policy (carried over from P4)
+
+- x86_64 = full kit incl. wine (prefix tarball + `wine-install` steps).
+- aarch64 = dnf + arch-safe strategies; wine steps skip **loudly** (printed
+  per-app skip + Doctor WARN), never silently.
+- The drill container is pinned `linux/amd64` (the P0/P1 `--platform` lesson).
+
+## Operator-input register (non-blocking for M11–M13)
+
+| Item | Unblocks | Lands as |
+|---|---|---|
+| Region content (Kiwix ZIM, OSM extract, GRIB) → `kit-static/` | full static payloads | kit rebuild + drill re-run |
+| VARA SAT/Chat/Term installers + licenses | full wine subset | kit rebuild (G6 fail-closed until then) |
+| meshtasticd channel/HAT decision | mesh bundle completeness | recipe flip + rebuild |
+| Hardware round (handset + BLE pins, wine pins, on-air Winlink, meshtasticd install) | spec §10 hardware-gated leftovers | acceptance addenda, not kit work |
+
+## Postinst format (recipe schema, M11a)
+
+```yaml
+recipe:
+  postinst:                  # [] stays valid (most dnf apps need nothing)
+    - units: install         # render + install grid-down-* user units (root-side files)
+    - udev: rules/99-meshtastic.rules  # path under the kit → /etc/udev/rules.d/
+    - dialout: true          # ensure the operator user is in dialout (group permitting)
+    - wine-prefix: true      # unpack kit/wine-prefix.tar.zst (x86_64-gated)
+    - wine-install: silent   # staged installer per wine.installer (setup|portable)
+```
+
+Executor rule: declarative steps only — a recipe never runs shell; unknown
+keys are a registry-test failure.
+
+## Adopted defaults (from the plan review, 2026-10-30)
+
+- **Drill kit:** stageable full kit (see top); unstaged VARA artifacts and
+  region content are recorded caveats, not blockers.
+- **Numbering:** M-numbers continue across phases (M11–M14).
+- **Runbook timing:** `docs/phase5-runbook.md` is written at M13, not up front.
+- **kit-staging/** stays untracked scratch; cleaned before gate runs, never
+  committed.
+
