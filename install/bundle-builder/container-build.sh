@@ -210,6 +210,49 @@ while IFS=$'\x1f' read -r id src serve; do
     printf '%s\t%s\t%s\n' "$id" "static/$id" "$serve" >> "$OUT/static.tsv"
 done < <(plan_rows static id src serve)
 
+# --- wine phase (M11b, spec G6): kit-import installers ride the kit; the -----
+# shared prefix is built once HERE, with the same wine the kit's dnf set
+# installs on the station (wine recipes carry dnf: packages: [wine]), then
+# packed as wine-prefix.tar.zst for gd_postinst_wine_prefix to bsdtar -xf.
+# The installers themselves are never run at build time — they run at the
+# operator's own station only (G6); only the empty prefix is cached.
+: > "$OUT/wine.tsv"
+while IFS=$'\x1f' read -r id file glob mode install_dir; do
+    [ -n "$id" ] || continue
+    mkdir -p "$OUT/wine/$id"
+    cp "/install-src/kit-import/$file" "$OUT/wine/$id/$file"   # resolver verified presence + sha256 pin
+    printf '%s\t%s\t%s\t%s\t%s\n' "$id" "wine/$id/$file" "$mode" "$install_dir" "$glob" >> "$OUT/wine.tsv"
+    log "wine[$id]: staged kit-import installer ($mode) — runs at the operator's station only (G6)"
+done < <(plan_rows wine id file glob mode install_dir)
+if [ -s "$OUT/wine.tsv" ]; then
+    log "wine: building shared prefix with the kit's wine (wineboot -i; several minutes)"
+    dnf -y install wine zstd >/dev/null
+    export WINEPREFIX="$BUILD_ROOT/wine-prefix"
+    export WINEDEBUG=-all
+    export WINEDLLOVERRIDES="mscoree,mshtml="   # skip mono/gecko download dialogs (same env as gd winehub)
+    if ! timeout 900 wineboot -i >"$BUILD_ROOT/wineboot.log" 2>&1; then
+        tail -20 "$BUILD_ROOT/wineboot.log" >&2 2>/dev/null || true
+        log "FATAL: wineboot -i failed — full log: $BUILD_ROOT/wineboot.log"
+        exit 1
+    fi
+    log "wine: prefix initialized ($(find "$WINEPREFIX" -maxdepth 1 -mindepth 1 | wc -l | tr -d ' ') top-level entries)"
+    # Rosetta-safe packer (see PACK below): python tarfile writes plain tar,
+    # zstd compresses. Top-level dir stays "wine-prefix" so the air-gap
+    # executor's `bsdtar -xf -C /opt/grid-down` lands it at the documented
+    # GRID_DOWN_WINE_PREFIX default.
+    python3 - "$WINEPREFIX" "$BUILD_ROOT/wine-prefix.tar" <<'PYEOF'
+import os, sys, tarfile
+src, dest = sys.argv[1], sys.argv[2]
+with tarfile.open(dest, "w") as tf:
+    for root, dirs, files in os.walk(src):
+        for name in sorted(dirs + files):
+            p = os.path.join(root, name)
+            tf.add(p, arcname=os.path.relpath(p, os.path.dirname(src)))
+PYEOF
+    zstd -q -f "$BUILD_ROOT/wine-prefix.tar" -o "$OUT/wine-prefix.tar.zst" && rm -f "$BUILD_ROOT/wine-prefix.tar"
+    log "wine: prefix packed ($(du -h "$OUT/wine-prefix.tar.zst" | cut -f1))"
+fi
+
 # --- postinst.tsv: declarative postinst steps (M11a, spec §5) ----------------
 # The resolver validated the vocabulary (known steps, wine-* off wine only,
 # udev paths inside the kit layout); the air-gap side reads only this TSV —
@@ -266,6 +309,13 @@ while IFS= read -r -d '' f; do
         wheels/*)
             b="${p##*/}"; src="pypi (pip download in fedora:45)"
             ver="$(printf '%s' "$b" | sed -E 's/^[^-]+-([^-]+)-.*/\1/')" ;;
+        wine-prefix.tar.zst)
+            src="shared wine prefix built in fedora:45 (kit wine dnf set, wineboot -i)"
+            ver="$(rpm -q --qf '%{VERSION}' wine 2>/dev/null || echo "-")" ;;
+        wine/*)
+            id="${p#wine/}"; id="${id%%/*}"
+            src="operator-staged kit-import installer (G6 — rides the kit, runs at the operator's station)"
+            ver="-" ;;
         static/*) src="operator-staged payload (region ride-along)"; ver="-" ;;
     esac
     printf '%s\t%s\t%s\t%s\n' "$h" "$p" "$src" "$ver"

@@ -16,6 +16,25 @@ Rules:
   `wine.license: user-supplied` instead (G6). Inventory: `docs/audit/third-party-licenses.md`.
 - Recipe strategy must match the registry entry's `install.strategy` (enforced by tests).
 
+## Wine recipes (M11b, spec G6)
+
+A `strategy: wine` recipe never names a download URL — the installer is staged by
+the operator in `install/kit-import/` and resolved at kit build:
+
+- `wine.installer_glob` must match **exactly one** staged file (0 or ≥2 fails the
+  build, naming the fix); `wine.installer_sha256` pins that file's sha256 (64-hex,
+  same M6 discipline as every other artifact) and is verified against the staged
+  bytes — drift fails the build (re-stage or re-pin).
+- `wine.installer:` is `setup` (default; silent Inno run) or `portable` (zip
+  unpacked into `wine.install_dir`, never executed).
+- The artifact **rides the kit** (`kit/wine/<id>/` + `kit/wine.tsv`) and runs at
+  the operator's own station only; the shared prefix itself is built once by the
+  builder in the x86_64 container (`kit/wine-prefix.tar.zst`) and unpacked by the
+  air-gap executor's `wine-prefix` step.
+- The recipe's `dnf: packages: [wine]` (any strategy may carry a dnf row) puts
+  wine itself into the kit's download set — the same stack builds the prefix in
+  the container and runs it air-gap.
+
 ## Config blocks (P4 M7, spec §6.2)
 
 Native apps' adapters write ONLY the keys their recipe declares, under a

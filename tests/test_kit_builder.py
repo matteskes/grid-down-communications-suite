@@ -7,6 +7,7 @@ Run: python3 -m pytest tests/ -q   (skips if PyYAML is absent)
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -83,11 +84,139 @@ def test_resolver_refuses_unknown_apps():
     assert "unknown apps" in p.stderr
 
 
-def test_resolver_refuses_wine_apps():
-    """Wine apps are kit-import only (G6) — never kit-built."""
-    p = run_resolver("--apps", "vara-hf")
+# --- wine kit-import staging (M11b, spec G6) ----------------------------------
+# Every wine test uses a tmp mirror (recipes/ + kit-import/) so the suite never
+# depends on operator-staged artifacts being present on this machine.
+
+
+def _fake_artifact(staging: Path, name: str) -> str:
+    content = f"fake user-supplied installer: {name}\n".encode()
+    (staging / name).write_bytes(content)
+    return hashlib.sha256(content).hexdigest()
+
+
+def _wine_env(
+    tmp_path: Path,
+    recipe: str = "vara-hf",
+    wine_overrides: dict | None = None,
+    artifacts: tuple[str, ...] = ("fake-installer.zip",),
+) -> Path:
+    """tmp mirror of the repo layout: <tmp>/recipes/<recipe>.yaml — glob and
+    sha256 pin rewritten to the fake staged artifact — beside <tmp>/kit-import/.
+    wine_overrides values of None remove the key (pin/install_dir absence)."""
+    rec_dir = tmp_path / "recipes"
+    staging = tmp_path / "kit-import"
+    rec_dir.mkdir()
+    staging.mkdir()
+    pins = {name: _fake_artifact(staging, name) for name in artifacts}
+    rec = yaml.safe_load((REC_DIR / f"{recipe}.yaml").read_text())
+    w = rec["recipe"]["wine"]
+    w["installer_glob"] = "fake-installer*"
+    w["installer_sha256"] = next(iter(pins.values()), "0" * 64)
+    for key, val in (wine_overrides or {}).items():
+        if val is None:
+            w.pop(key, None)
+        else:
+            w[key] = val
+    (rec_dir / f"{recipe}.yaml").write_text(yaml.safe_dump(rec))
+    return rec_dir
+
+
+def _run_resolver_on(rec_dir: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [PY, str(RESOLVER), str(rec_dir), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_resolver_routes_wine_apps(tmp_path):
+    """A wine app with exactly one pinned staged artifact resolves into a
+    plan['wine'] row, pulls wine into the kit dnf set (M11b: the same stack
+    builds the container prefix and runs it air-gap), and keeps its
+    declarative wine-* postinst rows."""
+    rec_dir = _wine_env(tmp_path)
+    p = _run_resolver_on(rec_dir, "--apps", "vara-hf")
+    assert p.returncode == 0, p.stderr
+    plan = json.loads(p.stdout)
+    pin = hashlib.sha256(b"fake user-supplied installer: fake-installer.zip\n").hexdigest()
+    assert plan["wine"] == [
+        {
+            "id": "vara-hf",
+            "file": "fake-installer.zip",
+            "glob": "fake-installer*",
+            "mode": "setup",
+            "install_dir": "",
+            "sha256": pin,
+        }
+    ]
+    assert "wine" in plan["pkgs_fedora"]
+    row = next(r for r in plan["postinst"] if r["id"] == "vara-hf")
+    assert (row["prefix"], row["install"]) == ("1", "1")
+
+
+def test_resolver_carries_wine_portable_mode(tmp_path):
+    """A portable installer (VarAC-style zip) carries its install_dir pin."""
+    rec_dir = _wine_env(tmp_path, recipe="varac")
+    p = _run_resolver_on(rec_dir, "--apps", "varac")
+    assert p.returncode == 0, p.stderr
+    row = json.loads(p.stdout)["wine"][0]
+    assert (row["mode"], row["install_dir"]) == ("portable", "C:\\VarAC")
+
+
+def test_resolver_all_dnf_excludes_wine_apps():
+    """--all-dnf selects dnf-strategy apps only — wine kits are an explicit
+    --apps choice (and never trip the wine packing machinery)."""
+    p = run_resolver("--all-dnf")
+    assert p.returncode == 0, p.stderr
+    assert "vara-hf" not in json.loads(p.stdout)["apps"]
+
+
+def test_resolver_wine_missing_staged_artifact(tmp_path):
+    """G6 fail-closed: no staged artifact matching the glob -> exit 2."""
+    rec_dir = _wine_env(tmp_path, artifacts=())
+    p = _run_resolver_on(rec_dir, "--apps", "vara-hf")
     assert p.returncode == 2
-    assert "kit-import" in p.stderr
+    assert "nothing matching" in p.stderr
+
+
+def test_resolver_wine_ambiguous_glob(tmp_path):
+    """G6 fail-closed: more than one staged match -> exit 2 naming them."""
+    rec_dir = _wine_env(tmp_path, artifacts=("fake-installer.zip", "fake-installer-2.zip"))
+    p = _run_resolver_on(rec_dir, "--apps", "vara-hf")
+    assert p.returncode == 2
+    assert "keep exactly one" in p.stderr
+
+
+def test_resolver_wine_sha256_pin_mismatch(tmp_path):
+    """Supply-chain guard: staged artifact drifting from the pin fails."""
+    rec_dir = _wine_env(tmp_path, wine_overrides={"installer_sha256": "b" * 64})
+    p = _run_resolver_on(rec_dir, "--apps", "vara-hf")
+    assert p.returncode == 2
+    assert "sha256" in p.stderr
+
+
+def test_resolver_wine_unpinned_sha256(tmp_path):
+    rec_dir = _wine_env(tmp_path, wine_overrides={"installer_sha256": None})
+    p = _run_resolver_on(rec_dir, "--apps", "vara-hf")
+    assert p.returncode == 2
+    assert "64-hex" in p.stderr
+
+
+def test_resolver_wine_portable_needs_install_dir(tmp_path):
+    rec_dir = _wine_env(tmp_path, recipe="varac", wine_overrides={"install_dir": None})
+    p = _run_resolver_on(rec_dir, "--apps", "varac")
+    assert p.returncode == 2
+    assert "needs wine.install_dir" in p.stderr
+
+
+def test_resolver_wine_arch_guard_on_aarch64(tmp_path):
+    """Arch policy fires before any staging work (M11b moved the guard up)."""
+    rec_dir = _wine_env(tmp_path)
+    p = _run_resolver_on(rec_dir, "--apps", "vara-hf", "--arch", "aarch64")
+    assert p.returncode == 2
+    assert "Arch policy" in p.stderr
 
 
 # --- postinst plan rows + vocabulary guards (M11a, spec §5) -------------------

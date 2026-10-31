@@ -55,6 +55,7 @@ N_BUILD="$(plan_field "len(p['build'])")"
 N_TARBALL="$(plan_field "len(p['tarball'])")"
 N_PIP="$(plan_field "len(p['pip'])")"
 N_STATIC="$(plan_field "len(p['static'])")"
+N_WINE="$(plan_field "len(p['wine'])")"
 N_DNF="$(plan_field "len([r for r in p['dnf'] if r['id'] in p['apps']])")"
 PKGS_FEDORA="$(plan_field "' '.join(p['pkgs_fedora'])")"
 PKGS_RPMFUSION="$(plan_field "' '.join(p['pkgs_rpmfusion'])")"
@@ -64,7 +65,7 @@ fi
 
 echo "grid-down kit builder"
 echo "  apps        : $SEL_APPS"
-echo "  strategies  : dnf=$N_DNF build=$N_BUILD tarball=$N_TARBALL pip=$N_PIP static=$N_STATIC"
+echo "  strategies  : dnf=$N_DNF build=$N_BUILD tarball=$N_TARBALL pip=$N_PIP static=$N_STATIC wine=$N_WINE"
 echo "  packages    : fedora=[$PKGS_FEDORA] rpmfusion=[$PKGS_RPMFUSION]"
 echo "  arch        : $ARCH   rpmfusion-enablement: $RPMFUSION"
 echo "  image       : $IMAGE (linux/amd64)   out: $OUT   pack: $PACK"
@@ -99,6 +100,10 @@ printf '  rpms     : %s\n' "$(find "$STAGING/repo" -maxdepth 1 -name '*.rpm' | w
     "$(find "$STAGING/wheels" -name '*.whl' | wc -l | tr -d ' ')"
 [ -d "$STAGING/tarball" ] && printf '  artifacts: %s\n' \
     "$(find "$STAGING/tarball" -type f | wc -l | tr -d ' ')"
+[ -f "$STAGING/wine-prefix.tar.zst" ] && printf '  prefix   : %s\n' \
+    "$(du -h "$STAGING/wine-prefix.tar.zst" | cut -f1) (kit-built, unpacked air-gap by postinst)"
+[ -s "$STAGING/wine.tsv" ] && printf '  wine     : %s installer(s) from kit-import (G6 — operator-station only)\n' \
+    "$(wc -l < "$STAGING/wine.tsv" | tr -d ' ')"
 printf '  apps     : %s\n' "$(tr '\n' ' ' < "$STAGING/apps.txt")"
 du -sh "$STAGING" "$OUT" 2>/dev/null | sed 's/^/  size /' || true
 

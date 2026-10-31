@@ -13,6 +13,8 @@ container-build.sh as GD_IN_PLAN:
     tarball   [{id, url, sha256, dest, arch, format, version, arm64_url, arm64_sha256}]
     pip       [{id, package}]         — "name==version" when the recipe pins one
     static    [{id, src, serve}]
+    wine      [{id, file, glob, mode, install_dir, sha256}] — M11b: the single
+              kit-import installer that rides the kit per wine app (G6)
     postinst  [{id, units, udev, dialout, prefix, install}] — declarative M11a steps
     pkgs_fedora / pkgs_rpmfusion   merged, de-duplicated download lists
 
@@ -22,6 +24,10 @@ Guards (fail loudly, exit 2):
     - postinst vocabulary violations (M11a, spec §5): unknown step, wine-*
       steps off a wine recipe, udev path outside the kit layout or a rule
       file missing from install/udev/
+    - wine kit-import staging (M11b, spec G6): wine.installer_glob matching
+      nothing or more than one file in install/kit-import/, a missing or
+      mismatched wine.installer_sha256 pin, installer mode not setup|portable,
+      or a portable installer without wine.install_dir
     - --arch aarch64 with any non-dnf app selected — full kits are x86_64-only
       in P4 (docs/phase4-plan.md §Arch policy); dnf-only subsets keep the S4
       --forcearch path.
@@ -30,6 +36,8 @@ Guards (fail loudly, exit 2):
 from __future__ import annotations
 
 import argparse
+import fnmatch
+import hashlib
 import json
 import re
 import sys
@@ -89,9 +97,7 @@ def _validate_postinst(r: dict, udev_dir: Path) -> list[str]:
                     f"udev/<name>.rules path, got {arg!r}"
                 )
             if not (udev_dir / Path(arg).name).is_file():
-                raise PlanError(
-                    f"{r['id']}: postinst.udev rule missing from install/udev/: {arg}"
-                )
+                raise PlanError(f"{r['id']}: postinst.udev rule missing from install/udev/: {arg}")
             name = "udev"
         else:
             raise PlanError(
@@ -105,6 +111,78 @@ def _validate_postinst(r: dict, udev_dir: Path) -> list[str]:
         # so the air-gap executor joins it against the kit root directly.
         out.append(f"install/{arg}" if arg else name)
     return out
+
+
+WINE_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+WINE_MODES = ("setup", "portable")
+
+
+def _resolve_wine_import(app_id: str, r: dict, install_root: Path) -> dict:
+    """Resolve one wine recipe's staged kit-import artifact (M11b, spec G6).
+
+    Returns the plan row the builder packs into kit/wine/<id>/ and kit/wine.tsv.
+    Fails closed (PlanError) when the recipe is unpinned, the glob matches
+    nothing or more than one staged file, or the artifact's sha256 drifts from
+    the recipe's pin — same everything-pinned discipline as M6 tarballs.
+    """
+    w = r.get("wine") or {}
+    pattern = str(w.get("installer_glob") or "").strip()
+    if not pattern:
+        raise PlanError(
+            f"{app_id}: wine recipe missing wine.installer_glob "
+            "(the user-supplied artifact pattern staged in install/kit-import/)"
+        )
+    pin = str(w.get("installer_sha256") or "").strip().lower()
+    if not WINE_SHA256_RE.fullmatch(pin):
+        raise PlanError(
+            f"{app_id}: wine.installer_sha256 must be a 64-hex pin of the staged "
+            "artifact (M6 discipline: the kit carries exactly what was verified)"
+        )
+    mode = str(w.get("installer") or "setup").strip()
+    if mode not in WINE_MODES:
+        raise PlanError(
+            f"{app_id}: wine.installer must be one of {'|'.join(WINE_MODES)}, got {mode!r}"
+        )
+    install_dir = str(w.get("install_dir") or "").strip()
+    if mode == "portable" and not install_dir:
+        raise PlanError(
+            f"{app_id}: wine.installer=portable needs wine.install_dir "
+            "(the drive_c target the zip unpacks into)"
+        )
+
+    import_dir = install_root / "kit-import"
+    matches = sorted(
+        p
+        for p in (import_dir.iterdir() if import_dir.is_dir() else [])
+        if p.is_file() and fnmatch.fnmatch(p.name.lower(), pattern.lower())
+    )
+    if not matches:
+        raise PlanError(
+            f"{app_id}: nothing matching '{pattern}' in install/kit-import/ — drop the "
+            f"user-supplied download there (G6: it rides the kit, never the repo), or "
+            "drop the app from --apps"
+        )
+    if len(matches) > 1:
+        listing = ", ".join(p.name for p in matches)
+        raise PlanError(
+            f"{app_id}: {len(matches)} files match '{pattern}' in install/kit-import/ — "
+            f"keep exactly one (move the rest out) and retry: {listing}"
+        )
+    artifact = matches[0]
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    if digest != pin:
+        raise PlanError(
+            f"{app_id}: staged {artifact.name} sha256 {digest} != recipe pin {pin} — "
+            "re-stage the artifact or re-pin the recipe (supply-chain guard)"
+        )
+    return {
+        "id": app_id,
+        "file": artifact.name,
+        "glob": pattern,
+        "mode": mode,
+        "install_dir": install_dir,
+        "sha256": pin,
+    }
 
 
 def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -> dict:
@@ -127,6 +205,16 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
     if unknown:
         raise PlanError(f"unknown apps: {unknown}")
 
+    # Arch policy first (M11b: fail before any strategy work — the wine branch
+    # hashes staged artifacts, and a wrong-arch plan must not get that far).
+    non_dnf = sorted(i for i in sorted(set(ids)) if recs[i][0]["strategy"] != "dnf")
+    if arch == "aarch64" and non_dnf:
+        raise PlanError(
+            "--arch aarch64 with non-dnf apps selected: full kits are x86_64-only in P4 "
+            "(docs/phase4-plan.md §Arch policy — VARA/wine is x86_64-only upstream, "
+            "artemis ships x86_64 only). Use a dnf-only --apps subset for aarch64 (S4)."
+        )
+
     plan: dict = {
         "apps": [],
         "dnf": [],
@@ -134,10 +222,10 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
         "tarball": [],
         "pip": [],
         "static": [],
+        "wine": [],
         "postinst": [],
     }
     udev_dir = recipes.parent / "udev"  # kit-relative udev rule targets live here
-    strategy_by_id: dict[str, str] = {}
     pkgs_fed: list[str] = []
     pkgs_rf: list[str] = []
     # Installer tooling rides the kit (the spec §8 dnf class with createrepo_c /
@@ -151,7 +239,6 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
         _require_pinned(r, path)
         strat = r["strategy"]
         plan["apps"].append(app_id)
-        strategy_by_id[app_id] = strat
 
         if strat == "dnf":
             d = r.get("dnf") or {}
@@ -234,10 +321,13 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
             )
 
         elif strat == "wine":
-            raise PlanError(
-                f"{app_id}: wine apps are kit-import (user-supplied installers), "
-                "never kit-built — spec G6"
-            )
+            # M11b (spec G6): the user-supplied installer is never built or
+            # downloaded by the kit — it is staged by the operator in
+            # install/kit-import/ and RIDES THE KIT to be run at the
+            # operator's own station only. Fail closed unless the glob picks
+            # exactly one staged artifact and its sha256 matches the pin.
+            plan["wine"].append(_resolve_wine_import(app_id, r, recipes.parent))
+
         else:
             raise PlanError(f"{app_id}: unknown strategy {strat!r}")
 
@@ -281,14 +371,6 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
                 else:  # kit-relative udev rule path ("install/udev/<name>.rules")
                     row["udev"] = step
             plan["postinst"].append(row)
-
-    non_dnf = sorted(i for i in plan["apps"] if strategy_by_id[i] != "dnf")
-    if arch == "aarch64" and non_dnf:
-        raise PlanError(
-            "--arch aarch64 with non-dnf apps selected: full kits are x86_64-only in P4 "
-            "(docs/phase4-plan.md §Arch policy — VARA/wine is x86_64-only upstream, "
-            "artemis ships x86_64 only). Use a dnf-only --apps subset for aarch64 (S4)."
-        )
 
     for row in plan["dnf"]:
         (pkgs_rf if row["repo"] == "rpmfusion-free" else pkgs_fed).extend(row["packages"])
