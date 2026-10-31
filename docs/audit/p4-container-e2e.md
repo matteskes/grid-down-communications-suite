@@ -117,4 +117,19 @@ bytes unchanged. `commstatone`'s slot stays empty by design (Doctor WARNs).
 - Station-baseline prep (not kit content): `python3 python3-yaml file curl`
   on a maintained F45 install — the suite (operator checkout) needs them.
 
+## M12 re-run (2026-10-31, `19fb0f2`) — 3/3 `P4: PASS`
+
+Re-run after M12 made the kit self-contained: `tools/p4-e2e-gates.sh` now
+reads the control suite AND the installer from `$KIT` (G0 asserts
+`kit/control/` exists; G1 verifies with the kit's own `install/lib`), so
+these runs prove the kit carries everything its own postinst delegation
+needs — the `/gd` operator-checkout mount is a convenience only, and the
+station-baseline note above is superseded for `python3-yaml` (the kit's
+dnf set now pins it; `python3` arrives with the app closures, `file`/
+`curl` remain station probes). The kit also rides `profiles/`, and the
+delegated `units`/`wine-install` postinst steps are exercised in the P5
+round-trip gates — see `docs/audit/p4-usb-roundtrip.md`.
+≈ 50 min wall for build + 3 air-gapped rounds; logs:
+`/var/folders/…/gd-p4-e2e-logs/run-{1,2,3}.log` (ephemeral).
+
 

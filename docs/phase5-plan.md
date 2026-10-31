@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) landed · next: M12 ·
+**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) landed · next: M13 ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -227,20 +227,71 @@ such (not a skip).
 (66 s / 232 s, one run each, gd-f45-current, `--network none`); suite 269
 green; lint + pre-commit clean.
 
-## M12 — USB kit packaging
+### M12 — USB kit packaging — **LANDED** (`19fb0f2`, 2026-10-31)
 
-- `tools/make-usb-kit.sh`: assembles a USB layout from a built kit —
-  `grid-down-kit-<date>.tar.zst` + `.sha256` sidecar, the `control/` suite
-  snapshot, README with restore/verify steps (the two-end sha256 discipline
-  carried over verbatim from the P3 transfer recipe). exFAT-safe layout: no
-  symlinks, no reliance on POSIX perms on the stick.
-- `bootstrap.sh` accepts a USB mount path verbatim — no special-casing; the
-  strict manifest re-hash + file-count equality already catches truncated or
-  partial copies. M12 adds the drills' unpack-from-mount step and documents
-  the mount-agnostic checks in the runbook.
-- **Gate:** build → write layout → mount path → `bootstrap.sh --kit <mount>`
-  offline with the manifest verified *from the mount*; a tamper probe (one
-  flipped byte) is refused loudly.
+Every kit now carries its own control suite, and the P4 transport loop is
+a gate: build → pack to FAT32 parts → wipe the staging tree → restore
+from the USB layout alone → tamper probe → air-gap install from the
+restored tree.
+**Gate:** `ROUNDTRIP OK — usb pack/unpack (M12 gate)` (77 s); `ROUNDTRIP
+OK — incl. postinst` re-asserts delegation (lean 78 s / `--with-wine`
+265 s, `install: varac  installed` under wine as the operator, air-gapped);
+`P4: PASS` ×3 with the E2E gates reading the suite + installer from $KIT;
+suite 274 green; lint clean.
+
+**Shipped:**
+- `install/bundle-builder/` — the kit packs control/ and profiles/
+  (`/control-src` + `/profiles-src` mounts, bytecode pruning, manifest
+  source strings; a missing mount is a FATAL). `resolve-kit.py` pins
+  util-linux + python3-yaml into the station set (runuser + the suite's
+  yaml import) — the kit carries its own runtime deps.
+- `install/lib/kit.sh` — the M11d loud-skips become the pre-M12 refusal
+  ("control suite missing from this kit (M12+ kits pack control/)");
+  with the suite present, `units` delegates (`gd units install` under
+  the operator, daemon-reload soft-skipping headless) and `wine-install`
+  delegates (`gd winehub install <id>` — the silent kit-import installer
+  runs at install time, G6 honored: it rides the kit and runs on the
+  operator's station).
+- `control/core/winehub.py` — `resolve_installer` falls back to the kit
+  layout (`<root>/wine/<id>/`, the M11b manifest-pinned staging) with
+  the same recipe glob, exactly one match; the executor still never
+  parses the recipe's wine block.
+- `tools/make-usb-kit.sh` + `tools/unpack-usb-kit.sh` — FAT32-safe
+  split parts + `usb-manifest.sha256` sidecar (plain tar; why, in
+  docs/audit/p4-usb-roundtrip.md); restore = per-part verify →
+  reassemble → extract → kit-manifest re-hash (refuses any layout the
+  installer would refuse). Host hashing takes sha256sum(1) or shasum(1).
+- `tools/roundtrip-usb.sh` — the P4 gate (the loop above + tamper probe
+  + install assertions R/A/N). Evidence: docs/audit/p4-usb-roundtrip.md.
+- `tools/p4-e2e-gates.sh` — reads the suite + installer from $KIT (G0
+  asserts kit/control/); the /gd checkout mount drops to convenience;
+  both E2E scripts gain their executable bit.
+- doctor — `gd doctor --kit DIR`: strict per-file manifest re-hash plus
+  the control//profiles/ presence contract (pre-M12 kits FAIL with a
+  rebuild pointer); the M1-era kit-check DEFERRED line lands.
+
+**Findings the gate caught (five, first delegation runs, each fixed in
+the tree it exposed):** runuser absent (util-linux-core doesn't ship it
+— resolver pins util-linux); yaml absent on a bare station (resolver
+pins python3-yaml); the profile fallback is ROOT-relative (the kit now
+carries profiles/); the historic uid-11 `operator` system account
+satisfied the harnesses' `id operator` guard and landed HOME in /root
+(they now replace uid < 1000 operators before useradd); the suite
+resolved installers repo-only (winehub kit-layout fallback). Details in
+the commit message.
+
+**Bullet-vs-code corrections:** the plan's `.tar.zst` + README-on-the-
+stick became split parts + sidecar manifest (FAT32's 4 GiB file cap;
+no compression win on an already-compressed payload; the README lives
+in the tool headers + the audit doc); the plan had make-usb-kit assemble
+the suite snapshot — the suite rides the KIT from the builder
+(delegation is a kit property, not a transport one); bootstrap takes the
+restored dir verbatim, as planned.
+
+**Validation:** suite 274 green (+5 doctor kit-check tests; M10 result
+count 20→21); ruff/black/isort clean; synthetic USB smoke round-trips
+multi-part byte-clean with `doctor --kit` ok and the live tamper probe
+refusing; round-trips lean 78 s / wine 265 s; USB gate 77 s.
 
 ## M13 — Clean-host drill (automated + human, per spec §10)
 
