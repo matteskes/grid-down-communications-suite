@@ -1,7 +1,7 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 planning — M11–M14 open · next: M11 · **Order:** installer completion →
-USB packaging → clean-host drill → acceptance closure
+**Status:** P5 in progress — M11a landed (`1e6485e`, 2026-10-30) · next: M11b ·
+**Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
 This file is P5's single source of truth — milestone scope, adopted decisions, and
@@ -41,7 +41,26 @@ Research facts this milestone builds on:
   declares hooks (lines ~90–96) — the gate for removal is the executor being
   real.
 
-### M11a — postinst vocabulary + executor
+### M11a — postinst vocabulary + executor — **LANDED** (`1e6485e`, 2026-10-30)
+
+Shipped as planned, with two container-check-caught corrections recorded
+below. Validation: suite 261 green (was 250); ruff/black/isort clean;
+`bash -n` ×3; resolver CLI smoke; fedora:45 mechanism check (hand-made kit,
+no dnf): `--dry-run` plan incl. the postinst line + operator, real
+`gd_kit_postinst` — dialout WARN-skips without an operator, udev rule
+installed 0644 into `/etc/udev/rules.d`, units M12 WARN, wine-prefix passes
+the x86_64 gate then dies naming the M11b tarball. Full offline round-trip
+with a real kit stays M11d.
+
+Corrections the check caught (both folded into `1e6485e`):
+- `postinst.tsv` is the first kit TSV with optional columns — tab-`read`
+  collapses empty cells and shifts columns (the M6c `\x1f` rationale, met on
+  the air-gap read side). Builder normalizes to `1`/`-` sentinels; no empty
+  cells ever.
+- `gd_postinst_udev` had the M10 `local` self-reference class again
+  (`dest` expanding `rel` from the same declaration — unbound under `set -u`);
+  split declarations, and the TSV carries the kit-relative path
+  (`install/udev/…`) instead of the recipe-relative one.
 1. `postinst:` grows a typed list (see "Postinst format" below): `units`,
    `udev`, `dialout`, `wine-prefix`, `wine-install`. `tests/test_registry.py`
    gains the contract: known keys only, udev paths under the kit, declarative
@@ -153,20 +172,27 @@ prefix path sane (x86_64) / loud skip (aarch64), re-run is a no-op.
 | meshtasticd channel/HAT decision | mesh bundle completeness | recipe flip + rebuild |
 | Hardware round (handset + BLE pins, wine pins, on-air Winlink, meshtasticd install) | spec §10 hardware-gated leftovers | acceptance addenda, not kit work |
 
-## Postinst format (recipe schema, M11a)
+## Postinst format (recipe schema, M11a — shipped shape)
 
 ```yaml
 recipe:
   postinst:                  # [] stays valid (most dnf apps need nothing)
-    - units: install         # render + install grid-down-* user units (root-side files)
-    - udev: rules/99-meshtastic.rules  # path under the kit → /etc/udev/rules.d/
-    - dialout: true          # ensure the operator user is in dialout (group permitting)
-    - wine-prefix: true      # unpack kit/wine-prefix.tar.zst (x86_64-gated)
-    - wine-install: silent   # staged installer per wine.installer (setup|portable)
+    - units                  # render + install grid-down-* user units (operator's dirs)
+    - udev: udev/99-meshtastic.rules   # file under install/udev/ -> /etc/udev/rules.d/
+    - dialout                # ensure the operator user is in dialout (group permitting)
+    - wine-prefix            # unpack kit/wine-prefix.tar.zst (x86_64-gated)
+    - wine-install           # staged installer per wine.installer (setup|portable)
 ```
 
+Differences from the planning sketch: bare step names (no `key: value` forms
+— values carried no information), and `udev` paths are anchored at
+`udev/<name>.rules` (a file that must exist under `install/udev/`; the
+builder renders the kit-relative `install/udev/…` into `postinst.tsv`).
+Canonical application order: dialout → udev → units → wine-prefix →
+wine-install.
+
 Executor rule: declarative steps only — a recipe never runs shell; unknown
-keys are a registry-test failure.
+keys fail the resolver (exit 2) and the registry tests.
 
 ## Adopted defaults (from the plan review, 2026-10-30)
 
