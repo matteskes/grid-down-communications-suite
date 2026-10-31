@@ -93,6 +93,8 @@ docker run --rm --platform linux/amd64 \
 [ -f "$STAGING/manifest.sha256" ] || { echo "FATAL: kit staging incomplete" >&2; exit 1; }
 echo "kit ready:"
 awk -F'\t' '{n++} END {printf "  manifest : %d files\n", n}' "$STAGING/manifest.sha256"
+printf '  arch     : %s (kit/ARCH — bootstrap refuses an arch mismatch)\n' \
+    "$(cat "$STAGING/ARCH" 2>/dev/null || echo MISSING)"
 printf '  rpms     : %s\n' "$(find "$STAGING/repo" -maxdepth 1 -name '*.rpm' | wc -l | tr -d ' ')"
 [ -d "$STAGING/opt" ] && printf '  built    : %s\n' \
     "$(find "$STAGING/opt" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') dirs under kit/opt/"

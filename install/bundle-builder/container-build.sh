@@ -282,6 +282,7 @@ plan_rows_apps() {
 }
 plan_rows_apps | sort > "$OUT/apps.txt"
 { plan_pkgs pkgs_fedora; plan_pkgs pkgs_rpmfusion; } | tr ' ' '\n' | grep -v '^$' | sort -u > "$OUT/packages.txt"
+printf '%s\n' "$ARCH" > "$OUT/ARCH"   # kit target arch — bootstrap's M11c arch guard
 
 # --- manifest.sha256 — TSV sha256 <TAB> relpath <TAB> source <TAB> version ---
 ( cd "$OUT" && find . -type f ! -name manifest.sha256 -print0 | sort -z | \
@@ -312,6 +313,8 @@ while IFS= read -r -d '' f; do
         wine-prefix.tar.zst)
             src="shared wine prefix built in fedora:45 (kit wine dnf set, wineboot -i)"
             ver="$(rpm -q --qf '%{VERSION}' wine 2>/dev/null || echo "-")" ;;
+        ARCH)
+            src="kit target arch (bootstrap arch guard, M11c)"; ver="$ARCH" ;;
         wine/*)
             id="${p#wine/}"; id="${id%%/*}"
             src="operator-staged kit-import installer (G6 — rides the kit, runs at the operator's station)"

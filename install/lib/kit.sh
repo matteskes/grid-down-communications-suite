@@ -28,6 +28,24 @@ gd_kit_verify() { # $1 = kit dir — strict: every file hashed + no extras
     gd_info "kit manifest verified: $n_manifest files"
 }
 
+gd_kit_arch_check() { # $1 = kit dir; prints the kit arch. M11c arch guard:
+    # the kit records its target arch (kit/ARCH, one line, manifest-hashed)
+    # and this refuses a mismatch BEFORE anything mutates — the P1 finding #1
+    # failure mode used to die inside the dnf solver with a confusing
+    # dependency error instead of naming the fix.
+    local kit="$1" want have
+    [ -f "$kit/ARCH" ] || gd_die "kit/ARCH missing — pre-M11c kit; rebuild it (build-kit.sh)"
+    want=$(tr -d '[:space:]' < "$kit/ARCH")
+    have=$(uname -m)
+    case "$want" in
+        x86_64|aarch64) ;;
+        *) gd_die "kit/ARCH holds '$want' — expected x86_64 or aarch64; rebuild the kit (build-kit.sh --arch <arch>)" ;;
+    esac
+    [ "$want" = "$have" ] \
+        || gd_die "kit arch mismatch: this host is $have, the kit targets $want — rebuild with build-kit.sh --arch $have"
+    printf '%s' "$want"
+}
+
 gd_kit_repo_file() { printf '%s' "/etc/yum.repos.d/grid-down-kit.repo"; }
 
 gd_kit_repo_setup() { # $1 = kit dir
@@ -154,9 +172,10 @@ gd_kit_place_static() { # $1 = kit dir — static payloads into their dest under
 # The builder pre-renders kit/postinst.tsv (id, units, udev, dialout, prefix,
 # install) from the recipes' postinst: steps — the air-gap side never parses
 # YAML. Per app, steps apply in the canonical order dialout -> udev -> units
-# -> wine-prefix -> wine-install; every step self-guards, so a re-run resumes
-# after a fix. Real failures die loudly naming the step; steps that need an
-# operator identity skip with the exact follow-up command when none is known.
+# -> wine-prefix -> wine-install, each under the postinst_done watermark
+# (M11c): applied steps are marked and skipped on re-runs, self-skipped steps
+# stay unmarked (a fixed condition + re-run applies them), and failures die
+# loud naming the step — so fixing + re-running bootstrap resumes.
 
 gd_as_user() { # gd_as_user <name-or-uid> <cmd...> — run as the operator, root-side
     # with the operator's HOME (units render into their user dirs; wine must
@@ -175,14 +194,17 @@ gd_postinst_operator() { # the operator: bootstrap's --user wins, then SUDO_UID
 }
 
 gd_postinst_dialout() { # $1 = operator ("" = none known) $2 = app id
+    # Convention (M11c): return 0 = applied (the caller watermarks it);
+    # return non-zero = skipped itself with the follow-up printed (no
+    # watermark — a fixed condition + re-run applies it); gd_die = loud stop.
     local op="$1" id="$2"
     if ! getent group dialout >/dev/null; then
         gd_warn "postinst[$id/dialout]: dialout group missing — create it (groupadd --system dialout) and re-run bootstrap"
-        return 0
+        return 1
     fi
     if [ -z "$op" ]; then
         gd_warn "postinst[$id/dialout]: no operator identity — skipped (re-run with --user, or as root: usermod -aG dialout <operator>)"
-        return 0
+        return 1
     fi
     if id -nG "$op" 2>/dev/null | tr ' ' '\n' | grep -qx dialout; then
         gd_info "postinst[$id/dialout]: $op already in dialout"
@@ -215,11 +237,11 @@ gd_postinst_units() { # $1 = operator ("" = none known) $2 = app id — suite de
     local op="$1" id="$2" gd="$GD_ROOT/control/cli/gd.py"
     if [ ! -f "$gd" ]; then
         gd_warn "postinst[$id/units]: control suite not in this kit yet (M12 packs control/) — run as the operator: gd units install"
-        return 0
+        return 1
     fi
     if [ -z "$op" ]; then
         gd_warn "postinst[$id/units]: no operator identity — skipped (re-run with --user, or as the operator: gd units install)"
-        return 0
+        return 1
     fi
     gd_info "postinst[$id/units]: rendering + installing grid-down-* user units for $op"
     gd_as_user "$op" python3 "$gd" units install \
@@ -254,15 +276,32 @@ gd_postinst_wine_install() { # $1 = operator $2 = app id — suite-run silent in
     local op="$1" id="$2" gd="$GD_ROOT/control/cli/gd.py"
     if [ ! -f "$gd" ]; then
         gd_warn "postinst[$id/wine-install]: control suite not in this kit yet (M12) — run as the operator: gd winehub install $id"
-        return 0
+        return 1
     fi
     if [ -z "$op" ]; then
         gd_warn "postinst[$id/wine-install]: no operator identity — skipped (wine never runs as root; re-run with --user)"
-        return 0
+        return 1
     fi
     gd_info "postinst[$id/wine-install]: silent kit-import installer for $id (operator: $op)"
     gd_as_user "$op" python3 "$gd" winehub install "$id" \
         || gd_die "postinst[$id/wine-install]: $id installer failed (see its output above)"
+}
+
+gd_postinst_step() { # gd_postinst_step <id/step> <fn> [args...] — one declarative
+    # step under the postinst_done watermark (M11c). fn exit 0 = applied
+    # (watermarked; re-runs skip it); any other exit = the step skipped itself
+    # with its follow-up printed (no watermark — a fixed condition + re-run
+    # applies it); a gd_die inside fn stops the install loud, step named.
+    local tag="$1"; shift
+    if gd_state_marked postinst_done "$tag"; then
+        gd_info "postinst[$tag]: already applied (re-run: skip)"
+        return 0
+    fi
+    if "$@"; then
+        gd_state_mark postinst_done "$tag"
+    else
+        gd_info "postinst[$tag]: skipped this run — re-run bootstrap to apply it"
+    fi
 }
 
 gd_kit_postinst() { # $1 = kit dir — apply every selected app's declarative steps
@@ -283,12 +322,11 @@ gd_kit_postinst() { # $1 = kit dir — apply every selected app's declarative st
     # udev carries the kit-relative rule path when present.
     while IFS=$'\t' read -r id units udev dialout prefix install; do
         [ -n "$id" ] || continue
-        if [ "$dialout" = "1" ]; then gd_postinst_dialout "$op" "$id"; fi
-        if [ "$udev" != "-" ]; then gd_postinst_udev "$kit" "$udev" "$id"; fi
-        if [ "$units" = "1" ]; then gd_postinst_units "$op" "$id"; fi
-        if [ "$prefix" = "1" ]; then gd_postinst_wine_prefix "$op" "$kit" "$id"; fi
-        if [ "$install" = "1" ]; then gd_postinst_wine_install "$op" "$id"; fi
+        if [ "$dialout" = "1" ]; then gd_postinst_step "$id/dialout" gd_postinst_dialout "$op" "$id"; fi
+        if [ "$udev" != "-" ]; then gd_postinst_step "$id/udev" gd_postinst_udev "$kit" "$udev" "$id"; fi
+        if [ "$units" = "1" ]; then gd_postinst_step "$id/units" gd_postinst_units "$op" "$id"; fi
+        if [ "$prefix" = "1" ]; then gd_postinst_step "$id/wine-prefix" gd_postinst_wine_prefix "$op" "$kit" "$id"; fi
+        if [ "$install" = "1" ]; then gd_postinst_step "$id/wine-install" gd_postinst_wine_install "$op" "$id"; fi
     done < "$tsv"
-    gd_state_set postinst_done yes
-    gd_info "postinst: declarative steps applied ($(grep -c . "$tsv" 2>/dev/null || echo 0) app row(s))"
+    gd_info "postinst: declarative steps applied ($(grep -c . "$tsv" 2>/dev/null || echo 0) app row(s), $(gd_state_get postinst_done | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 0) step(s) watermarked)"
 }
