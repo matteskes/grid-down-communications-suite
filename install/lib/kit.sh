@@ -236,7 +236,7 @@ gd_postinst_units() { # $1 = operator ("" = none known) $2 = app id — suite de
     # diffs (units_current), instead of reimplementing it in bash.
     local op="$1" id="$2" gd="$GD_ROOT/control/cli/gd.py"
     if [ ! -f "$gd" ]; then
-        gd_warn "postinst[$id/units]: control suite not in this kit yet (M12 packs control/) — run as the operator: gd units install"
+        gd_warn "postinst[$id/units]: control suite missing from this kit (M12+ kits pack control/) — run as the operator: gd units install"
         return 1
     fi
     if [ -z "$op" ]; then
@@ -280,7 +280,7 @@ gd_postinst_wine_install() { # $1 = operator $2 = app id — suite-run silent in
     # (gd winehub install) — the executor never parses them.
     local op="$1" id="$2" gd="$GD_ROOT/control/cli/gd.py"
     if [ ! -f "$gd" ]; then
-        gd_warn "postinst[$id/wine-install]: control suite not in this kit yet (M12) — run as the operator: gd winehub install $id"
+        gd_warn "postinst[$id/wine-install]: control suite missing from this kit (M12+ kits pack control/) — run as the operator: gd winehub install $id"
         return 1
     fi
     if [ -z "$op" ]; then

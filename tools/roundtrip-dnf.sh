@@ -13,8 +13,9 @@
 #      (bootstrap.sh --user), then asserts:
 #        R  install + P1 core (rpms, binaries, ldd clean)
 #        A  postinst effects: dialout gid, udev rule 0644 + content, units
-#           loud-skip (control/ ships in M12 — unmarked watermark), applied
-#           steps watermarked, state kit_manifest_lines == on-disk manifest
+#           DELEGATION (M12: the kit packs control/ — the suite renders + installs
+#           the unit set headless, daemon-reload soft-skips), applied steps
+#           watermarked, state kit_manifest_lines == on-disk manifest
 #        G  wine-prefix arch gate: uname-shimmed aarch64 must DIE naming
 #           x86_64 (a die, not a skip) without touching state.json
 #        N  idempotency: second bootstrap is a no-op — dnf reports installed
@@ -86,6 +87,8 @@ while IFS= read -r -d '' f; do
         wine-prefix.tar.zst) src="shared wine prefix built in fedora:45 (kit wine dnf set, wineboot -i)" ;;
         ARCH)                src="kit target arch (bootstrap arch guard, M11c)" ;;
         wine/*)              src="operator-staged kit-import installer (G6 — rides the kit, runs at the operator's station)" ;;
+        control/*)           src="grid-down repo (control/ suite — postinst units/wine-install delegation, M12)" ;;
+        profiles/*)          src="grid-down repo (station profile template — profile_path() repo fallback, M12)" ;;
         "$RULE_REL")         src="round-trip postinst probe (tools/roundtrip-dnf.sh, M11d)" ;;
         *)                   src="grid-down repo (install/ snapshot)" ;;
     esac
@@ -94,13 +97,13 @@ done ) > "$KIT/manifest.sha256"
 echo "  probe: direwolf/udev -> $RULE_REL ($(wc -l < "$KIT/manifest.sha256") manifest rows)"
 
 # Watermark expectations for stage A (id/step tokens in state.postinst_done):
-# applied steps are marked; self-skipped steps (units — M12 control/, and
-# wine-install in the wine leg) must stay UNMARKED so a re-run re-attempts.
-MARK_APPLY="direwolf/dialout fldigi/dialout hamlib/dialout direwolf/udev"
-MARK_ABSENT="direwolf/units fldigi/units hamlib/units"
+# applied steps are marked. Since M12 the kit packs control/, so EVERY
+# declarative step applies — units and wine-install delegate to the kit's
+# suite; nothing self-skips in this harness (MARK_ABSENT is empty).
+MARK_APPLY="direwolf/dialout fldigi/dialout hamlib/dialout direwolf/udev direwolf/units fldigi/units hamlib/units"
+MARK_ABSENT=""
 if [ "$WINE" = "1" ]; then
-    MARK_APPLY="$MARK_APPLY varac/dialout varac/wine-prefix"
-    MARK_ABSENT="$MARK_ABSENT varac/wine-install"
+    MARK_APPLY="$MARK_APPLY varac/dialout varac/wine-prefix varac/wine-install"
 fi
 
 # Install-side image: updated to repo-HEAD so it represents the spec's target —
@@ -138,7 +141,14 @@ PY
 }
 
 # ---------- R: air-gap install (operator identity via --user) -----------------
-id operator >/dev/null 2>&1 || useradd -m operator   # some cached install images ship one
+# a REAL operator: the historic uid-11 "operator" system account (the setup
+# package's /etc/passwd relic — home /root, nologin) is not one. gd_as_user
+# would resolve HOME to /root and the delegation would die on permissions
+# (M12 gate finding). Replace it, then create the real one.
+if id operator >/dev/null 2>&1 && [ "$(id -u operator)" -lt 1000 ]; then
+    userdel operator
+fi
+id operator >/dev/null 2>&1 || useradd -m operator
 bash "$KIT/install/bootstrap.sh" --kit "$KIT" --user operator 2>&1 | tee /tmp/install.log
 grep -qF 'install complete:' /tmp/install.log || fail "bootstrap didn't reach install complete"
 
@@ -164,10 +174,17 @@ grep -qF 'postinst[direwolf/udev]: installing 99-grid-down-probe.rules -> /etc/u
 pycmp /etc/udev/rules.d/99-grid-down-probe.rules "$KIT/install/udev/99-grid-down-probe.rules" \
     || fail "placed rule content differs from the kit copy"
 for app in $GD_APPS; do
-    # control/ ships in M12; the step must warn with its follow-up and stay unmarked
-    grep -qF "postinst[$app/units]: control suite not in this kit yet (M12 packs control/) — run as the operator: gd units install" \
-        /tmp/install.log || fail "units step didn't loud-skip for $app"
+    # M12: the kit packs control/ — the step delegates to the kit's suite and
+    # the unit set renders + installs for the operator
+    grep -qF "postinst[$app/units]: rendering + installing grid-down-* user units for operator" \
+        /tmp/install.log || fail "units step didn't delegate to the kit suite for $app"
 done
+grep -Eq '^services: +[0-9]+ installed$' /tmp/install.log \
+    || fail "units install didn't report installed services"
+grep -qF 'daemon-reload: skipped (no systemd user session)' /tmp/install.log \
+    || fail "units install didn't soft-skip the headless daemon-reload"
+[ -n "$(ls /home/operator/.config/systemd/user/grid-down-*.service 2>/dev/null)" ] \
+    || fail "no grid-down-*.service units landed in the operator's user unit dir"
 python3 - "$STATE" "$GD_MARK_APPLY" "$GD_MARK_ABSENT" <<'PY' || fail "postinst watermark state wrong"
 import json, sys
 d = json.load(open(sys.argv[1]))
@@ -189,8 +206,13 @@ if [ "$GD_WINE" = "1" ]; then
         || fail "wine prefix not bootstrapped (.update-timestamp missing)"
     [ "$(stat -c %u /opt/grid-down/wine-prefix)" = "$(id -u operator)" ] \
         || fail "wine prefix not chowned to the operator"
-    grep -qF 'postinst[varac/wine-install]: control suite not in this kit yet (M12) — run as the operator: gd winehub install varac' \
-        /tmp/install.log || fail "wine-install didn't loud-skip with its follow-up"
+    # M12: the step delegates to the kit's suite — the silent kit-import
+    # installer runs for the operator via gd winehub, and winehub only reports
+    # "installed" after the recipe's exe candidates really exist under drive_c
+    grep -qF 'postinst[varac/wine-install]: silent kit-import installer for varac (operator: operator)' \
+        /tmp/install.log || fail "wine-install didn't delegate to the kit suite"
+    grep -qF 'install: varac  installed' /tmp/install.log \
+        || fail "winehub install didn't report varac installed"
 fi
 
 # ---------- P1 core: the kit really installed ---------------------------------
@@ -232,15 +254,14 @@ done
 grep -qF 'postinst[direwolf/udev]: already applied (re-run: skip)' /tmp/rerun.log \
     || fail "re-run: udev watermark not honored"
 for app in $GD_APPS; do
-    # self-skipped steps stay unmarked — the re-run must re-attempt them
-    grep -qF "postinst[$app/units]: control suite not in this kit yet" /tmp/rerun.log \
-        || fail "re-run: units skip not re-attempted for $app"
+    grep -qF "postinst[$app/units]: already applied (re-run: skip)" /tmp/rerun.log \
+        || fail "re-run: units watermark not honored for $app"
 done
 if [ "$GD_WINE" = "1" ]; then
     grep -qF 'postinst[varac/wine-prefix]: already applied (re-run: skip)' /tmp/rerun.log \
         || fail "re-run: wine prefix watermark not honored"
-    grep -qF 'postinst[varac/wine-install]: control suite not in this kit yet' /tmp/rerun.log \
-        || fail "re-run: wine-install skip not re-attempted"
+    grep -qF 'postinst[varac/wine-install]: already applied (re-run: skip)' /tmp/rerun.log \
+        || fail "re-run: wine-install watermark not honored"
 fi
 pycmp "$STATE" /tmp/state.run1 \
     || fail "re-run: state.json changed (idempotency broken)"

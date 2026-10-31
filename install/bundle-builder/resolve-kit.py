@@ -232,7 +232,17 @@ def resolve(recipes: Path, select: list[str] | None, all_dnf: bool, arch: str) -
     # python3-pip): the air-gap side extracts tarball/deb payloads with bsdtar
     # (gd_kit_extract_artifacts) and the kit repo is the only enabled repo
     # there — M10 container E2E caught its absence from the install set.
+    # util-linux rides because gd_postinst_units/wine_install drop privileges
+    # with runuser, which f45's util-linux-core does NOT ship (only the full
+    # package does) — the M12 round-trip gate's first delegation run caught it.
+    # python3-yaml rides because the delegated suite imports yaml on the system
+    # interpreter (the sweep of gd.py + core/* + adapters/* found no other
+    # third-party import) — M10 provisioned it on the station image; the kit
+    # now carries it, so delegation works on a bare station. Same gate, same
+    # first run: ModuleNotFoundError: No module named 'yaml'.
     pkgs_fed.append("bsdtar")
+    pkgs_fed.append("util-linux")
+    pkgs_fed.append("python3-yaml")
 
     for app_id in sorted(set(ids)):
         r, path = recs[app_id]

@@ -18,13 +18,15 @@
 # which the orchestrator greps per run (3x PASS discipline).
 set -euo pipefail
 
-GD_ROOT=/gd            # operator checkout (read-only mount)
+GD_ROOT=/gd            # operator checkout (read-only mount) — legacy convenience:
+                       # since M12 the kit itself carries control/ and install/,
+                       # and every gate below reads the suite + installer from $KIT
 KIT=/kit               # kit staging tree (read-only mount)
 BACKEND=direct         # no systemd user session in a container (spec §6.5)
 
 fail() { printf 'P4-FAIL: %s\n' "$*" >&2; exit 1; }
 stage() { printf '\n== %s\n' "$*"; }
-gd() { python3 "$GD_ROOT/control/cli/gd.py" "$@"; }
+gd() { python3 "$KIT/control/cli/gd.py" "$@"; }   # M12: the kit's own suite
 
 # --- fresh-station profile (P3 e2e values; GRID_DOWN_PROFILE, §4) ------------
 export GRID_DOWN_PROFILE=/tmp/p4-e2e-profile.yaml
@@ -33,11 +35,11 @@ printf 'profile:\n  callsign: W1AW\n  grid: FN31pr\n' > "$GRID_DOWN_PROFILE"
 stage "G0 — arch guard + mounts"
 [ "$(uname -m)" = "x86_64" ] || fail "arch is $(uname -m), want x86_64 (P4 kits are x86_64-only)"
 [ -d "$KIT/repo/repodata" ] || fail "kit repo missing at $KIT/repo"
-[ -d "$GD_ROOT/control/registry/apps" ] || fail "operator checkout missing at $GD_ROOT"
+[ -d "$KIT/control/registry/apps" ] || fail "kit missing control/ — M12 kits carry the suite (postinst delegation)"
 
-stage "G1 — kit manifest verify (the shipped verifier, strict)"
-GD_ROOT="$GD_ROOT" . "$GD_ROOT/install/lib/common.sh"
-. "$GD_ROOT/install/lib/kit.sh"
+stage "G1 — kit manifest verify (the shipped verifier, strict; kit's own installer)"
+GD_ROOT="$KIT" . "$KIT/install/lib/common.sh"
+. "$KIT/install/lib/kit.sh"
 gd_kit_verify "$KIT"
 
 stage "G2 — kit dnf set: installer tooling + app runtime rows"
@@ -54,7 +56,7 @@ done
 [ -e /opt/grid-down/js8spotter/js8spotter.py ] || fail "js8spotter payload incomplete (js8spotter.py missing — flatten?)"
 [ -e /opt/grid-down/js8spotter/azure.tcl ] || fail "js8spotter payload incomplete (azure.tcl missing)"
 [ -n "$(ls -A /opt/grid-down/meshtastic-web)" ] || fail "meshtastic-web docroot empty (operator content missing)"
-ARDOPCF="$(python3 - "$GD_ROOT" <<'PY'
+ARDOPCF="$(python3 - "$KIT" <<'PY'
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(sys.argv[1]) / "control"))
@@ -73,7 +75,7 @@ printf '  /opt/grid-down: %s payload dirs\n' \
 stage "G4 — meshtastic real CLI (kit venv), offline pins"
 MT=/opt/grid-down/meshtastic/venv/bin/meshtastic
 "$MT" --version | grep -q "2\.7\.11" || fail "meshtastic --version is not the pin (2.7.11): $("$MT" --version)"
-MT_HELP="$(python3 - "$GD_ROOT" <<'PY'
+MT_HELP="$(python3 - "$KIT" <<'PY'
 import subprocess, sys
 from pathlib import Path
 root = Path(sys.argv[1])
@@ -95,7 +97,7 @@ done
 printf '  %s — configure surface ok (--seturl --port --host)\n' "$("$MT" --version)"
 
 stage "G5 — adapter render, spawn-free (dry_run): target args, payload, PSK mask"
-python3 - "$GD_ROOT" <<'PY' || fail "adapter pins failed"
+python3 - "$KIT" <<'PY' || fail "adapter pins failed"
 import sys
 from pathlib import Path
 

@@ -488,6 +488,24 @@ class WineHub:
                 f"pass the installer path explicitly: gd winehub install {app_id} <path.exe|.zip>"
             )
         if not self.kit_import.is_dir():
+            # M12 kit layout: the installer rides the kit at <root>/wine/<id>/
+            # (container-build.sh stages it there, manifest-pinned) — the same
+            # recipe glob applies, still run in place (G6: never copied out).
+            kit_dir = self.recipes_dir.parent.parent / "wine" / app_id
+            if kit_dir.is_dir():
+                kit_matches = sorted(
+                    p
+                    for p in kit_dir.iterdir()
+                    if p.is_file() and fnmatch.fnmatch(p.name.lower(), pattern.lower())
+                )
+                if len(kit_matches) == 1:
+                    return kit_matches[0]
+                if kit_matches:
+                    listing = ", ".join(p.name for p in kit_matches)
+                    raise WinehubError(
+                        f"{app_id}: {len(kit_matches)} files match '{pattern}' in {kit_dir} "
+                        f"— the kit must carry exactly one (rebuild it): {listing}"
+                    )
             raise WinehubError(
                 f"installer staging dir {self.kit_import} is absent — create it and drop the "
                 f"user-supplied {app_id} download there (G6), or pass its path explicitly"

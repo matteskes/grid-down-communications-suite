@@ -10,6 +10,9 @@
 #   kit/tarball/<id>/    pinned upstream artifacts (verified here; extracted air-gap side)
 #   kit/wheels/          pinned pip wheels (same ABI as the F45 station)
 #   kit/static/<id>/     operator-staged payloads (region ride-along; Doctor WARNs if empty)
+#   kit/control/         the control suite (M12 — postinst units/wine-install
+#                        delegation: gd_postinst_units / gd_postinst_wine_install
+#                        exec control/cli/gd.py under the kit's $GD_ROOT)
 #   kit/apps.txt         selected app ids (one per line)
 #   kit/packages.txt     resolved package specs for offline dnf install (one per line)
 #   kit/artifacts.tsv    id -> (file, dest, format, arch) for the air-gap extractor
@@ -18,7 +21,8 @@
 # Inputs via env (set by build-kit.sh):
 #   GD_IN_OUT (staging dir), GD_IN_ARCH (x86_64|aarch64), GD_IN_RPMFUSION (0|1),
 #   GD_IN_PACK (0|1), GD_IN_PLAN (JSON plan from resolve-kit.py),
-#   /install-src (repo install/ mounted ro), /kits (pack output dir)
+#   /install-src (repo install/ mounted ro), /control-src (repo control/ ro),
+#   /kits (pack output dir)
 # Spike-verified dnf5 flags: tools/spike-dnf5-offline.sh (S1: --resolve --alldeps is a
 # complete closure; S2: createrepo_c must be installed explicitly; S3: never --cacheonly).
 set -euo pipefail
@@ -273,6 +277,27 @@ while IFS=$'\x1f' read -r id units udev dialout prefix install; do
 done < <(plan_rows postinst id units udev dialout prefix install)
 [ -s "$OUT/postinst.tsv" ] && log "postinst: $(wc -l < "$OUT/postinst.tsv") app row(s) of declarative steps"
 
+# --- control suite (M12): the kit carries control/ so the postinst units and --
+# wine-install steps can delegate to the suite directly from the kit dir
+# (kit.sh's gd_postinst_units / gd_postinst_wine_install exec
+# $GD_ROOT/control/cli/gd.py — ROOT = parents[2] = the kit root, so the suite's
+# registry/presets resolve inside the kit). Prune bytecode
+# caches: the kit must be byte-stable and free of stale build artifacts.
+[ -d /control-src ] || { log "FATAL: /control-src not mounted — the M12 kit must carry control/ (build-kit.sh mounts it)"; exit 1; }
+mkdir -p "$OUT/control"
+cp -a /control-src/. "$OUT/control/"
+find "$OUT/control" -depth -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -exec rm -rf {} + 2>/dev/null || true
+log "control: staged $(find "$OUT/control" -type f | wc -l | tr -d ' ') suite files (M12 postinst delegation)"
+
+# --- station profile template (M12): profile_path()'s repo fallback is --------
+# ROOT-relative (<root>/profiles/default.yaml), so the kit carries profiles/ —
+# the operator's spec §4 starting template. Same self-containment contract as
+# control/: the delegated suite resolves everything from inside the kit.
+[ -d /profiles-src ] || { log "FATAL: /profiles-src not mounted — the M12 kit must carry profiles/ (build-kit.sh mounts it)"; exit 1; }
+mkdir -p "$OUT/profiles"
+cp -a /profiles-src/. "$OUT/profiles/"
+log "profiles: staged $(find "$OUT/profiles" -type f | wc -l | tr -d ' ') template(s)"
+
 # --- air-gap installer snapshot + selection lists ---
 mkdir -p "$OUT/install"
 cp -r /install-src/bootstrap.sh /install-src/lib /install-src/recipes "$OUT/install/"
@@ -320,6 +345,12 @@ while IFS= read -r -d '' f; do
             src="operator-staged kit-import installer (G6 — rides the kit, runs at the operator's station)"
             ver="-" ;;
         static/*) src="operator-staged payload (region ride-along)"; ver="-" ;;
+        control/*)
+            src="grid-down repo (control/ suite — postinst units/wine-install delegation, M12)"
+            ver="-" ;;
+        profiles/*)
+            src="grid-down repo (station profile template — profile_path() repo fallback, M12)"
+            ver="-" ;;
     esac
     printf '%s\t%s\t%s\t%s\n' "$h" "$p" "$src" "$ver"
 done ) > "$OUT/manifest.sha256"

@@ -83,6 +83,8 @@ docker run --rm --platform linux/amd64 \
     -e GD_IN_OUT=/kit-staging -e GD_IN_ARCH="$ARCH" -e GD_IN_RPMFUSION="$RPMFUSION" \
     -e GD_IN_PACK="$PACK" -e GD_IN_PLAN="$PLAN" \
     -v "$GD_ROOT/install:/install-src:ro" \
+    -v "$GD_ROOT/control:/control-src:ro" \
+    -v "$GD_ROOT/profiles:/profiles-src:ro" \
     -v "$GD_ROOT/kit-static:/kit-static:ro" \
     -v "$STAGING:/kit-staging" \
     -v "$OUT:/kits" \
@@ -102,6 +104,8 @@ printf '  rpms     : %s\n' "$(find "$STAGING/repo" -maxdepth 1 -name '*.rpm' | w
     "$(find "$STAGING/wheels" -name '*.whl' | wc -l | tr -d ' ')"
 [ -d "$STAGING/tarball" ] && printf '  artifacts: %s\n' \
     "$(find "$STAGING/tarball" -type f | wc -l | tr -d ' ')"
+[ -d "$STAGING/control" ] && printf '  control  : %s files (the suite — postinst units/wine-install delegation, M12)\n' \
+    "$(find "$STAGING/control" -type f | wc -l | tr -d ' ')"
 [ -f "$STAGING/wine-prefix.tar.zst" ] && printf '  prefix   : %s\n' \
     "$(du -h "$STAGING/wine-prefix.tar.zst" | cut -f1) (kit-built, unpacked air-gap by postinst)"
 [ -s "$STAGING/wine.tsv" ] && printf '  wine     : %s installer(s) from kit-import (G6 — operator-station only)\n' \

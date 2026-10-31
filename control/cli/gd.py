@@ -234,7 +234,11 @@ def cmd_audio(args) -> int:
 
 
 def cmd_doctor(args) -> int:
-    results = doctor.run_checks(profile_data=profile.load_profile())
+    kit_dir = getattr(args, "kit", None)
+    results = doctor.run_checks(
+        profile_data=profile.load_profile(),
+        kit_dir=Path(kit_dir) if kit_dir else None,
+    )
     if args.json:
         print(doctor.to_json(results))
     else:
@@ -588,6 +592,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_doctor = sub.add_parser("doctor", help="station preflight checks (spec §6.7, M1 subset)")
     p_doctor.add_argument("--json", action="store_true", help="machine-readable report")
+    p_doctor.add_argument(
+        "--kit",
+        metavar="DIR",
+        default=None,
+        help="also check a built kit dir: manifest re-hash + M12 control/ presence",
+    )
     p_doctor.set_defaults(func=cmd_doctor)
 
     p_launch = sub.add_parser("launch", help="launch an app or a bundle session")

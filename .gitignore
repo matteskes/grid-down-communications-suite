@@ -8,6 +8,9 @@ venv/
 # Kit build artifacts (never commit kits — they contain user-supplied installers/licenses)
 kit/
 kit-staging/
+kit-staging-restored/
+usb-kit/
+usb-kit-tampered/
 install/bundle-builder/builds/out/
 *.tar.zst
 *.iso

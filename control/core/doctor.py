@@ -24,6 +24,7 @@ scan beyond the meshtasticd MQTT surface.
 from __future__ import annotations
 
 import glob
+import hashlib
 import json
 import os
 import re
@@ -70,7 +71,7 @@ MESHTASTICD_CONFIG_FILES = (
 )
 
 DEFERRED = (
-    "kit manifest sha256 verification (needs kit/ from a build)",
+    # kit manifest verification landed in M12 as _check_kit (gd doctor --kit)
     "per-app phone-home scan beyond the meshtasticd MQTT surface (M9)",
 )
 
@@ -533,6 +534,59 @@ def _check_wine() -> CheckResult:
     return CheckResult("wine", "VARA wine hub", "ok", detail)
 
 
+def _check_kit(kit_dir: Path | None) -> CheckResult:
+    """M12 (§6.9): kit self-containment — run on a built kit dir (`gd doctor --kit`).
+    Lands the kit check deferred since M1: strict per-file manifest re-hash (the
+    same check gd_kit_verify enforces at install time) plus the M12 contract —
+    the kit carries control/, so postinst units/wine-install steps can delegate
+    to the suite straight from the kit dir. Never raises."""
+    cid, title = "kit", "kit self-containment (§6.9, M12)"
+    if kit_dir is None:
+        return CheckResult(cid, title, "skip", "no --kit dir given (pass a built kit tree)")
+    kit = Path(kit_dir)
+    if not kit.is_dir():
+        return CheckResult(cid, title, "fail", f"{kit}: not a directory")
+    manifest = kit / "manifest.sha256"
+    if not manifest.is_file():
+        return CheckResult(cid, title, "fail", f"{kit}: no manifest.sha256 (not a built kit)")
+    for rel in ("control/cli/gd.py", "control/registry/apps", "profiles/default.yaml"):
+        if not (kit / rel).exists():
+            return CheckResult(
+                cid,
+                title,
+                "fail",
+                f"{kit}: missing {rel} — pre-M12 kit; rebuild so postinst "
+                "units/wine-install can delegate to the kit's own suite",
+            )
+    bad: list[str] = []
+    rows = 0
+    with manifest.open() as fh:
+        for line in fh:
+            want, rel = line.rstrip("\n").split("\t")[:2]
+            rows += 1
+            p = kit / rel
+            if not p.is_file():
+                bad.append(f"missing {rel}")
+                continue
+            h = hashlib.sha256()
+            with p.open("rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            if h.hexdigest() != want:
+                bad.append(f"hash {rel}")
+    if bad:
+        shown = "; ".join(bad[:5]) + (" …" if len(bad) > 5 else "")
+        return CheckResult(cid, title, "fail", f"{kit}: {shown}")
+    arch = (kit / "ARCH").read_text().strip() if (kit / "ARCH").is_file() else "?"
+    return CheckResult(
+        cid,
+        title,
+        "ok",
+        f"{kit}: manifest clean ({rows} files), control/ present, arch {arch} "
+        "— postinst delegation armed",
+    )
+
+
 def _check_deferred() -> CheckResult:
     return CheckResult("deferred", "checks deferred to later phases", "skip", "; ".join(DEFERRED))
 
@@ -618,6 +672,7 @@ def run_checks(
     state_dir: Path | None = None,
     profile_data: dict | None = None,
     ports: dict[str, int] | None = None,
+    kit_dir: Path | None = None,
 ) -> list[CheckResult]:
     """Run every check; returns results in stable order. Never raises."""
     ports = PORTS if ports is None else ports
@@ -630,6 +685,7 @@ def run_checks(
     results.append(_check_rig_model(profile_data))
     results += _check_mesh(profile_data)
     results.append(_check_wine())
+    results.append(_check_kit(kit_dir))
     results.append(_check_deferred())
     return results
 

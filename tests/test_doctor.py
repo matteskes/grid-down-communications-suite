@@ -30,6 +30,75 @@ def test_baseline_report_has_no_failures(tmp_path):
     assert doctor.all_ok(results), [r for r in results if r.status == "fail"]
 
 
+# --- M12: kit self-containment (gd doctor --kit) ------------------------------
+
+import hashlib  # noqa: E402  (kit fixtures)
+
+_KIT_FILES = {
+    "ARCH": b"x86_64\n",
+    "apps.txt": b"direwolf\n",
+    "control/cli/gd.py": b"print('gd')\n",
+    "control/registry/apps/direwolf.yaml": b"id: direwolf\n",
+    "profiles/default.yaml": b"profile:\n  id: default\n",
+    "install/bootstrap.sh": b"#!/bin/sh\n",
+}
+
+
+def _write_kit(root: Path, files: dict[str, bytes]) -> Path:
+    """A synthetic built kit: files + manifest.sha256 over them (never listing
+    itself — same contract as the builder's manifest generation)."""
+    kit = root / "kit-staging"
+    for rel, data in files.items():
+        p = kit / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    rows = [f"{hashlib.sha256(files[rel]).hexdigest()}\t{rel}" for rel in sorted(files)]
+    (kit / "manifest.sha256").write_text("\n".join(rows) + "\n")
+    return kit
+
+
+def test_kit_check_skips_without_kit(tmp_path):
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={})
+    (kit_res,) = [r for r in results if r.id == "kit"]
+    assert kit_res.status == "skip"
+
+
+def test_kit_check_ok_on_self_contained_kit(tmp_path):
+    kit = _write_kit(tmp_path, dict(_KIT_FILES))
+    res = doctor._check_kit(kit)
+    assert res.status == "ok", res.detail
+    assert "control/ present" in res.detail and "x86_64" in res.detail
+    # public path: threaded through run_checks, and not a failure overall
+    results = doctor.run_checks(state_dir=tmp_path, profile_data={}, kit_dir=kit)
+    (kit_res,) = [r for r in results if r.id == "kit"]
+    assert kit_res.status == "ok" and doctor.all_ok(results)
+
+
+def test_kit_check_fails_on_pre_m12_kit(tmp_path):
+    files = dict(_KIT_FILES)
+    del files["control/cli/gd.py"]
+    del files["control/registry/apps/direwolf.yaml"]
+    res = doctor._check_kit(_write_kit(tmp_path, files))
+    assert res.status == "fail"
+    assert "missing control/cli/gd.py" in res.detail
+
+
+def test_kit_check_fails_on_tampered_file(tmp_path):
+    kit = _write_kit(tmp_path, dict(_KIT_FILES))
+    (kit / "apps.txt").write_bytes(b"tampered\n")
+    res = doctor._check_kit(kit)
+    assert res.status == "fail"
+    assert "hash apps.txt" in res.detail
+
+
+def test_kit_check_fails_on_missing_listed_file(tmp_path):
+    kit = _write_kit(tmp_path, dict(_KIT_FILES))
+    (kit / "apps.txt").unlink()
+    res = doctor._check_kit(kit)
+    assert res.status == "fail"
+    assert "missing apps.txt" in res.detail
+
+
 def test_state_hygiene_flags_stale_instance(tmp_path):
     (tmp_path / "supervisor.json").write_text(
         json.dumps(
