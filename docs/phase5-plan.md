@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a landed (`1e6485e`, 2026-10-30) · next: M11b ·
+**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) landed · next: M11c ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -84,11 +84,44 @@ Corrections the check caught (both folded into `1e6485e`):
      decided by the same per-app probe as `gd winehub install` (`wine.exes`
      candidates under `drive_c`).
 
-### M11b — builder side: prefix tarball
+### M11b — builder side: prefix tarball — **LANDED** (`0cc3bfc`, 2026-10-31)
 `container-build.sh` builds the shared prefix once in the x86_64 container
 (wine from the kit dnf set + the staged `kit-import/` installers), packs
 `kit/wine-prefix.tar.zst` + manifest rows. G6 unchanged: installers ride the
 kit to the operator's own station only; licenses stay applied in-app.
+
+**Shipped:**
+- Resolver: wine apps resolve (the M11a-era refusal is gone) into
+  `plan["wine"]` rows `{id, file, glob, mode, install_dir, sha256}`.
+  Fail-closed G6 guards: `wine.installer_glob` must match exactly one staged
+  `install/kit-import/` file, and the new `wine.installer_sha256` pin (64-hex,
+  M6 discipline) must match the staged bytes — 0 or ≥2 matches, or drift,
+  exits 2 naming the fix (re-stage or re-pin). `installer:` is `setup`
+  (default) or `portable` (requires `install_dir`). The arch guard moved
+  ahead of the strategy loop — a wrong-arch plan fails before any staging
+  I/O. Wine itself joins the kit dnf set with zero resolver code: the
+  recipes carry `dnf: packages: [wine]` and the M10-proven any-strategy
+  dnf-row tail picks it up (same wine stack builds the prefix and runs it).
+- Builder: `kit/wine/<id>/<artifact>` + `kit/wine.tsv` (id, kit path, mode,
+  install_dir, glob); prefix built once with `wineboot -i` under winehub's
+  suppress env (`WINEDLLOVERRIDES="mscoree,mshtml="`, `WINEDEBUG=-all`),
+  packed Rosetta-safe (python tarfile → zstd — GNU tar is broken under
+  Rosetta) with top-level `wine-prefix/` so the executor's
+  `bsdtar -xf -C /opt/grid-down` lands it at the documented default.
+  Manifest rows carry the wine version (11.20) + the G6 source note. No new
+  container mounts — `kit-import` already rides `/install-src`.
+- Air-gap side unchanged: M11a's `gd_postinst_wine_prefix` already consumed
+  exactly this ball (its missing-tarball guard now only trips on pre-M11b
+  kits); `wine-install` stays suite-delegated (M12 wires `gd winehub install`).
+
+**Validation:** 269 passed (was 261; +9 wine staging tests incl. the G6
+fail-closed cases, −1 flipped refusal test), lint clean, `bash -n` ×4.
+fedora:45 mechanism check green end-to-end: host resolver smoke over the
+real recipes + staged pins; container build with a one-app (varac) plan —
+real wine closure download (41 wine rpms into the kit repo), `wineboot -i`
+prefix init + 996 MB ball, wine.tsv / zip-sha / postinst / manifest
+assertions, and the executor's bsdtar round-trip unpack in-container
+(`.update-timestamp` + `drive_c` present).
 
 ### M11c — hardening
 - **Arch guard:** the kit records its target arch (builder side writes it);
