@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) landed · next: M11c ·
+**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) landed · next: M11d ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -123,7 +123,7 @@ prefix init + 996 MB ball, wine.tsv / zip-sha / postinst / manifest
 assertions, and the executor's bsdtar round-trip unpack in-container
 (`.update-timestamp` + `drive_c` present).
 
-### M11c — hardening
+### M11c — hardening — **LANDED** (`5b1393d`, 2026-10-31)
 - **Arch guard:** the kit records its target arch (builder side writes it);
   `bootstrap.sh` refuses an arch mismatch before touching dnf — the P1
   finding #1 failure mode dies up front instead of in the solver.
@@ -134,6 +134,50 @@ assertions, and the executor's bsdtar round-trip unpack in-container
   (dnf is transactional; payload steps are copy/extract idempotent).
 - **State:** `state.json` gains `kit_arch`, `kit_manifest_lines`,
   `postinst_done` (per-step watermarks).
+
+**Shipped:**
+- Arch guard: `container-build.sh` writes `kit/ARCH` (one line) before the
+  manifest pass, so the target arch is manifest-hashed like every other kit
+  file; `build-kit.sh` prints it in the kit-ready summary. `bootstrap.sh`
+  adds `ARCH` to its completeness list and calls `gd_kit_arch_check` right
+  after the strict manifest verify — before the dry-run block and anything
+  mutating — so missing (pre-M11c kit), garbage, or mismatched ARCH dies
+  naming the fix, on `--dry-run` too. The P1 finding #1 refusal is one line.
+- Idempotency + resume: `postinst_done` became per-step watermarks
+  (`app/step` tokens in a deduplicated state list) driven by
+  `gd_postinst_step`: step exit 0 = applied (marked; re-runs skip it),
+  non-zero = self-skip with the follow-up printed (no mark — a fixed
+  condition + re-run applies it), `gd_die` = loud stop naming app/step. The
+  operator-skip paths in dialout/units/wine-install return non-zero so they
+  never watermark. `installed_at` freezes across same-kit re-runs, so a
+  completed install's re-run exits 0 and leaves `state.json` byte-identical.
+  `kit_arch` + `kit_manifest_lines` land right after dnf — the first point
+  the python3-based state helpers are guaranteed to work (a bare container's
+  pre-dnf writes would only warn; a crash before it is a rolled-back dnf
+  transaction the re-run redoes). Phase names ride `$PHASE` into an ERR trap
+  so unguarded failures stop loud naming the phase and the resume contract.
+- State helpers: `gd_state_get` / `gd_state_mark` / `gd_state_marked` in
+  `common.sh` (read-back, deduplicated list append migrating M11a's
+  `postinst_done: "yes"` sentinel, membership probe).
+
+**Validation:** suite 269 green (no python behavior change); `bash -n` ×5;
+lint clean; host probes of the state helpers (dedup + sentinel migration +
+missing-key) and the arch guard (match/mismatch/garbage/missing).
+fedora:45 container check of record (gd-f45-current, `--network none`, real
+direwolf+hamlib kit, one green run from a clean kit build): dry-run arch
+line; install with an operator (dialout watermarked ×2, units M12-warn-skip
+unmarked); re-run exits 0 with state byte-identical and dnf "Nothing to
+do."; tampered-ARCH (aarch64) refused before repo setup with state
+untouched — and refused on `--dry-run`; missing ARCH refused; a
+bogus-udev-row manifest-consistent tamper stops loud at
+`postinst[zz-bogus/udev]` with earlier watermarks intact, and the repaired
+re-run resumes past them to completion. Battery-iteration lessons folded
+into the check: the runner passed extra args through (its "dry-run" first
+ran a full install), `cmp`/`diff` don't exist in the f45 container (exit-127
+masquerading as a state mutation — byte-compare in python3 instead), and
+bash ERR traps skip guarded commands (a `|| gd_die` path never prints the
+phase line; the ERROR step line is the assertion there). M11d re-asserts
+the idempotency proof inside its round-trip harness.
 
 ### M11d — gate
 Container round-trip (`--network none`) with postinst assertions: unit files
