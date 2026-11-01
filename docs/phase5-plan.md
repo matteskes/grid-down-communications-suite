@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) + M13 (automated leg) landed · next: M14 ·
+**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) + M13 (automated leg) landed; human leg deferred to M14 · next: M14 ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -295,7 +295,8 @@ refusing; round-trips lean 78 s / wine 265 s; USB gate 77 s.
 
 ## M13 — Clean-host drill (automated + human, per spec §10)
 
-**Status: LANDED** (automated leg; human leg pending — runbook ready). The
+**Status: LANDED** (automated leg; human leg deferred to M14 — runbook ready,
+needs a real x86_64 host). The
 drill shipped as the P4 harness split: `tools/drill-clean-rebuild.sh` (host:
 full 38-app build → USB pack → **kit-staging wiped** → N rounds) +
 `tools/p5-drill-gates.sh` (container: the gate chain, final line exactly
@@ -334,13 +335,20 @@ full 38-app build → USB pack → **kit-staging wiped** → N rounds) +
   0 fail); 2-part 3.8 G layout; 278 tests green (+4 winehub innoextract),
   lint clean.
 - `docs/phase5-runbook.md` — the human half, written and ready: fresh
-  **x86_64** F45 GUI VM, NIC detached before unpack, layout via `vmpal cp` (or
+  **x86_64** F45 host, NIC detached before unpack, layout via `vmpal cp` (or
   a FAT32 stick), the kit's own unpacker + installer, checks H1–H8, transcripts
-  back into the audit doc. **Gate remainder:** runbook executed once, evidence
-  committed (solo, or driven in a follow-up session on a UTM/VMPal VM).
+  back into the audit doc. **Gate remainder — DEFERRED (M14 open item):** this
+  Mac's only VM is the aarch64 reference VM and full kits are x86_64-only
+  (VARA/wine + artemis have no arm upstream), so the arch guard would refuse
+  the field kit there; a dnf-only 16-of-38 subset was considered and rejected
+  (it dilutes the gate). Details in `docs/audit/p5-clean-rebuild.md`.
 
 ## M14 — Acceptance + closure
 
+- **Open item from M13:** the human clean-host leg (`docs/phase5-runbook.md`)
+  is deferred until a real x86_64 host is available. At M14, either execute it
+  before closure (the proven `usb-kit/` layout is staged and waiting), or
+  record it as a post-closure field task in the spec §12 sweep.
 - Audit doc `docs/audit/p5-clean-rebuild.md`: runs + carriers, gate table,
   findings that shaped the design, caveats (empty region slots, wine subset,
   hardware-gated leftovers).

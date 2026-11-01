@@ -90,9 +90,27 @@ calling user's (root's) unit dir — the render evidence is G5's 21 units for
 - Resolver accepts the new mode (`WINE_MODES`) and requires `install_dir` for
   it, same as portable.
 
-## Human leg (pending)
+## Human leg (deferred — needs a real x86_64 host)
 
-The runbook is ready (`docs/phase5-runbook.md`): fresh x86_64 F45 GUI VM, NIC
-detached before unpack, layout in via `vmpal cp` (or a FAT32 stick), the kit's
-own unpacker + installer, the H1–H8 checks, transcripts back into this file.
-To be executed once — solo, or driven in a follow-up session on a UTM/VMPal VM.
+The runbook is written and ready (`docs/phase5-runbook.md`): fresh x86_64 F45
+host, NIC detached before unpack, layout in via `vmpal cp` (or a FAT32 stick),
+the kit's own unpacker + installer, the H1–H8 checks, transcripts back into
+this file. **Execution is deferred (2026-11-01 decision):** this Mac's only VM
+is the aarch64 reference VM — the P2/P3b arm-validated "Fedora 45 Workstation"
+— and full kits are x86_64-only by design: `resolve-kit.py` refuses
+`--arch aarch64` with any non-dnf app selected ("VARA/wine is x86_64-only
+upstream, artemis ships x86_64 only"), so the kit arch guard would refuse the
+field kit there — the same refusal drill gate G1 exercises. A dnf-only
+aarch64 subset leg (16 of 38 recipes; the 9 build + 7 tarball + 6 wine apps
+are the x86_64 machinery) was considered and rejected: it would dilute the
+gate's meaning, not strengthen it.
+
+Staged and waiting for a real x86_64 host (VM or bare metal, ~30–45 min):
+
+- the runbook's §1–§6 procedure and H1–H8 gates;
+- the byte-proven layout `usb-kit/` — `gd-kit-20261101-x86_64`
+  (`tar.part-aa` 3.98 G + `tar.part-ab` 109 M + `usb-manifest.sha256`), the
+  exact bytes that passed this drill 3×.
+
+M14 carries the open item: execute the runbook before P5 closure, or record
+it as a post-closure field task in the spec §12 sweep.
