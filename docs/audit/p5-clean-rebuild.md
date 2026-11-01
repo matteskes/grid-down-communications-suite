@@ -3,7 +3,7 @@
 **Date:** 2026-11-01 (M13). Automated leg on the macOS host via Docker Desktop
 (`--platform linux/amd64`, Rosetta): full 38-app kit build → FAT32 USB pack →
 staging wiped → N air-gapped fedora:45 rebuilds. Human leg: `docs/phase5-runbook.md`
-(fresh x86_64 F45 GUI VM; pending — see the end of this file).
+(fresh x86_64 F45 host; deferred — see the end of this file).
 
 ## The gate
 
@@ -114,3 +114,13 @@ Staged and waiting for a real x86_64 host (VM or bare metal, ~30–45 min):
 
 M14 carries the open item: execute the runbook before P5 closure, or record
 it as a post-closure field task in the spec §12 sweep.
+
+## P5 closure (M14, 2026-11-01)
+
+Acceptance per spec §10 — "full offline rebuild from USB kit on a clean host"
+— is carried by the automated leg: 3× `P5: PASS` air-gapped rebuilds from the
+2-part FAT32 layout alone (fresh containers, kit-staging wiped, G0–G8),
+evidence above. The human leg's remainder is **registered, not waived**:
+spec §12 item 6 (deferred — needs a real x86_64 host; runbook + layout
+staged) and item 7 (hardware-gated acceptance addenda). The README status
+line (stale since P3b) was advanced to lead with P5 complete + P4 closed.

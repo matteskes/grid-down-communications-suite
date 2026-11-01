@@ -386,6 +386,17 @@ source URLs for every artifact for auditability.
 5. ~~Project license choice~~ **Resolved 2026-10-26** — suite code is **MIT** (`LICENSE` at the
    repo root, SPDX headers on all source files); bundled third-party attribution is inventoried
    in `docs/audit/third-party-licenses.md` (see §13).
+6. **P5 human clean-host leg — deferred 2026-11-01.** The runbook (`docs/phase5-runbook.md`)
+   and the byte-proven layout it consumes are staged, but no x86_64 host exists to run them
+   on: this Mac's only VM is the aarch64 reference VM, and full kits are x86_64-only by
+   design (`resolve-kit.py` refuses non-dnf apps on aarch64 — VARA/wine and artemis have no
+   arm upstream); a dnf-only 16-of-38 subset leg was considered and rejected (it dilutes the
+   gate). Execute on any fresh x86_64 F45 host (~30–45 min), or carry as a field task at
+   deployment. Rationale + what is staged: `docs/audit/p5-clean-rebuild.md` (§ Human leg).
+7. **Hardware-gated acceptance addenda** (carried, non-blocking): P3's on-air Winlink E2E
+   (x86_64 carrier, `docs/phase3-vm-runbook.md`); handset + BLE pins; VARA/wine pins;
+   meshtasticd install. Bench evidence exists for the machinery (P4 mesh profile round-trip,
+   P3b audio/COM loopbacks); the addenda land when the hardware is in hand.
 
 ---
 

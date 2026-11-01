@@ -8,7 +8,7 @@ designed to be **built online, installed offline, and run fully offline**.
 
 - Full design and scope: [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) (v0.3)
 - Fedora 45 package audit: [`docs/audit/f45-package-audit.md`](docs/audit/f45-package-audit.md)
-- Status: **Phase 2 closed — v0.6.0-m5: M1–M5 shipped (CLI v1, supervisor + systemd-unit backend, Control Center v1 + install-state columns + wine hub panel + tray/launcher, rigctld/audio ownership, `gd winehub`) and VM-accepted on air-gapped Fedora 45 aarch64 (M1–M4 12-gate pass 2026-10-26 + M5 smoke 2026-10-27)**; evidence: `docs/audit/phase2-vm-acceptance.md` — **P3b shipped 2026-10-28** (`gd audio wire|unwire` rig-audio loopbacks + `gd winehub bridge` pty-pair COM harness, arm-validated on the aarch64 VM: `docs/phase3b-vm-runbook.md`); remaining: P3's on-air Winlink E2E (x86_64 carrier: `docs/phase3-vm-runbook.md`)
+- Status: **P5 complete — M11–M13 closed: 3× `P5: PASS` clean-host USB rebuild (2026-11-01, `9c4c15e`: 38 apps, 2-part 3.8 G layout, air-gapped fedora:45 rounds; audit `docs/audit/p5-clean-rebuild.md`)**; **P4 closed 2026-10-30** (3× `P4: PASS` container E2E, 19 apps; `docs/audit/p4-container-e2e.md`); **P3b shipped 2026-10-28** (`gd audio wire|unwire` rig-audio loopbacks + `gd winehub bridge` pty-pair COM harness, arm-validated on the aarch64 VM); remaining (all need a real x86_64 carrier — spec §12 items 6–7): the P5 human clean-host leg (`docs/phase5-runbook.md`, layout staged), P3's on-air Winlink E2E, and the hardware round (handset/BLE pins, wine pins, meshtasticd install)
 
 ## Why
 

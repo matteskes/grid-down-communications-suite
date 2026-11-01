@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) + M13 (automated leg) landed; human leg deferred to M14 · next: M14 ·
+**Status:** P5 complete — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) + M13 (automated leg, `9c4c15e`) + M14 closure landed · 3× `P5: PASS` (2026-11-01) · human clean-host leg open: spec §12 item 6 · next: field addenda (spec §12 items 6–7) ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -343,18 +343,21 @@ full 38-app build → USB pack → **kit-staging wiped** → N rounds) +
   the field kit there; a dnf-only 16-of-38 subset was considered and rejected
   (it dilutes the gate). Details in `docs/audit/p5-clean-rebuild.md`.
 
-## M14 — Acceptance + closure
+## M14 — Acceptance + closure — **LANDED** (2026-11-01)
 
-- **Open item from M13:** the human clean-host leg (`docs/phase5-runbook.md`)
-  is deferred until a real x86_64 host is available. At M14, either execute it
-  before closure (the proven `usb-kit/` layout is staged and waiting), or
-  record it as a post-closure field task in the spec §12 sweep.
-- Audit doc `docs/audit/p5-clean-rebuild.md`: runs + carriers, gate table,
-  findings that shaped the design, caveats (empty region slots, wine subset,
-  hardware-gated leftovers).
-- Spec §12 sweep; phase5-plan closure; status banner; commit + push via the
-  `.git/COMMIT_MSG.txt` discipline.
-- **Gate:** spec §10 P5 acceptance met and evidenced.
+- **Open item from M13 — disposition: recorded, not executed.** The human
+  clean-host leg (`docs/phase5-runbook.md`) stays deferred: no x86_64 host
+  exists on this Mac, the aarch64 reference VM cannot take the full kit
+  (`resolve-kit.py` refuses non-dnf apps there; VARA/wine + artemis have no
+  arm upstream), and a dnf-only subset was rejected as gate-diluting. It is
+  registered as **spec §12 item 6**, with the hardware-gated acceptance
+  addenda as **item 7**. The runbook + the proven `usb-kit/` layout remain
+  staged for any fresh x86_64 F45 host.
+- Spec §12 swept (items 6–7); README status line advanced (was stale at P3b —
+  now leads with P5 complete + P4 closed); audit doc gained the closure
+  section. **Gate:** spec §10 P5 acceptance met and evidenced — the automated
+  leg (3× clean-host USB rebuild, `9c4c15e`) carries it; the human-leg
+  remainder is registered, not waived.
 
 ## Arch policy (carried over from P4)
 
