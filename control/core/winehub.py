@@ -17,10 +17,13 @@ apps (spec §6.5); this module owns their lifecycle instead:
 - ``install(app_id)``      silent install of the user-supplied VARA installer
                            (.exe, or the .zip wrapping it) from
                            ``install/kit-import/`` + install probe; recipe
-                           ``wine.installer:`` picks the mode — ``setup``
-                           (Inno ``/VERYSILENT``, the VARA family) or
-                           ``portable`` (a plain zip unpacked into
-                           ``wine.install_dir`` — VarAC ships no installer)
+                           ``wine.installer:`` picks the mode — ``innoextract``
+                           (unpack the Inno Setup exe without running it; the
+                           M13 default for VARA HF/FM, which wine cannot run
+                           headless), ``setup`` (Inno ``/VERYSILENT`` under
+                           wine; needs a display/session) or ``portable``
+                           (a plain zip unpacked into ``wine.install_dir``
+                           — VarAC ships no installer)
 
 The prefix itself is created by the kit postinst (§5) from the cached prefix
 tarball — or by ``init_prefix()`` on a dev box; without it every verb that
@@ -68,10 +71,14 @@ KIT_IMPORT = Path(
 )
 # The VARA installers are Inno Setup packages; these switches install silently.
 # WINEDLLOVERRIDES skips the wine-mono/gecko download dialogs on first run.
+# M13 drill finding: under a headless container wine refuses to run them at all
+# (the launch is routed through wine's start program and ShellExecuteEx fails),
+# so the VARA recipes install with innoextract instead — _install_innoextract.
 SILENT_INSTALL_FLAGS = ("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
 WINE_SUPPRESS_ENV = {"WINEDLLOVERRIDES": "mscoree,mshtml=", "WINEDEBUG": "-all"}
 INIT_TIMEOUT_S = 600
 INSTALL_TIMEOUT_S = 900
+EXTRACT_TIMEOUT_S = 300
 
 
 class WinehubError(RuntimeError):
@@ -562,10 +569,15 @@ class WineHub:
     def install(self, app_id: str, installer: str | Path | None = None) -> dict:
         """Silent install of one user-supplied VARA artifact into the prefix.
 
-        ``setup`` mode (the VARA family's Inno installers) runs
-        ``wine <setup.exe> /VERYSILENT /SUPPRESSMSGBOXES /NORESTART`` with
-        WINEPREFIX set, creating the prefix first if needed. ``portable``
-        mode (``wine.installer: portable`` — VarAC ships a plain zip, not an
+        ``innoextract`` mode (``wine.installer: innoextract`` — VARA HF/FM
+        since M13) unpacks the Inno Setup exe with innoextract instead of
+        running it: wine refuses these installers in a headless container
+        (the drill's first finding), and the unpack needs no display, no
+        elevation and no wine at all. ``setup`` mode (the pre-M13 path)
+        runs ``wine <setup.exe> /VERYSILENT /SUPPRESSMSGBOXES /NORESTART``
+        with WINEPREFIX set, creating the prefix first if needed — it needs
+        a display/session (a field VM has one). ``portable`` mode
+        (``wine.installer: portable`` — VarAC ships a plain zip, not an
         installer) never runs wine: it unpacks into the recipe's
         ``wine.install_dir`` under ``drive_c``. Either way the probe after
         the step decides success: an installer that exits 0 without
@@ -583,14 +595,18 @@ class WineHub:
             return {"id": app_id, "state": "already-installed", "exe_path": before["exe_path"]}
         recipe = load_wine_recipe(app_id, self.recipes_dir)
         mode = str(recipe.get("installer") or "setup").strip().lower()
-        if mode not in ("setup", "portable"):
-            raise WinehubError(f"{app_id}: recipe wine.installer {mode!r} is not setup|portable")
-        wine = None if mode == "portable" else self._require_wine()
+        if mode not in ("setup", "portable", "innoextract"):
+            raise WinehubError(
+                f"{app_id}: recipe wine.installer {mode!r} is not setup|portable|innoextract"
+            )
+        wine = None if mode in ("portable", "innoextract") else self._require_wine()
         artifact = self.resolve_installer(app_id, installer)
         setup, temp_dir = self._unpack_zip(artifact)
         try:
             if mode == "portable":
                 return self._install_portable(app_id, recipe, temp_dir)
+            if mode == "innoextract":
+                return self._install_innoextract(app_id, recipe, setup)
             if not (self.prefix / "drive_c").is_dir():
                 self.init_prefix()
             log_dir = self.state_dir / "logs" / "winehub"
@@ -636,6 +652,104 @@ class WineHub:
             if temp_dir is not None:
                 shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def _windows_dir_target(self, app_id: str, recipe: dict) -> Path:
+        """The recipe's ``wine.install_dir`` (a ``C:\\…`` Windows path) resolved
+        under the prefix's ``drive_c`` — the placement contract shared by the
+        portable and innoextract install modes."""
+        install_dir = str(recipe.get("install_dir") or "").strip()
+        if not install_dir:
+            raise WinehubError(
+                f"{app_id}: this install mode needs wine.install_dir in the recipe — "
+                f'the Windows dir the files unpack to under drive_c (e.g. "C:\\VarAC")'
+            )
+        m = re.fullmatch(r"[Cc]:(\\.*)", install_dir)
+        if not m:
+            raise WinehubError(
+                f"{app_id}: recipe wine.install_dir {install_dir!r} is not a C:\\… "
+                f'Windows path (e.g. "C:\\VarAC")'
+            )
+        parts = [p for p in m.group(1).split("\\") if p]
+        if any(p in ("..", ".") for p in parts):
+            raise WinehubError(
+                f"{app_id}: recipe wine.install_dir {install_dir!r} would escape drive_c"
+            )
+        target = self.prefix / "drive_c"
+        for part in parts:
+            target = target / part
+        return target
+
+    def _install_innoextract(self, app_id: str, recipe: dict, setup: Path) -> dict:
+        """``wine.installer: innoextract`` — unpack the Inno Setup exe without
+        running it.
+
+        The M13 drill's first finding: in a headless container wine routes
+        the setup launch through its start program and dies in
+        ShellExecuteEx before Inno's /VERYSILENT path ever runs — and a
+        silent install should not need a display anyway. innoextract
+        produces the same files (the app dir with the candidate exes) with
+        none of that: no wine run, no elevation handshake, no display. It
+        must ride the kit dnf set (the recipe's dnf row), like every other
+        installer tool. The prefix must already exist (kit postinst tarball
+        or ``gd winehub init``), as in portable mode; the probe decides
+        success.
+        """
+        inno = shutil.which("innoextract")
+        if inno is None:
+            raise WinehubError(
+                f"{app_id}: innoextract not on PATH — the recipe's dnf row must ship it "
+                "(kit repo; wine cannot run Inno installers headless, M13 finding)"
+            )
+        target = self._windows_dir_target(app_id, recipe)
+        self._require_prefix()
+        out = Path(tempfile.mkdtemp(prefix="gd-inno-"))
+        log_dir = self.state_dir / "logs" / "winehub"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"install-{app_id}.log"
+        with open(log_path, "ab") as log:
+            log.write(
+                f"--- install {app_id}: innoextract {setup.name} -> {target} {_now()} ---\n".encode()
+            )
+            try:
+                proc = subprocess.run(
+                    [inno, "-s", "-d", str(out), str(setup)],
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    timeout=EXTRACT_TIMEOUT_S,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise WinehubError(
+                    f"{app_id}: innoextract still running after {EXTRACT_TIMEOUT_S}s "
+                    f"(log: {log_path})"
+                ) from exc
+        if proc.returncode != 0:
+            shutil.rmtree(out, ignore_errors=True)
+            raise WinehubError(
+                f"{app_id}: innoextract exited {proc.returncode} — the setup exe may use "
+                f"a newer Inno version than innoextract supports (log: {log_path})"
+            )
+        try:
+            # innoextract renders the Inno {app} dir as app/ — that subtree is
+            # the payload; other Inno dirs ($TEMP, installer scaffolding) are skipped
+            src = out / "app" if (out / "app").is_dir() else out
+            shutil.copytree(src, target, dirs_exist_ok=True)
+        finally:
+            shutil.rmtree(out, ignore_errors=True)
+        after = self.probe(app_id)
+        if not after["installed"]:
+            raise WinehubError(
+                f"{app_id}: unpacked into {target} but no candidate exe appeared "
+                f"({', '.join(after['candidates'])}) — the installer's layout may "
+                f"have changed; check it by hand (log: {log_path})"
+            )
+        return {
+            "id": app_id,
+            "state": "installed",
+            "mode": "innoextract",
+            "dir": str(target),
+            "exe_path": after["exe_path"],
+            "log": str(log_path),
+        }
+
     def _install_portable(self, app_id: str, recipe: dict, temp_dir: Path | None) -> dict:
         """``wine.installer: portable`` — unpack a plain-zip app (VarAC).
 
@@ -651,26 +765,13 @@ class WineHub:
                 f"{app_id}: portable install needs wine.install_dir in the recipe — "
                 f'the Windows dir the zip unpacks to under drive_c (e.g. "C:\\VarAC")'
             )
-        m = re.fullmatch(r"[Cc]:(\\.*)", install_dir)
-        if not m:
-            raise WinehubError(
-                f"{app_id}: recipe wine.install_dir {install_dir!r} is not a C:\\… "
-                f'Windows path (e.g. "C:\\VarAC")'
-            )
-        parts = [p for p in m.group(1).split("\\") if p]
-        if any(p in ("..", ".") for p in parts):
-            raise WinehubError(
-                f"{app_id}: recipe wine.install_dir {install_dir!r} would escape drive_c"
-            )
+        target = self._windows_dir_target(app_id, recipe)
         if temp_dir is None:
             raise WinehubError(
                 f"{app_id}: portable install needs the .zip (a bare .exe has nothing "
                 "to unpack — set the recipe's wine.installer to setup instead)"
             )
         self._require_prefix()
-        target = self.prefix / "drive_c"
-        for part in parts:
-            target = target / part
         target.mkdir(parents=True, exist_ok=True)
         log_dir = self.state_dir / "logs" / "winehub"
         log_dir.mkdir(parents=True, exist_ok=True)

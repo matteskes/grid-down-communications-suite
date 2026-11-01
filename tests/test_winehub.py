@@ -208,6 +208,32 @@ def _fake_wine(hub: WineHub, tmp_path: Path, monkeypatch, body: str = FAKE_WINE)
     return log
 
 
+# The M13 recipes default to innoextract; the wine-run tests below pin the
+# setup mode (wine + /VERYSILENT) they were written for.
+_SETUP_RECIPE = {
+    "recipe": {
+        "id": "vara-hf",
+        "strategy": "wine",
+        "wine": {
+            "prefix": "/opt/grid-down/wine-prefix",
+            "installer_glob": "VARA HF*",
+            "exes": ["VARA.exe"],
+            "installer": "setup",
+        },
+    }
+}
+
+
+def _setup_hub(hub: WineHub, tmp_path: Path) -> WineHub:
+    """Point the hub at a setup-mode vara-hf recipe (the repo default since
+    M13 is innoextract — these tests exercise the wine path)."""
+    recipes = tmp_path / "recipes-setup"
+    recipes.mkdir(exist_ok=True)
+    (recipes / "vara-hf.yaml").write_text(yaml.safe_dump(_SETUP_RECIPE))
+    hub.recipes_dir = recipes
+    return hub
+
+
 def test_status_includes_per_app_install_probe(hub):
     rows = {a["id"]: a for a in hub.status()["apps"]}
     assert rows["vara-hf"]["installed"] is False and rows["vara-hf"]["exe_path"] is None
@@ -300,6 +326,7 @@ def test_init_prefix_failure_names_the_log(hub, tmp_path, monkeypatch):
 
 def test_install_runs_silent_installer_and_probes(hub, tmp_path, monkeypatch):
     log = _fake_wine(hub, tmp_path, monkeypatch)
+    hub = _setup_hub(hub, tmp_path)
     kit = tmp_path / "kit-import"
     kit.mkdir()
     setup = kit / "VARA HF setup.exe"
@@ -318,6 +345,7 @@ def test_install_runs_silent_installer_and_probes(hub, tmp_path, monkeypatch):
 
 def test_install_from_zip_extracts_runs_and_cleans_up(hub, tmp_path, monkeypatch):
     log = _fake_wine(hub, tmp_path, monkeypatch)
+    hub = _setup_hub(hub, tmp_path)
     hub.kit_import = tmp_path / "kit-import"
     hub.kit_import.mkdir()
     zip_path = hub.kit_import / "VARA HF v4.7.2.zip"  # matches the real recipe's installer_glob
@@ -340,6 +368,7 @@ def test_install_reports_silent_failure_when_no_exe_appears(hub, tmp_path, monke
         monkeypatch,
         body='for a in "$@"; do echo "ARG: $a" >> "$FAKE_WINE_LOG"; done',
     )
+    hub = _setup_hub(hub, tmp_path)
     kit = tmp_path / "kit-import"
     kit.mkdir()
     setup = kit / "VARA HF setup.exe"
@@ -461,3 +490,109 @@ def test_install_refuses_unknown_recipe_installer_mode(tmp_path):
     hub.prefix.mkdir()
     with pytest.raises(WinehubError, match="not setup\\|portable"):
         hub.install("varac", _portable_zip(tmp_path))
+
+
+# ------------------------------------- M13: innoextract installs (VARA HF/FM)
+
+# The VARA HF/FM setup zips wrap an Inno Setup exe. The M13 drill found that
+# wine cannot run those headless (the launch routes through wine's start
+# program and ShellExecuteEx fails before /VERYSILENT matters), so the recipes
+# unpack with innoextract instead — no wine run, no display, no elevation.
+_INNO_RECIPE = {
+    "recipe": {
+        "id": "vara-fm",
+        "strategy": "wine",
+        "wine": {
+            "prefix": "/opt/grid-down/wine-prefix",
+            "installer_glob": "VARA FM*",
+            "exes": ["FM.exe", "VARAFM.exe"],
+            "installer": "innoextract",
+            "install_dir": "C:\\VARA FM",
+        },
+    }
+}
+
+# innoextract -s -d <dst> <setup.exe> renders the Inno {app} dir as <dst>/app;
+# the fake mirrors the real tool's output shape for the VARA FM payload.
+FAKE_INNOEXTRACT = (
+    'PATH="/usr/bin:/bin"   # _bind_path restricts PATH to the fake bin dir\n'
+    'dst=""\n'
+    "while [ $# -gt 0 ]; do\n"
+    '  case "$1" in -d) dst="$2"; shift 2 ;; -s) shift ;; *) break ;; esac\n'
+    "done\n"
+    'mkdir -p "$dst/app"\n'
+    ': > "$dst/app/VARAFM.exe"\n'
+    ': > "$dst/app/OCXpack.ini"\n'
+)
+
+
+def _inno_hub(tmp_path: Path, wine_block: dict | None = None) -> WineHub:
+    apps = [
+        {
+            "id": "vara-fm",
+            "install": {"strategy": "wine"},
+            "launch": {"via": "wine-hub", "cmd": "FM.exe (via gd winehub)"},
+        },
+    ]
+    recipes = tmp_path / "recipes"
+    recipes.mkdir(exist_ok=True)
+    recipe = json.loads(json.dumps(_INNO_RECIPE))  # deep copy
+    if wine_block is not None:
+        recipe["recipe"]["wine"] = wine_block
+    (recipes / "vara-fm.yaml").write_text(yaml.safe_dump(recipe))
+    return WineHub(
+        apps, state_dir=tmp_path / "state", prefix=tmp_path / "prefix", recipes_dir=recipes
+    )
+
+
+def _inno_setup_zip(tmp_path: Path) -> Path:
+    zp = tmp_path / "VARA FM v4.4.0 setup.zip"  # matches the real recipe's glob
+    with zipfile.ZipFile(zp, "w") as zf:
+        zf.writestr("VARA FM setup (Run as Administrator).exe", b"MZ")
+    return zp
+
+
+def test_install_innoextract_unpacks_without_wine(tmp_path, monkeypatch):
+    hub = _inno_hub(tmp_path)
+    hub.prefix.mkdir()  # prefix exists, but wine is NOT on PATH (never bound)
+    _bind_path(tmp_path, monkeypatch, {"innoextract": FAKE_INNOEXTRACT})
+    out = hub.install("vara-fm", _inno_setup_zip(tmp_path))
+    assert out["state"] == "installed" and out["mode"] == "innoextract"
+    target = hub.prefix / "drive_c" / "VARA FM"
+    assert (target / "VARAFM.exe").is_file()  # {app} subtree = the payload
+    assert (target / "OCXpack.ini").is_file()
+    assert out["exe_path"] == str(target / "VARAFM.exe")
+    assert "innoextract" in Path(out["log"]).read_text()
+    # idempotent: second run reports already-installed, no re-unpack
+    again = hub.install("vara-fm", _inno_setup_zip(tmp_path))
+    assert again["state"] == "already-installed"
+
+
+def test_install_innoextract_refuses_missing_binary_or_prefix(tmp_path, monkeypatch):
+    hub = _inno_hub(tmp_path)
+    zp = _inno_setup_zip(tmp_path)
+    with pytest.raises(WinehubError, match="innoextract not on PATH"):
+        hub.install("vara-fm", zp)  # nothing bound: no innoextract anywhere
+    _bind_path(tmp_path, monkeypatch, {"innoextract": FAKE_INNOEXTRACT})
+    with pytest.raises(WinehubError, match="not installed yet"):
+        hub.install("vara-fm", zp)  # binary present, but the prefix still missing
+
+
+def test_install_innoextract_failure_names_the_log(tmp_path, monkeypatch):
+    hub = _inno_hub(tmp_path)
+    hub.prefix.mkdir()
+    _bind_path(tmp_path, monkeypatch, {"innoextract": "echo newer-inno >&2; exit 3"})
+    with pytest.raises(WinehubError, match="innoextract exited 3"):
+        hub.install("vara-fm", _inno_setup_zip(tmp_path))
+    log = hub.state_dir / "logs" / "winehub" / "install-vara-fm.log"
+    assert "install vara-fm" in log.read_text()
+
+
+def test_install_innoextract_without_a_candidate_exe_is_refused(tmp_path, monkeypatch):
+    hub = _inno_hub(tmp_path)
+    hub.prefix.mkdir()
+    # the fake unpacks a layout the recipe's exes list does not cover
+    body = FAKE_INNOEXTRACT.replace("VARAFM.exe", "SomethingElse.exe")
+    _bind_path(tmp_path, monkeypatch, {"innoextract": body})
+    with pytest.raises(WinehubError, match="no candidate exe appeared"):
+        hub.install("vara-fm", _inno_setup_zip(tmp_path))

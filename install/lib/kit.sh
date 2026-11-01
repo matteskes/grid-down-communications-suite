@@ -83,7 +83,7 @@ gd_kit_extract_artifacts() { # $1 = kit dir — bsdtar-extract pinned artifacts 
     # split local: `$kit` in the same declaration expands from the CALLER's
     # scope (empty under bootstrap's set -u, wrong paths otherwise) — M10 E2E.
     local kit="$1"
-    local tsv="$kit/artifacts.tsv" id file dest fmt arch wrk
+    local tsv="$kit/artifacts.tsv" id file dest fmt arch wrk src
     [ -f "$tsv" ] || return 0
     command -v bsdtar >/dev/null || { gd_err "bsdtar not found — install the kit dnf set first (it ships bsdtar)"; return 1; }
     while IFS=$'\t' read -r id file dest fmt arch; do
@@ -93,22 +93,28 @@ gd_kit_extract_artifacts() { # $1 = kit dir — bsdtar-extract pinned artifacts 
         case "$fmt" in
             npm) bsdtar --no-xattrs -xf "$kit/$file" -C "$dest" --strip-components=1 ;;
             deb|rpm) bsdtar --no-xattrs -xf "$kit/$file" -C "$dest" ;;
-            *)
-                # Release tarballs/zips usually wrap everything in one top dir;
+            *)  # Release tarballs/zips usually wrap everything in one top dir;
                 # flatten it so the recipe dest IS the payload root — registry
                 # cmd/docroot paths assume that (M10: js8spotter served 404s
                 # from the wrapped dir; gridtracker/pat wrapped, yaac not).
-                wrk="$(mktemp -d "$dest/.extract.XXXXXX")"
+                # M13 drill finding: the dest is replaced WHOLESALE — the
+                # artifact is sha-pinned, so its content is the truth, and
+                # mv(1) cannot overwrite a non-empty dir on a re-run (G6:
+                # re-runs are no-ops; gridtracker's locales/ died there).
+                wrk="$(mktemp -d "$(dirname "$dest")/.$(basename "$dest").extract.XXXXXX")"
                 bsdtar --no-xattrs -xf "$kit/$file" -C "$wrk"
                 set -- "$wrk"/* "$wrk"/.[!.]*
                 if [ $# -eq 2 ] && [ -d "$1" ] && [ "$2" = "$wrk"/.[!.]* ]; then
                     set -- "$1"
                 fi
                 if [ $# -eq 1 ] && [ -d "$1" ]; then
-                    ( shopt -s dotglob; mv "$1"/* "$dest"/ )
+                    src="$1"
                 else
-                    ( shopt -s dotglob; mv "$wrk"/* "$dest"/ )
+                    src="$wrk"
                 fi
+                rm -rf "$dest"
+                mkdir -p "$dest"
+                ( shopt -s dotglob; mv "$src"/* "$dest"/ )
                 rm -rf "$wrk"
                 ;;
         esac

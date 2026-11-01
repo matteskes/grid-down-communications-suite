@@ -133,8 +133,9 @@ def _run_resolver_on(rec_dir: Path, *args: str) -> subprocess.CompletedProcess:
 
 def test_resolver_routes_wine_apps(tmp_path):
     """A wine app with exactly one pinned staged artifact resolves into a
-    plan['wine'] row, pulls wine into the kit dnf set (M11b: the same stack
-    builds the container prefix and runs it air-gap), and keeps its
+    plan['wine'] row, pulls wine + innoextract into the kit dnf set (M11b:
+    the same stack builds the container prefix and runs it air-gap; M13:
+    innoextract unpacks the Inno installer where wine cannot), and keeps its
     declarative wine-* postinst rows."""
     rec_dir = _wine_env(tmp_path)
     p = _run_resolver_on(rec_dir, "--apps", "vara-hf")
@@ -146,12 +147,12 @@ def test_resolver_routes_wine_apps(tmp_path):
             "id": "vara-hf",
             "file": "fake-installer.zip",
             "glob": "fake-installer*",
-            "mode": "setup",
-            "install_dir": "",
+            "mode": "innoextract",
+            "install_dir": "C:\\VARA HF",
             "sha256": pin,
         }
     ]
-    assert "wine" in plan["pkgs_fedora"]
+    assert "wine" in plan["pkgs_fedora"] and "innoextract" in plan["pkgs_fedora"]
     row = next(r for r in plan["postinst"] if r["id"] == "vara-hf")
     assert (row["prefix"], row["install"]) == ("1", "1")
 

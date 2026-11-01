@@ -26,7 +26,8 @@ Guards (fail loudly, exit 2):
       file missing from install/udev/
     - wine kit-import staging (M11b, spec G6): wine.installer_glob matching
       nothing or more than one file in install/kit-import/, a missing or
-      mismatched wine.installer_sha256 pin, installer mode not setup|portable,
+      mismatched wine.installer_sha256 pin, installer mode not
+      setup|portable|innoextract,
       or a portable installer without wine.install_dir
     - --arch aarch64 with any non-dnf app selected — full kits are x86_64-only
       in P4 (docs/phase4-plan.md §Arch policy); dnf-only subsets keep the S4
@@ -114,7 +115,7 @@ def _validate_postinst(r: dict, udev_dir: Path) -> list[str]:
 
 
 WINE_SHA256_RE = re.compile(r"[0-9a-f]{64}")
-WINE_MODES = ("setup", "portable")
+WINE_MODES = ("setup", "portable", "innoextract")
 
 
 def _resolve_wine_import(app_id: str, r: dict, install_root: Path) -> dict:
@@ -144,10 +145,10 @@ def _resolve_wine_import(app_id: str, r: dict, install_root: Path) -> dict:
             f"{app_id}: wine.installer must be one of {'|'.join(WINE_MODES)}, got {mode!r}"
         )
     install_dir = str(w.get("install_dir") or "").strip()
-    if mode == "portable" and not install_dir:
+    if mode in ("portable", "innoextract") and not install_dir:
         raise PlanError(
-            f"{app_id}: wine.installer=portable needs wine.install_dir "
-            "(the drive_c target the zip unpacks into)"
+            f"{app_id}: wine.installer={mode} needs wine.install_dir "
+            "(the drive_c target the files unpack into)"
         )
 
     import_dir = install_root / "kit-import"
