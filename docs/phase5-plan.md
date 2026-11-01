@@ -1,6 +1,6 @@
 # Phase 5 implementation plan (P5)
 
-**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) landed · next: M13 ·
+**Status:** P5 in progress — M11a (`1e6485e`) + M11b (`0cc3bfc`) + M11c (`5b1393d`) + M11d (`d40877d`) + M12 (`19fb0f2`) + M13 (automated leg) landed · next: M14 ·
 **Order:** installer completion → USB packaging → clean-host drill → acceptance closure
 **Baseline:** P4 closed at `e0950c5` (M10 body `00a38b3`; 3×`P4: PASS` container E2E,
 2026-10-30; audit `docs/audit/p4-container-e2e.md`).
@@ -295,27 +295,49 @@ refusing; round-trips lean 78 s / wine 265 s; USB gate 77 s.
 
 ## M13 — Clean-host drill (automated + human, per spec §10)
 
-- `tools/drill-clean-rebuild.sh` — the P4 harness pattern: fresh `fedora:45`
-  `linux/amd64` image, `--network none`, kit unpacked **from the M12 USB
-  layout**, timed, gate list, `P5: PASS` banner, evidence dir. Gates:
-  - G0 — layout + sidecar verify (USB content, not a bare staging tree)
-  - G1 — arch guard refuses a mismatched kit up front
-  - G2 — strict manifest verify from the mount
-  - G3 — dnf install from the kit repo only (no network-capable repo)
-  - G4 — payloads placed (build/tarball/pip/static per TSVs)
-  - G5 — postinst effects asserted (units/udev/dialout; wine subset on x86_64)
-  - G6 — re-run is a no-op
-  - G7 — `gd doctor` fail=0 (warns recorded as caveats: empty region slots,
-    hardware-absent checks)
-  - G8 — bundle render sanity: targets/units render, rig argv previews
-    (headless container: no GUI spawn)
-  Discipline: **3×`P5: PASS`** fresh runs (P4 precedent); logs kept in
-  `$TMPDIR`, outcomes recorded in the audit doc.
-- `docs/phase5-runbook.md` — the human half (written at M13): fresh Fedora 45
-  GUI VM (any arch), USB layout in via image mount/transfer, `bootstrap.sh
-  --kit`, `gd doctor` fail=0, one bundle start (Control Center or `gd launch`);
-  evidence pattern identical to the P1–P3b runbooks.
-- **Gate:** 3× drill PASS + runbook executed once, evidence committed.
+**Status: LANDED** (automated leg; human leg pending — runbook ready). The
+drill shipped as the P4 harness split: `tools/drill-clean-rebuild.sh` (host:
+full 38-app build → USB pack → **kit-staging wiped** → N rounds) +
+`tools/p5-drill-gates.sh` (container: the gate chain, final line exactly
+`P5: PASS`).
+
+- Gates as planned, with the honest adjustments the first runs forced:
+  - G1 — the wrong-arch probe is a **self-consistent** kit (ARCH flipped *and*
+    re-signed) so the refusal provably comes from the arch guard, not the
+    earlier manifest guard; asserts no state written.
+  - G3 — canaries are recipe-truth (18 rpms + the flarq binary; Fedora's
+    fldigi `Provides:` flarq — there is no flarq rpm; winetricks/nodejs/java
+    turned out not to be kit rows at all).
+  - G5 — dialout + rendered user units + the VARA HF/FM/VarAC exes on the
+    shared prefix; **no recipe declares a udev row yet** (the mechanism is
+    specified; the first rule-carrying recipe lands with the handset work).
+  - G8 — mesh adapter dry-run (target argv, `--seturl ***` PSK mask, refusals)
+    + wine-hub config surface + units listing; the VARA start argv is not a
+    suite render surface, so the wine side asserts the config read instead.
+- **Findings fixed at this milestone** (details in
+  `docs/audit/p5-clean-rebuild.md`):
+  1. wine cannot silently run VARA's Inno installers headless (ShellExecuteEx
+     dies in wine's `start` before `/VERYSILENT` matters; P3's VM E2E used
+     fixture dummies, so this was the first automated attempt anywhere) —
+     winehub gained `wine.installer: innoextract` (unpacks the setup exe; the
+     VARA HF/FM recipes pin it + `install_dir`; resolver enforces it). A field
+     win too: VARA installs no longer need a GUI.
+  2. `gd_kit_extract_artifacts` re-runs were not idempotent for
+     directory-bearing tarballs (`mv` into a non-empty dest; gridtracker's
+     `locales/`) — the dest is now replaced wholesale from the sha-pinned
+     artifact. Unexercised before M13: M11d's re-runs had no such artifacts.
+  3. python bytecode litter (`__pycache__`) in a writable restored tree breaks
+     G6's kit-manifest re-verify (M12's roundtrip mounted the kit read-only) —
+     the drill sets `PYTHONDONTWRITEBYTECODE=1`.
+- **Evidence:** 3/3 `P5: PASS` in 382 s (126–129 s per round: unpack 17 s,
+  repo-only dnf, payloads, postinst, re-run no-op, doctor 9 ok / 6 warn /
+  0 fail); 2-part 3.8 G layout; 278 tests green (+4 winehub innoextract),
+  lint clean.
+- `docs/phase5-runbook.md` — the human half, written and ready: fresh
+  **x86_64** F45 GUI VM, NIC detached before unpack, layout via `vmpal cp` (or
+  a FAT32 stick), the kit's own unpacker + installer, checks H1–H8, transcripts
+  back into the audit doc. **Gate remainder:** runbook executed once, evidence
+  committed (solo, or driven in a follow-up session on a UTM/VMPal VM).
 
 ## M14 — Acceptance + closure
 
